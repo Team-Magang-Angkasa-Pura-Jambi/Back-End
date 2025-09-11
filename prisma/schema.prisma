@@ -1,0 +1,298 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------
+// Modul 1: Manajemen Pengguna
+// ---------------------------------------------
+
+model User {
+  user_id       Int      @id @default(autoincrement())
+  username      String   @unique
+  password_hash String
+  created_at    DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  role_id Int  
+  role    Role @relation(fields: [role_id], references: [role_id])
+
+  // Relasi balik
+  Readings          Reading[]
+  EventsLogbooks    EventsLogbook[]
+  PriceSchemesSet   PriceScheme[]
+  EfficiencyTargets EfficiencyTarget[]
+  AlertsAcknowledged Alert[]
+  
+  @@map("USERS")
+}
+
+model Role {
+  role_id   Int      @id @default(autoincrement())
+  role_name RoleName @unique
+
+  // Relasi balik
+  users User[]
+
+  @@map("ROLES")
+}
+
+/// Enum untuk peran pengguna
+enum RoleName {
+  Teknisi
+  Admin
+  SuperAdmin
+}
+
+// ---------------------------------------------
+// Modul 2: Data Master Aset & Energi
+// ---------------------------------------------
+
+model EnergyType {
+  energy_type_id      Int      @id @default(autoincrement())
+  /// Contoh: "Listrik", "Air", "BBM"
+  type_name           String   @unique
+  /// Contoh: "kWh", "m3", "Liter"
+  unit_of_measurement String
+
+  // Relasi balik
+  meters            Meter[]
+  price_schemes     PriceScheme[]
+  efficiency_targets EfficiencyTarget[]
+
+  @@map("ENERGY_TYPES")
+}
+
+/// [NEW] Tabel untuk profil konsumsi demi akurasi biaya ToU
+model ConsumptionProfile {
+  profile_id   Int      @id @default(autoincrement())
+  /// Contoh: "Profil Pabrik Siang", "Profil Kantor 9-5", "Profil Server 24/7"
+  profile_name String   @unique
+  description  String?  @db.Text
+
+  // Relasi balik
+  hourly_weights ProfileHourlyWeight[]
+  meters         Meter[]
+
+  @@map("CONSUMPTION_PROFILES")
+}
+
+/// [NEW] Tabel detail untuk menyimpan bobot konsumsi per jam untuk setiap profil
+model ProfileHourlyWeight {
+  weight_id Int @id @default(autoincrement())
+  /// Jam dalam sehari (0-23)
+  hour_of_day   Int
+  /// Faktor bobot, total dari 24 jam harus = 1.0
+  weight_factor Decimal @db.Decimal(5, 4)
+
+  profile_id Int
+  profile    ConsumptionProfile @relation(fields: [profile_id], references: [profile_id])
+
+  @@map("PROFILE_HOURLY_WEIGHTS")
+}
+
+model Meter {
+  meter_id          Int      @id @default(autoincrement())
+  meter_code        String   @unique
+  location          String?
+  /// Status meter: "Aktif", "Dalam Perbaikan", "Rusak", "Diganti"
+  status            MeterStatus @default(Aktif)
+  /// Tanggal pertama kali meter dipasang
+  installation_date DateTime?  @db.Date
+  /// Tanggal meter dilepas/diganti
+  decommission_date DateTime?  @db.Date
+  /// Garis Lintang untuk visualisasi peta
+  latitude          Decimal? @db.Decimal(10, 7)
+  /// Garis Bujur untuk visualisasi peta
+  longitude         Decimal? @db.Decimal(10, 7)
+
+  energy_type_id Int
+  energy_type    EnergyType @relation(fields: [energy_type_id], references: [energy_type_id])
+
+  /// Opsional: untuk kalkulasi ToU yang lebih akurat
+  profile_id Int?
+  profile    ConsumptionProfile? @relation(fields: [profile_id], references: [profile_id])
+
+  // Relasi balik
+  readings Reading[]
+
+  @@map("METERS")
+}
+
+enum MeterStatus {
+  Aktif
+  DalamPerbaikan
+  Rusak
+  Diganti
+
+  @@map("meter_status_enum")
+}
+
+
+// ---------------------------------------------
+// Modul 3: Transaksional & Operasional
+// ---------------------------------------------
+
+model Reading {
+  reading_id  Int      @id @default(autoincrement())
+  /// Angka pembacaan meteran
+  value       Decimal  @db.Decimal(12, 2)
+  /// Tipe pembacaan: "cumulative" (naik terus), "delta" (penambahan)
+  reading_type ReadingType @default(cumulative)
+  timestamp   DateTime
+  /// True jika pembacaan ini hasil estimasi sistem, bukan input manual
+  is_estimated  Boolean  @default(false)
+  photo_proof_url String?
+  notes       String?  @db.Text
+
+  meter_id Int
+  meter    Meter @relation(fields: [meter_id], references: [meter_id])
+
+  /// Dicatat oleh teknisi
+  user_id Int
+  user    User @relation(fields: [user_id], references: [user_id])
+
+  /// Jika diisi, ini adalah pembacaan koreksi untuk ID yang direferensikan
+  is_correction_for_id Int?      @unique @map("is_correction_for")
+  correction_for       Reading?  @relation("CorrectionRelation", fields: [is_correction_for_id], references: [reading_id])
+  corrected_by         Reading?  @relation("CorrectionRelation")
+
+  @@map("READINGS")
+}
+
+enum ReadingType {
+  cumulative
+  delta
+}
+
+model PaxData {
+  pax_id Int @id @default(autoincrement())
+  data_date      DateTime @unique @db.Date
+  /// Jumlah orang/tamu/karyawan sebagai basis efisiensi
+  total_pax      Int
+  /// Optional: jika pax berbeda per gedung/area
+  location_group String?
+
+  @@map("PAX_DATA")
+}
+
+/// [NEW] Tabel untuk mencatat kejadian penting yang bisa mempengaruhi konsumsi
+model EventsLogbook {
+  event_id        Int      @id @default(autoincrement())
+  event_timestamp DateTime
+  location_group  String?
+  /// Contoh: "Lembur seluruh departemen produksi", "Perbaikan AC Sentral Gedung A"
+  notes           String   @db.Text
+
+  reported_by_user_id Int
+  reported_by         User @relation(fields: [reported_by_user_id], references: [user_id])
+
+  @@map("EVENTS_LOGBOOK")
+}
+
+// ---------------------------------------------
+// Modul 4: Manajemen Harga
+// ---------------------------------------------
+
+model PriceScheme {
+  scheme_id    Int      @id @default(autoincrement())
+  /// e.g., "Tarif Bisnis B2 2025", "Harga Pertalite September"
+  scheme_name  String   @unique
+  effective_date DateTime @db.Date
+  is_active    Boolean  @default(true)
+
+  energy_type_id Int
+  energy_type    EnergyType @relation(fields: [energy_type_id], references: [energy_type_id])
+
+  /// Diubah oleh Super Admin
+  set_by_user_id Int
+  set_by_user    User @relation(fields: [set_by_user_id], references: [user_id])
+
+  // Relasi balik
+  tiers PriceTier[]
+
+  @@map("PRICE_SCHEMES")
+}
+
+model PriceTier {
+  tier_id Int @id @default(autoincrement())
+  /// e.g., "Blok 1 (0-100 kWh)", "LWBP", "WBP", "Tarif Normal"
+  tier_name   String?
+  /// Batas bawah penggunaan untuk tier ini
+  min_usage   Decimal @default(0) @db.Decimal(10, 2)
+  /// Batas atas penggunaan (null jika tak terbatas)
+  max_usage   Decimal? @db.Decimal(10, 2)
+  /// Harga per unit untuk tier ini
+  price_value Decimal @db.Decimal(12, 2)
+
+  scheme_id Int
+  scheme    PriceScheme @relation(fields: [scheme_id], references: [scheme_id])
+
+  @@map("PRICE_TIERS")
+}
+
+// ---------------------------------------------
+// Modul 5: Manajemen Target & Performa
+// ---------------------------------------------
+
+model EfficiencyTarget {
+  target_id    Int @id @default(autoincrement())
+  /// Opsional: Target untuk grup lokasi tertentu, cth: "Gedung A"
+  location_group String?
+  /// Contoh: kWh/pax, liter/km
+  kpi_name     String
+  target_value Decimal  @db.Decimal(10, 2)
+  period_start DateTime @db.Date
+  period_end   DateTime @db.Date
+
+  energy_type_id Int
+  energy_type    EnergyType @relation(fields: [energy_type_id], references: [energy_type_id])
+
+  set_by_user_id Int
+  set_by_user    User @relation(fields: [set_by_user_id], references: [user_id])
+  
+  // Relasi balik
+  alerts Alert[]
+
+  @@map("EFFICIENCY_TARGETS")
+}
+
+model Alert {
+  alert_id   Int      @id @default(autoincrement())
+  alert_timestamp DateTime @default(now())
+  /// Nilai faktual yang memicu alarm
+  actual_value    Decimal  @db.Decimal(12, 2)
+  /// Nilai target saat alarm terpicu
+  target_value_at_trigger Decimal @db.Decimal(12, 2)
+  /// Status: "UNREAD", "READ", "ACKNOWLEDGED"
+  status     AlertStatus @default(UNREAD)
+  /// Catatan dari user yang menangani alarm
+  notes      String?     @db.Text
+
+  /// Aturan/Target mana yang dilanggar
+  target_id Int
+  target    EfficiencyTarget @relation(fields: [target_id], references: [target_id])
+
+  /// User yang menangani alarm ini
+  acknowledged_by_user_id Int?
+  acknowledged_by         User? @relation(fields: [acknowledged_by_user_id], references: [user_id])
+
+  @@map("ALERTS")
+}
+
+enum AlertStatus {
+  UNREAD
+  READ
+  ACKNOWLEDGED
+}
