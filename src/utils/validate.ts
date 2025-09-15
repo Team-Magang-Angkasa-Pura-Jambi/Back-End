@@ -13,7 +13,6 @@ export const validate =
       });
 
       res.locals.validatedData = parsedSchema;
-      console.log(res.locals.validatedData);
       return next();
     } catch (error) {
       if (error instanceof ZodError) {
