@@ -12,7 +12,7 @@ datasource db {
 }
 
 // ---------------------------------------------
-// Modul 1: Manajemen Pengguna
+// Module 1: User Management
 // ---------------------------------------------
 
 model User {
@@ -23,10 +23,10 @@ model User {
   created_at    DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  // Relasi
+  // Relations
   role Role @relation(fields: [role_id], references: [role_id])
 
-  // Relasi Balik
+  // Reverse Relations
   reading_sessions    ReadingSession[]
   events_logbook      EventsLogbook[]
   price_schemes_set   PriceScheme[]
@@ -40,30 +40,30 @@ model Role {
   role_id   Int      @id @default(autoincrement())
   role_name RoleName @unique
 
-  // Relasi Balik
+  // Reverse Relations
   users User[]
 
   @@map("ROLES")
 }
 
 enum RoleName {
-  Teknisi
+  Technician
   Admin
   SuperAdmin
 }
 
 // ---------------------------------------------
-// Modul 2: Data Master Aset & Energi
+// Module 2: Asset & Energy Master Data
 // ---------------------------------------------
 
 model EnergyType {
-  energy_type_id      Int      @id @default(autoincrement())
-  /// Contoh: 'Listrik', 'Air', 'BBM'
-  type_name           String   @unique
-  /// Contoh: 'kWh', 'm3', 'Liter'
+  energy_type_id      Int    @id @default(autoincrement())
+  /// Example: 'Electricity', 'Water', 'Fuel'
+  type_name           String @unique
+  /// Example: 'kWh', 'm3', 'Liter'
   unit_of_measurement String
 
-  // Relasi Balik
+  // Reverse Relations
   meters             Meter[]
   reading_types      ReadingType[]
   price_schemes      PriceScheme[]
@@ -73,78 +73,83 @@ model EnergyType {
 }
 
 model Meter {
-  meter_id         Int         @id @default(autoincrement())
-  meter_code       String      @unique
-  location         String?
-  status           MeterStatus @default(Aktif)
-  energy_type_id   Int
+  meter_id       Int         @id @default(autoincrement())
+  meter_code     String      @unique
+  location       String?
+  status         MeterStatus @default(Active)
+  energy_type_id Int
 
-  // Relasi
+  // Relations
   energy_type EnergyType @relation(fields: [energy_type_id], references: [energy_type_id])
 
-  // Relasi Balik
+  // Reverse Relations
   reading_sessions ReadingSession[]
 
   @@map("METERS")
 }
 
 enum MeterStatus {
-  Aktif
-  DalamPerbaikan
-  Nonaktif
+  Active
+  UnderMaintenance
+  Inactive
 }
 
 // ---------------------------------------------
-// Modul 3: Pencatatan (Struktur Fleksibel)
+// Module 3: Reading Records (Flexible Structure)
 // ---------------------------------------------
 
-/// Tabel ini mencatat 'kapan' dan 'oleh siapa' pembacaan dilakukan.
+/// This table records 'when' and 'by whom' a reading was taken.
 model ReadingSession {
-  session_id           Int       @id @default(autoincrement())
+  session_id           Int      @id @default(autoincrement())
+  /// Timestamp lengkap dengan jam dan menit saat pencatatan
   timestamp            DateTime
+  /// [BARU] Kolom khusus untuk tanggal saja, untuk memastikan keunikan harian
+  reading_date         DateTime @db.Date
   meter_id             Int
   user_id              Int
-  /// Referensi ke session_id lain jika ini adalah koreksi
-  is_correction_for_id Int?      @unique
+  /// Reference to another session_id if this is a correction
+  is_correction_for_id Int?     @unique
 
-  // Relasi (FIXED)
+  // Relations
   user  User  @relation(fields: [user_id], references: [user_id])
   meter Meter @relation(fields: [meter_id], references: [meter_id])
 
-  // Relasi Koreksi (Self-referencing)
+  // Correction Relation (Self-referencing)
   correction_for ReadingSession? @relation("CorrectionRelation", fields: [is_correction_for_id], references: [session_id])
   corrected_by   ReadingSession? @relation("CorrectionRelation")
 
-  // Relasi Balik
+  // Reverse Relations
   details ReadingDetail[]
 
+  /// [BARU] Aturan ini memastikan kombinasi meter_id dan reading_date harus unik.
+  @@unique([meter_id, reading_date], name: "unique_meter_reading_per_day")
   @@map("READING_SESSIONS")
 }
 
-/// Tabel ini mendefinisikan jenis-jenis pembacaan yang mungkin ada.
+/// This table defines the possible types of readings for an energy type.
 model ReadingType {
   reading_type_id Int    @id @default(autoincrement())
-  /// Contoh: 'Main', 'WBP', 'LWBP', 'kVArh'
+  /// Example: 'Main', 'Peak', 'OffPeak', 'kVArh'
   type_name       String @unique
   energy_type_id  Int
 
-  // Relasi
+  // Relations
   energy_type EnergyType @relation(fields: [energy_type_id], references: [energy_type_id])
 
-  // Relasi Balik
+  // Reverse Relations
   details ReadingDetail[]
 
   @@map("READING_TYPES")
 }
 
-/// Tabel ini mencatat 'apa' dan 'berapa' nilai yang dibaca dalam satu sesi.
+/// This table records 'what' and 'how much' was read in a session.
 model ReadingDetail {
   detail_id       Int     @id @default(autoincrement())
   session_id      Int
   reading_type_id Int
   value           Decimal @db.Decimal(12, 2)
 
-  // Relasi
+  // Relations
   session      ReadingSession @relation(fields: [session_id], references: [session_id])
   reading_type ReadingType    @relation(fields: [reading_type_id], references: [reading_type_id])
 
@@ -152,7 +157,7 @@ model ReadingDetail {
 }
 
 // ---------------------------------------------
-// Modul 4: Operasional Lainnya
+// Module 4: Other Operations
 // ---------------------------------------------
 
 model PaxData {
@@ -169,14 +174,14 @@ model EventsLogbook {
   notes               String   @db.Text
   reported_by_user_id Int
 
-  // Relasi
+  // Relations
   reported_by User @relation(fields: [reported_by_user_id], references: [user_id])
 
   @@map("EVENTS_LOGBOOK")
 }
 
 // ---------------------------------------------
-// Modul 5: Manajemen Harga
+// Module 5: Price Management
 // ---------------------------------------------
 
 model PriceScheme {
@@ -187,11 +192,11 @@ model PriceScheme {
   energy_type_id Int
   set_by_user_id Int
 
-  // Relasi
+  // Relations
   energy_type EnergyType @relation(fields: [energy_type_id], references: [energy_type_id])
   set_by_user User       @relation(fields: [set_by_user_id], references: [user_id])
 
-  // Relasi Balik
+  // Reverse Relations
   rates SchemeRate[]
 
   @@map("PRICE_SCHEMES")
@@ -204,19 +209,19 @@ model SchemeRate {
   value     Decimal  @db.Decimal(12, 4)
   scheme_id Int
 
-  // Relasi
+  // Relations
   scheme PriceScheme @relation(fields: [scheme_id], references: [scheme_id])
 
   @@map("SCHEME_RATES")
 }
 
 enum RateType {
-  per_unit
-  percentage
+  PerUnit
+  Percentage
 }
 
 // ---------------------------------------------
-// Modul 6: Manajemen Target & Performa
+// Module 6: Target & Performance Management
 // ---------------------------------------------
 
 model EfficiencyTarget {
@@ -228,11 +233,11 @@ model EfficiencyTarget {
   energy_type_id Int
   set_by_user_id Int
 
-  // Relasi
+  // Relations
   energy_type EnergyType @relation(fields: [energy_type_id], references: [energy_type_id])
   set_by_user User       @relation(fields: [set_by_user_id], references: [user_id])
 
-  // Relasi Balik
+  // Reverse Relations
   alerts Alert[]
 
   @@map("EFFICIENCY_TARGETS")
@@ -244,10 +249,10 @@ model Alert {
   alert_timestamp         DateTime    @default(now())
   actual_value            Decimal     @db.Decimal(12, 2)
   target_value_at_trigger Decimal     @db.Decimal(12, 2)
-  status                  AlertStatus @default(BARU)
+  status                  AlertStatus @default(NEW)
   acknowledged_by_user_id Int?
 
-  // Relasi
+  // Relations
   target          EfficiencyTarget @relation(fields: [target_id], references: [target_id])
   acknowledged_by User?            @relation(fields: [acknowledged_by_user_id], references: [user_id])
 
@@ -255,8 +260,8 @@ model Alert {
 }
 
 enum AlertStatus {
-  BARU
-  DIBACA
-  DITANGANI
+  NEW
+  READ
+  HANDLED
 }
 
