@@ -6,6 +6,11 @@ import { authMiddleware } from '../../../middleware/auth.middleware.js';
 import { electricityRoutes } from './Electricity.routes.js';
 import { meterRoutes } from './meter.routes.js';
 import { energyTypeRoutes } from './energy.routes.js';
+import { roleRoutes } from './role.routes.js';
+import { readingRoutes } from './reading.routes.js';
+import { summaryRoutes } from './summary.routes.js';
+import { chartRoutes } from './chart.routes.js';
+import { readingTypeRoutes } from './readingType.route.js';
 
 export default (app: any) => {
   const router = Router();
@@ -14,10 +19,15 @@ export default (app: any) => {
   router.get('/', indexController.index);
 
   authRoutes(router);
+  summaryRoutes(router);
   router.use(authMiddleware);
   userRoutes(router);
 
   electricityRoutes(router);
   meterRoutes(router);
   energyTypeRoutes(router);
+  roleRoutes(router);
+  readingRoutes(router);
+  chartRoutes(router);
+  readingTypeRoutes(router);
 };

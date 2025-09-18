@@ -1,7 +1,6 @@
-
 import type { Request, Response } from 'express';
 import { res200 } from '../utils/response.js';
-import type { AuthService } from '../services/auth.service.js';
+import { authService, type AuthService } from '../services/auth.service.js';
 import type { LoginBody } from '../types/auth.type.js';
 
 export class AuthController {
@@ -12,3 +11,5 @@ export class AuthController {
     res200({ res, message: 'Login Berhasil!', data: result });
   };
 }
+
+export const authController = new AuthController(authService);

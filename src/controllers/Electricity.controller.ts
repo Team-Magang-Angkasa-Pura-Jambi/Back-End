@@ -1,5 +1,8 @@
 import type { Request, Response } from 'express';
-import type { ElectricityService } from '../services/Electricity.service.js';
+import {
+  electricityService,
+  type ElectricityService,
+} from '../services/Electricity.service.js';
 import { res200, res201 } from '../utils/response.js';
 import { Error400, Error404 } from '../utils/customError.js';
 import type {
@@ -29,10 +32,7 @@ export class ElectricityController {
    * Mengambil satu data pembacaan listrik berdasarkan ID.
    */
   public getById = async (req: Request<IdParams>, res: Response) => {
-    const sessionId = parseInt(req.params.id, 10);
-    if (isNaN(sessionId)) {
-      throw new Error400('ID sesi tidak valid.');
-    }
+    const sessionId = res.locals.validatedData.params.id;
 
     const reading = await this.electricityService.findById(sessionId);
     if (!reading) {
@@ -48,75 +48,6 @@ export class ElectricityController {
     });
   };
 
-  /**
-   * Membuat data pembacaan listrik baru.
-   */
-  public create = async (
-    req: Request<{}, {}, CreateReadingSessionBody>,
-    res: Response
-  ) => {
-    const newReading = await this.electricityService.create(req.body);
-    res201({
-      res,
-      message: 'Berhasil menambahkan data pembacaan baru.',
-      data: newReading,
-    });
-  };
-
-  /**
-   * Membuat data koreksi untuk pembacaan yang sudah ada.
-   */
-  public createCorrection = async (
-    req: Request<IdParams, {}, CreateReadingSessionBody>,
-    res: Response
-  ) => {
-    const originalSessionId = parseInt(req.params.id, 10);
-    if (isNaN(originalSessionId)) {
-      throw new Error400('ID sesi orisinal tidak valid.');
-    }
-
-    const originalSession =
-      await this.electricityService.findById(originalSessionId);
-    if (!originalSession) {
-      throw new Error404(
-        `Sesi pembacaan dengan ID ${originalSessionId} yang akan dikoreksi tidak ditemukan.`
-      );
-    }
-
-    const correctedReading = await this.electricityService.createCorrection(
-      originalSessionId,
-      req.body
-    );
-    res201({
-      res,
-      message: 'Berhasil menambahkan data koreksi.',
-      data: correctedReading,
-    });
-  };
-
-  /**
-   * Menghapus data pembacaan listrik.
-   */
-  public delete = async (req: Request<IdParams>, res: Response) => {
-    const sessionId = parseInt(req.params.id, 10);
-    if (isNaN(sessionId)) {
-      throw new Error400('ID sesi tidak valid.');
-    }
-
-    const existingReading = await this.electricityService.findById(sessionId);
-    if (!existingReading) {
-      throw new Error404(
-        `Sesi pembacaan dengan ID ${sessionId} tidak ditemukan.`
-      );
-    }
-
-    const deletedReading = await this.electricityService.delete(sessionId);
-    res200({ res, message: 'Data berhasil dihapus.', data: deletedReading });
-  };
-
-  /**
-   * Mendapatkan data pembacaan terakhir untuk sebuah meteran.
-   */
   public getLatestForMeter = async (req: Request<IdParams>, res: Response) => {
     const meterId = parseInt(req.params.id, 10);
     if (isNaN(meterId)) {
@@ -138,3 +69,6 @@ export class ElectricityController {
     });
   };
 }
+export const electricityController = new ElectricityController(
+  electricityService
+);

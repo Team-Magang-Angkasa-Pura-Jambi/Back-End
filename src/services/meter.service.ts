@@ -6,11 +6,22 @@ import { Error409 } from '../utils/customError.js';
  * Service yang menangani semua logika bisnis terkait data meteran.
  */
 export class MeterService {
-  /**
-   * Menemukan semua data meteran.
-   */
   public async findAll() {
     return prisma.meter.findMany({
+      include: {
+        energy_type: true, // Sertakan detail jenis energi
+      },
+      orderBy: {
+        meter_id: 'asc',
+      },
+    });
+  }
+
+  public async findAllActive() {
+    return prisma.meter.findMany({
+      where: {
+        status: 'Active',
+      },
       include: {
         energy_type: true, // Sertakan detail jenis energi
       },
@@ -83,12 +94,15 @@ export class MeterService {
   /**
    * Menghapus meteran.
    */
-  public async delete(meterId: number) {
+  public async delete(meter_id: number) {
     // PERHATIAN: Pastikan tidak ada data 'ReadingSession' yang terkait sebelum menghapus
     // Logika ini bisa ditambahkan di sini jika diperlukan.
-    return prisma.meter.delete({
+    return prisma.meter.update({
       where: {
-        meter_id: meterId,
+        meter_id,
+      },
+      data: {
+        status: 'DELETED',
       },
     });
   }

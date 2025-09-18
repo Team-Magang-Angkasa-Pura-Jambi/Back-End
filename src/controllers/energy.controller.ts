@@ -1,8 +1,12 @@
 import type { Request, Response } from 'express';
-import type { CreateEnergyTypeBody, EnergyTypeParams, UpdateEnergyTypeBody } from '../types/energy.type.js';
+import type {
+  CreateEnergyTypeBody,
+  EnergyTypeParams,
+  UpdateEnergyTypeBody,
+} from '../types/energy.type.js';
 import { res200, res201 } from '../utils/response.js';
 import { Error400 } from '../utils/customError.js';
-import type { EnergyTypeService } from '../services/energy.service.js';
+import { energyTypeService, type EnergyTypeService } from '../services/energy.service.js';
 
 /**
  * Controller untuk menangani request HTTP terkait Jenis Energi.
@@ -27,6 +31,14 @@ export class EnergyTypeController {
     res200({
       res,
       message: 'Berhasil mengambil semua data jenis energi.',
+      data: energyTypes,
+    });
+  };
+  public getAllActiveEnergyTypes = async (req: Request, res: Response) => {
+    const energyTypes = await this.energyTypeService.findAllActive();
+    res200({
+      res,
+      message: 'Berhasil mengambil semua data jenis energi yang active',
       data: energyTypes,
     });
   };
@@ -85,3 +97,4 @@ export class EnergyTypeController {
     });
   };
 }
+export const energyTypeController = new EnergyTypeController(energyTypeService);

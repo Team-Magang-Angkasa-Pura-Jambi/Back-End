@@ -22,6 +22,7 @@ model User {
   role_id       Int
   created_at    DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  is_active     Boolean  @default(true) /// [SOFT DELETE] To disable users instead of deleting
 
   // Relations
   role Role @relation(fields: [role_id], references: [role_id])
@@ -57,11 +58,10 @@ enum RoleName {
 // ---------------------------------------------
 
 model EnergyType {
-  energy_type_id      Int    @id @default(autoincrement())
-  /// Example: 'Electricity', 'Water', 'Fuel'
-  type_name           String @unique
-  /// Example: 'kWh', 'm3', 'Liter'
+  energy_type_id      Int     @id @default(autoincrement())
+  type_name           String  @unique
   unit_of_measurement String
+  is_active           Boolean @default(true) /// [SOFT DELETE] To disable types instead of deleting
 
   // Reverse Relations
   meters             Meter[]
@@ -76,7 +76,7 @@ model Meter {
   meter_id       Int         @id @default(autoincrement())
   meter_code     String      @unique
   location       String?
-  status         MeterStatus @default(Active)
+  status         MeterStatus @default(Active) /// [SOFT DELETE] Use 'DELETED' status for soft deletion
   energy_type_id Int
 
   // Relations
@@ -87,49 +87,43 @@ model Meter {
 
   @@map("METERS")
 }
-
+ 
 enum MeterStatus {
   Active
   UnderMaintenance
   Inactive
+  DELETED /// Added for soft deletes
 }
 
 // ---------------------------------------------
 // Module 3: Reading Records (Flexible Structure)
 // ---------------------------------------------
 
-/// This table records 'when' and 'by whom' a reading was taken.
 model ReadingSession {
   session_id           Int      @id @default(autoincrement())
-  /// Timestamp lengkap dengan jam dan menit saat pencatatan
-  timestamp            DateTime
-  /// [BARU] Kolom khusus untuk tanggal saja, untuk memastikan keunikan harian
+  timestamp            DateTime @default(now())
   reading_date         DateTime @db.Date
   meter_id             Int
   user_id              Int
-  /// Reference to another session_id if this is a correction
   is_correction_for_id Int?     @unique
 
   // Relations
   user  User  @relation(fields: [user_id], references: [user_id])
   meter Meter @relation(fields: [meter_id], references: [meter_id])
 
-  // Correction Relation (Self-referencing)
+  // Correction Relation
   correction_for ReadingSession? @relation("CorrectionRelation", fields: [is_correction_for_id], references: [session_id])
   corrected_by   ReadingSession? @relation("CorrectionRelation")
 
   // Reverse Relations
   details ReadingDetail[]
 
-  /// [BARU] Aturan ini memastikan kombinasi meter_id dan reading_date harus unik.
   @@unique([meter_id, reading_date], name: "unique_meter_reading_per_day")
   @@map("READING_SESSIONS")
 }
 
-/// This table defines the possible types of readings for an energy type.
 model ReadingType {
   reading_type_id Int    @id @default(autoincrement())
-  /// Example: 'Main', 'Peak', 'OffPeak', 'kVArh'
   type_name       String @unique
   energy_type_id  Int
 
@@ -142,7 +136,6 @@ model ReadingType {
   @@map("READING_TYPES")
 }
 
-/// This table records 'what' and 'how much' was read in a session.
 model ReadingDetail {
   detail_id       Int     @id @default(autoincrement())
   session_id      Int
@@ -150,7 +143,8 @@ model ReadingDetail {
   value           Decimal @db.Decimal(12, 2)
 
   // Relations
-  session      ReadingSession @relation(fields: [session_id], references: [session_id])
+  /// [CASCADE DELETE] Details are useless without a session
+  session      ReadingSession @relation(fields: [session_id], references: [session_id], onDelete: Cascade)
   reading_type ReadingType    @relation(fields: [reading_type_id], references: [reading_type_id])
 
   @@map("READING_DETAILS")
@@ -159,7 +153,6 @@ model ReadingDetail {
 // ---------------------------------------------
 // Module 4: Other Operations
 // ---------------------------------------------
-
 model PaxData {
   pax_id    Int      @id @default(autoincrement())
   data_date DateTime @unique @db.Date
@@ -179,6 +172,7 @@ model EventsLogbook {
 
   @@map("EVENTS_LOGBOOK")
 }
+
 
 // ---------------------------------------------
 // Module 5: Price Management
@@ -210,7 +204,8 @@ model SchemeRate {
   scheme_id Int
 
   // Relations
-  scheme PriceScheme @relation(fields: [scheme_id], references: [scheme_id])
+  /// [CASCADE DELETE] Rates are useless without a scheme
+  scheme PriceScheme @relation(fields: [scheme_id], references: [scheme_id], onDelete: Cascade)
 
   @@map("SCHEME_RATES")
 }

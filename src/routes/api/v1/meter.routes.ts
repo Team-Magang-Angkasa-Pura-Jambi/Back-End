@@ -15,6 +15,7 @@ export const meterRoutes = (router: Router) => {
   const meterController = new MeterController(meterService);
 
   router.get(prefix, asyncHandler(meterController.getAll));
+  router.get(`${prefix}-active`, asyncHandler(meterController.getAllActive));
 
   router.get(
     `${prefix}/:id`,

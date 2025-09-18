@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
-import type { ParamsDictionary, Query } from 'express-serve-static-core';
 import { ZodError, type ZodObject } from 'zod';
+import { Error400 } from './customError.js';
 
 export const validate =
   (schema: ZodObject) =>
@@ -13,15 +13,28 @@ export const validate =
       });
 
       res.locals.validatedData = parsedSchema;
+
       return next();
     } catch (error) {
       if (error instanceof ZodError) {
-        return res.status(400).json({
-          status: 'fail',
-          errors: error.flatten().fieldErrors,
-        });
-      }
+        const errorList = Object.entries(error.flatten().fieldErrors)
 
+          .map(([field, messages]) => {
+            if (Array.isArray(messages)) {
+              return `${field}: ${messages.join(', ')}`;
+            }
+            return null;
+          })
+
+          .filter((message) => message !== null);
+
+        const errorMessages = errorList.join('; ');
+
+        const finalMessage =
+          errorMessages || error.flatten().formErrors.join(', ');
+
+        throw new Error400(`Invalid input. Errors: ${finalMessage}`);
+      }
       return next(error);
     }
   };

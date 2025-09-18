@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-// Skema untuk membuat jenis energi baru
 export const createEnergyTypeSchema = z.object({
   body: z.object({
     type_name: z.string({
@@ -12,7 +11,6 @@ export const createEnergyTypeSchema = z.object({
   }),
 });
 
-// Skema untuk memperbarui jenis energi
 export const updateEnergyTypeSchema = z.object({
   body: z.object({
     type_name: z.string().optional(),
@@ -20,7 +18,6 @@ export const updateEnergyTypeSchema = z.object({
   }),
 });
 
-// Mengekstrak tipe data dari skema untuk digunakan di service/controller
 export type CreateEnergyTypeInput = z.infer<
   typeof createEnergyTypeSchema
 >['body'];

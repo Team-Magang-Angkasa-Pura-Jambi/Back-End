@@ -21,12 +21,6 @@ export class UserService {
     const skip = (page - 1) * limit;
     const take = limit;
 
-    console.log(
-      `Calculating pagination: page=${page}, limit=${limit}, skip=${skip}, take=${take}`
-    );
-
-    
-
     const where: Prisma.UserWhereInput = {};
 
     if (search) {
@@ -51,6 +45,67 @@ export class UserService {
         select: {
           user_id: true,
           username: true,
+          is_active: true,
+          role: {
+            select: {
+              role_id: true,
+              role_name: true,
+            },
+          },
+          created_at: true,
+        },
+        orderBy: {
+          user_id: 'asc',
+        },
+      }),
+    ]);
+
+    return {
+      data: users,
+      meta: {
+        total,
+        page,
+        limit,
+        last_page: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  public async findAllActive(filters: GetUsersQuery) {
+    const page = filters.page ?? 1;
+    const limit = filters.limit ?? 10;
+    const { search, role_id } = filters;
+
+    const skip = (page - 1) * limit;
+    const take = limit;
+
+    const where: Prisma.UserWhereInput = {};
+
+    where.is_active = true;
+
+    if (search) {
+      where.username = {
+        contains: search,
+        mode: 'insensitive',
+      };
+    }
+
+    if (role_id) {
+      where.role = {
+        role_id: role_id,
+      };
+    }
+
+    const [total, users] = await prisma.$transaction([
+      prisma.user.count({ where }),
+      prisma.user.findMany({
+        where,
+        skip,
+        take,
+        select: {
+          user_id: true,
+          username: true,
+          is_active: true,
           role: {
             select: {
               role_id: true,
@@ -78,11 +133,11 @@ export class UserService {
   public async findById(userId: number) {
     const user = await prisma.user.findUnique({
       where: { user_id: userId },
-      select: { username: true, role: true },
+      select: { user_id: true, username: true, role: true },
     });
 
     if (!user) {
-      throw new Error404('Pengguna tidak ditemukan.');
+      throw new Error404(`Pengguna ${userId} tidak ditemukan.`);
     }
     return user;
   }
@@ -157,7 +212,7 @@ export class UserService {
           user_id: true,
           username: true,
           role_id: true,
-
+          is_active: true,
           created_at: true,
           updatedAt: true,
         },
@@ -180,14 +235,12 @@ export class UserService {
 
   public async delete(userId: number): Promise<Omit<User, 'password_hash'>> {
     try {
-      return await prisma.user.delete({
-        where: { user_id: userId },
-        select: {
-          user_id: true,
-          username: true,
-          role_id: true,
-          created_at: true,
-          updatedAt: true,
+      return prisma.user.update({
+        where: {
+          user_id: userId,
+        },
+        data: {
+          is_active: false,
         },
       });
     } catch (error) {
