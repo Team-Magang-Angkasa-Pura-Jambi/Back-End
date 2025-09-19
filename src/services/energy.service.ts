@@ -1,5 +1,6 @@
 import prisma from '../configs/db.js';
 import { Prisma } from '../generated/prisma/index.js';
+import { BaseService } from '../utils/baseService.js';
 import { Error409 } from '../utils/customError.js';
 import type {
   CreateEnergyTypeInput,
@@ -9,7 +10,7 @@ import type {
 /**
  * Service yang menangani semua logika bisnis terkait Jenis Energi.
  */
-export class EnergyTypeService {
+export class EnergyTypeService extends BaseService {
   /**
    * Menemukan semua jenis energi.
    */
@@ -155,5 +156,4 @@ export class EnergyTypeService {
   }
 }
 
-
-  export const energyTypeService = new EnergyTypeService();
+export const energyTypeService = new EnergyTypeService();

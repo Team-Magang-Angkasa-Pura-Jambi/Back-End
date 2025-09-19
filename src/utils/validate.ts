@@ -1,10 +1,12 @@
 import type { Request, Response, NextFunction } from 'express';
+import type { ParamsDictionary, Query } from 'express-serve-static-core';
 import { ZodError, type ZodObject } from 'zod';
 import { Error400 } from './customError.js';
 
 export const validate =
   (schema: ZodObject) =>
   async (req: Request, res: Response, next: NextFunction) => {
+
     try {
       const parsedSchema = await schema.parseAsync({
         body: req.body,

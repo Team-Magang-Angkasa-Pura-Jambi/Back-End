@@ -1,32 +1,37 @@
 import prisma from '../configs/db.js';
 import { Prisma } from '../generated/prisma/index.js';
 import type { CreateRoleInput, UpdateRoleInput } from '../types/role.type.js';
+import { BaseService } from '../utils/baseService.js';
 import { Error409 } from '../utils/customError.js';
 
 /**
  * Service yang menangani semua logika bisnis terkait Peran Pengguna.
  */
-export class RoleService {
+export class RoleService extends BaseService {
   /**
    * Menemukan semua peran yang ada.
    */
   public async findAll() {
-    return prisma.role.findMany({
-      orderBy: {
-        role_id: 'asc',
-      },
-    });
+    return this._handleCrudOperation(() =>
+      prisma.role.findMany({
+        orderBy: {
+          role_id: 'asc',
+        },
+      })
+    );
   }
 
   /**
    * Menemukan satu peran berdasarkan ID-nya.
    */
   public async findById(roleId: number) {
-    return prisma.role.findUnique({
-      where: {
-        role_id: roleId,
-      },
-    });
+    return this._handleCrudOperation(() =>
+      prisma.role.findUnique({
+        where: {
+          role_id: roleId,
+        },
+      })
+    );
   }
 
   /**
@@ -35,44 +40,33 @@ export class RoleService {
    * jika nilai enum tersebut belum ada di dalam tabel. Biasanya digunakan untuk inisialisasi awal.
    */
   public async create(data: CreateRoleInput) {
-    try {
-      return await prisma.role.create({
-        data,
-      });
-    } catch (error) {
-      // Menangani error jika peran sudah ada (pelanggaran constraint unik)
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        throw new Error409(`Peran dengan nama '${data.role_name}' sudah ada.`);
+    return this._handleCrudOperation(
+      () =>
+        prisma.role.create({
+          data,
+        }),
+      {
+        P2002: `role '${data.role_name}' sudah terdaftar. Silakan gunakan Role lain.`,
       }
-      throw error;
-    }
+    );
   }
 
   /**
    * Memperbarui data peran yang ada.
    */
   public async update(roleId: number, data: UpdateRoleInput) {
-    try {
-      return await prisma.role.update({
-        where: {
-          role_id: roleId,
-        },
-        data,
-      });
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        throw new Error409(
-          `Peran dengan nama '${data.role_name}' sudah digunakan.`
-        );
-      }
-      throw error;
-    }
+    console.log(data);
+
+    return this._handleCrudOperation(
+      () =>
+        prisma.role.update({
+          where: {
+            role_id: roleId,
+          },
+          data,
+        }),
+      { P2002: `Peran dengan nama '${data.role_name}' sudah digunakan.` }
+    );
   }
 
   /**
@@ -80,24 +74,18 @@ export class RoleService {
    * Ini akan gagal jika peran masih terhubung dengan pengguna.
    */
   public async delete(roleId: number) {
-    try {
-      return await prisma.role.delete({
-        where: {
-          role_id: roleId,
-        },
-      });
-    } catch (error) {
-      // Menangani error jika peran masih digunakan oleh pengguna
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2003' // Foreign key constraint failed
-      ) {
-        throw new Error409(
-          'Tidak dapat menghapus peran karena masih digunakan oleh pengguna.'
-        );
+    return this._handleCrudOperation(
+      () =>
+        prisma.role.delete({
+          where: {
+            role_id: roleId,
+          },
+        }),
+      {
+        P2003:
+          'Tidak dapat menghapus peran karena masih digunakan oleh pengguna.',
       }
-      throw error;
-    }
+    );
   }
 }
 export const roleService = new RoleService();

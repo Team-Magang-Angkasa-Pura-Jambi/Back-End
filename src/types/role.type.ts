@@ -6,4 +6,4 @@ import type {
 
 // Mengekstrak tipe dari skema Zod untuk body request
 export type CreateRoleInput = z.infer<typeof createRoleSchema>['body'];
-export type UpdateRoleInput = z.infer<typeof updateRoleSchema>['body'];
+export type UpdateRoleInput = z.infer<typeof update RoleSchema>['body'];

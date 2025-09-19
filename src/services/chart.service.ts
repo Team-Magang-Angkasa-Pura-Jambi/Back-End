@@ -1,20 +1,29 @@
-import prisma from "../configs/db.js";
-import type { ChartDataPoint, GetChartDataQuery } from "../types/chart.type.js";
+import prisma from '../configs/db.js';
+import type { ChartDataPoint, GetChartDataQuery } from '../types/chart.type.js';
+import { BaseService } from '../utils/baseService.js';
 
 /**
  * Service yang menangani logika untuk mengambil dan menstrukturkan data chart.
  */
-export class ChartService {
+export class ChartService extends BaseService {
   /**
    * Menghasilkan data time-series untuk chart analisis pemakaian.
    */
-  public async getChartData(query: GetChartDataQuery): Promise<ChartDataPoint[]> {
+  public async getChartData(
+    query: GetChartDataQuery
+  ): Promise<ChartDataPoint[]> {
     // 1. Tentukan rentang tanggal (default bulan ini)
     const today = new Date();
     const defaultStartDate = new Date(today.getFullYear(), today.getMonth(), 1);
-    const defaultEndDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    const defaultEndDate = new Date(
+      today.getFullYear(),
+      today.getMonth() + 1,
+      0
+    );
 
-    const startDate = query.startDate ? new Date(query.startDate) : defaultStartDate;
+    const startDate = query.startDate
+      ? new Date(query.startDate)
+      : defaultStartDate;
     startDate.setUTCHours(0, 0, 0, 0);
 
     const endDate = query.endDate ? new Date(query.endDate) : defaultEndDate;
@@ -24,44 +33,47 @@ export class ChartService {
     const readings = await prisma.readingSession.findMany({
       where: {
         meter: { energy_type: { type_name: query.energyTypeName } },
-        timestamp: {
-          // Ambil juga data 1 hari sebelum startDate untuk menghitung konsumsi hari pertama
-          gte: new Date(startDate.getTime() - 24 * 60 * 60 * 1000),
-          lte: endDate,
-        },
+        // reading_date: {
+        //   // Ambil juga data 1 hari sebelum startDate untuk menghitung konsumsi hari pertama
+        //   gte: new Date(startDate.getTime() - 24 * 60 * 60 * 1000),
+        //   lte: endDate,
+        // },
         corrected_by: null, // Hanya ambil data yang valid
       },
       include: {
         details: true,
       },
       orderBy: {
-        timestamp: 'asc',
+        reading_date: 'asc',
       },
     });
 
     // 3. (Placeholder) Ambil data target efisiensi
     // Logika ini bisa dibuat lebih kompleks sesuai kebutuhan
     const target = await prisma.efficiencyTarget.findFirst({
-        where: {
-            energy_type: { type_name: query.energyTypeName },
-            // Logika untuk menemukan target yang relevan dengan periode
-        }
+      where: {
+        energy_type: { type_name: query.energyTypeName },
+        // Logika untuk menemukan target yang relevan dengan periode
+      },
     });
-    const efficiencyTargetValue = target ? target.target_value.toNumber() : null;
-
+    const efficiencyTargetValue = target
+      ? target.target_value.toNumber()
+      : null;
 
     // 4. Proses data untuk menghitung konsumsi harian
     const dailyConsumptionMap = new Map<string, number>();
     for (let i = 1; i < readings.length; i++) {
-        const currentDate = new Date(readings[i].timestamp).toISOString().split('T')[0];
-        const previousValue = readings[i - 1].details[0]?.value.toNumber() ?? 0;
-        const currentValue = readings[i].details[0]?.value.toNumber() ?? 0;
-        
-        if(currentValue >= previousValue) {
-            dailyConsumptionMap.set(currentDate, currentValue - previousValue);
-        }
+      const currentDate = new Date(readings[i].timestamp)
+        .toISOString()
+        .split('T')[0];
+      const previousValue = readings[i - 1].details[0]?.value.toNumber() ?? 0;
+      const currentValue = readings[i].details[0]?.value.toNumber() ?? 0;
+
+      if (currentValue >= previousValue) {
+        dailyConsumptionMap.set(currentDate, currentValue - previousValue);
+      }
     }
-    
+
     // 5. Bangun respons akhir
     const chartData: ChartDataPoint[] = [];
     const currentDate = new Date(startDate);
@@ -73,7 +85,9 @@ export class ChartService {
         date: dateString,
         actual_consumption: actualConsumption,
         // (Placeholder) Logika prediksi akan ditambahkan di sini
-        predicted_consumption: actualConsumption ? actualConsumption * 1.02 : null,
+        predicted_consumption: actualConsumption
+          ? actualConsumption * 1.02
+          : null,
         efficiency_target: efficiencyTargetValue,
       });
 

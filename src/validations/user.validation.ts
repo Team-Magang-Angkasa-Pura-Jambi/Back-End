@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { boolean, string, z } from 'zod';
 
 const numericString = z.string().regex(/^\d+$/, 'Harus berupa angka').trim();
 
@@ -39,15 +39,20 @@ export const createUserSchema = z.object({
 });
 
 export const updateUserSchema = z.object({
-  body: z.object({
-    username: z.string().min(3, 'Username minimal 3 karakter.').optional(),
-    password: z.string().min(6, 'Password minimal 6 karakter.').optional(),
-    role_id: z.coerce
-      .number()
-      .int()
-      .positive('Role ID harus angka positif.')
-      .optional(),
-  }),
+  body: z
+    .object({
+      username: z.string().min(3, 'Username minimal 3 karakter.').optional(),
+      password: z.string().min(6, 'Password minimal 6 karakter.').optional(),
+      role_id: z.coerce
+        .number()
+        .int()
+        .positive('Role ID harus angka positif.')
+        .optional(),
+      is_active: boolean().optional(),
+      photo_profile_url: string().optional(),
+    })
+    .strict(),
+
   params: z.object({
     userId: z.string().refine((val) => !isNaN(parseInt(val, 10)), {
       message: 'User ID harus berupa angka.',

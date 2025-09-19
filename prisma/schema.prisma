@@ -11,30 +11,33 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ---------------------------------------------
-// Module 1: User Management
-// ---------------------------------------------
+// =============================================
+// MODULE 1: AUTHENTICATION & USERS
+// =============================================
 
 model User {
-  user_id       Int      @id @default(autoincrement())
-  username      String   @unique
-  password_hash String
-  role_id       Int
-  created_at    DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  is_active     Boolean  @default(true) /// [SOFT DELETE] To disable users instead of deleting
+  user_id           Int      @id @default(autoincrement())
+  username          String   @unique
+  password_hash     String
+  photo_profile_url String?
+
+  role_id           Int
+  is_active         Boolean  @default(true)
+  created_at        DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   // Relations
   role Role @relation(fields: [role_id], references: [role_id])
 
-  // Reverse Relations
-  reading_sessions    ReadingSession[]
-  events_logbook      EventsLogbook[]
-  price_schemes_set   PriceScheme[]
-  efficiency_targets  EfficiencyTarget[]
-  alerts_acknowledged Alert[]
+  // Reverse Relations (links to other modules)
+  reading_sessions      ReadingSession[]
+  events_logbook        EventsLogbook[]
+  price_schemes_set     PriceScheme[]
+  efficiency_targets_set EfficiencyTarget[]
+  alerts_acknowledged   Alert[]
+  insights_acknowledged AnalyticsInsight[]
 
-  @@map("USERS")
+  @@map("users")
 }
 
 model Role {
@@ -44,7 +47,7 @@ model Role {
   // Reverse Relations
   users User[]
 
-  @@map("ROLES")
+  @@map("roles")
 }
 
 enum RoleName {
@@ -53,15 +56,16 @@ enum RoleName {
   SuperAdmin
 }
 
-// ---------------------------------------------
-// Module 2: Asset & Energy Master Data
-// ---------------------------------------------
+
+// =============================================
+// MODULE 2: ASSETS & READINGS
+// =============================================
 
 model EnergyType {
   energy_type_id      Int     @id @default(autoincrement())
   type_name           String  @unique
   unit_of_measurement String
-  is_active           Boolean @default(true) /// [SOFT DELETE] To disable types instead of deleting
+  is_active           Boolean @default(true)
 
   // Reverse Relations
   meters             Meter[]
@@ -69,14 +73,15 @@ model EnergyType {
   price_schemes      PriceScheme[]
   efficiency_targets EfficiencyTarget[]
 
-  @@map("ENERGY_TYPES")
+  @@map("energy_types")
 }
 
 model Meter {
-  meter_id       Int         @id @default(autoincrement())
-  meter_code     String      @unique
-  location       String?
-  status         MeterStatus @default(Active) /// [SOFT DELETE] Use 'DELETED' status for soft deletion
+  meter_id   Int         @id @default(autoincrement())
+  meter_code String      @unique
+  location   String?
+  status     MeterStatus @default(Active)
+
   energy_type_id Int
 
   // Relations
@@ -84,34 +89,36 @@ model Meter {
 
   // Reverse Relations
   reading_sessions ReadingSession[]
+  daily_summaries  DailySummary[]
+  insights         AnalyticsInsight[]
+  predictions      ConsumptionPrediction[]
 
-  @@map("METERS")
+  @@map("meters")
 }
- 
+
 enum MeterStatus {
   Active
   UnderMaintenance
   Inactive
-  DELETED /// Added for soft deletes
+  DELETED // For soft deletes
 }
-
-// ---------------------------------------------
-// Module 3: Reading Records (Flexible Structure)
-// ---------------------------------------------
 
 model ReadingSession {
   session_id           Int      @id @default(autoincrement())
-  timestamp            DateTime @default(now())
-  reading_date         DateTime @db.Date
+  reading_date         DateTime @default(now()) @db.Date
+
   meter_id             Int
   user_id              Int
   is_correction_for_id Int?     @unique
 
-  // Relations
-  user  User  @relation(fields: [user_id], references: [user_id])
-  meter Meter @relation(fields: [meter_id], references: [meter_id])
+  created_at           DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  // Correction Relation
+  // Relations
+  meter Meter @relation(fields: [meter_id], references: [meter_id])
+  user  User  @relation(fields: [user_id], references: [user_id])
+
+  // Self-relation for corrections
   correction_for ReadingSession? @relation("CorrectionRelation", fields: [is_correction_for_id], references: [session_id])
   corrected_by   ReadingSession? @relation("CorrectionRelation")
 
@@ -119,12 +126,13 @@ model ReadingSession {
   details ReadingDetail[]
 
   @@unique([meter_id, reading_date], name: "unique_meter_reading_per_day")
-  @@map("READING_SESSIONS")
+  @@map("reading_sessions")
 }
 
 model ReadingType {
   reading_type_id Int    @id @default(autoincrement())
   type_name       String @unique
+
   energy_type_id  Int
 
   // Relations
@@ -133,56 +141,34 @@ model ReadingType {
   // Reverse Relations
   details ReadingDetail[]
 
-  @@map("READING_TYPES")
+  @@map("reading_types")
 }
 
 model ReadingDetail {
   detail_id       Int     @id @default(autoincrement())
-  session_id      Int
-  reading_type_id Int
   value           Decimal @db.Decimal(12, 2)
 
+  session_id      Int
+  reading_type_id Int
+
   // Relations
-  /// [CASCADE DELETE] Details are useless without a session
   session      ReadingSession @relation(fields: [session_id], references: [session_id], onDelete: Cascade)
   reading_type ReadingType    @relation(fields: [reading_type_id], references: [reading_type_id])
 
-  @@map("READING_DETAILS")
-}
-
-// ---------------------------------------------
-// Module 4: Other Operations
-// ---------------------------------------------
-model PaxData {
-  pax_id    Int      @id @default(autoincrement())
-  data_date DateTime @unique @db.Date
-  total_pax Int
-
-  @@map("PAX_DATA")
-}
-
-model EventsLogbook {
-  event_id            Int      @id @default(autoincrement())
-  event_timestamp     DateTime
-  notes               String   @db.Text
-  reported_by_user_id Int
-
-  // Relations
-  reported_by User @relation(fields: [reported_by_user_id], references: [user_id])
-
-  @@map("EVENTS_LOGBOOK")
+  @@map("reading_details")
 }
 
 
-// ---------------------------------------------
-// Module 5: Price Management
-// ---------------------------------------------
+// =============================================
+// MODULE 3: BUSINESS LOGIC & OPERATIONS
+// =============================================
 
 model PriceScheme {
   scheme_id      Int      @id @default(autoincrement())
   scheme_name    String   @unique
   effective_date DateTime @db.Date
   is_active      Boolean  @default(true)
+
   energy_type_id Int
   set_by_user_id Int
 
@@ -193,21 +179,21 @@ model PriceScheme {
   // Reverse Relations
   rates SchemeRate[]
 
-  @@map("PRICE_SCHEMES")
+  @@map("price_schemes")
 }
 
 model SchemeRate {
   rate_id   Int      @id @default(autoincrement())
   rate_name String
-  rate_type RateType
   value     Decimal  @db.Decimal(12, 4)
+  rate_type RateType
+
   scheme_id Int
 
   // Relations
-  /// [CASCADE DELETE] Rates are useless without a scheme
   scheme PriceScheme @relation(fields: [scheme_id], references: [scheme_id], onDelete: Cascade)
 
-  @@map("SCHEME_RATES")
+  @@map("scheme_rates")
 }
 
 enum RateType {
@@ -215,16 +201,13 @@ enum RateType {
   Percentage
 }
 
-// ---------------------------------------------
-// Module 6: Target & Performance Management
-// ---------------------------------------------
-
 model EfficiencyTarget {
   target_id      Int      @id @default(autoincrement())
   kpi_name       String
   target_value   Decimal  @db.Decimal(10, 2)
   period_start   DateTime @db.Date
   period_end     DateTime @db.Date
+
   energy_type_id Int
   set_by_user_id Int
 
@@ -235,23 +218,50 @@ model EfficiencyTarget {
   // Reverse Relations
   alerts Alert[]
 
-  @@map("EFFICIENCY_TARGETS")
+  @@map("efficiency_targets")
 }
+
+model PaxData {
+  pax_id    Int      @id @default(autoincrement())
+  data_date DateTime @unique @db.Date
+  total_pax Int
+
+  @@map("pax_data")
+}
+
+model EventsLogbook {
+  event_id        Int      @id @default(autoincrement())
+  event_timestamp DateTime
+  notes           String   @db.Text
+
+  reported_by_user_id Int
+
+  // Relations
+  reported_by User @relation(fields: [reported_by_user_id], references: [user_id])
+
+  @@map("events_logbook")
+}
+
+
+// =============================================
+// MODULE 4: ANALYTICS & MONITORING
+// =============================================
 
 model Alert {
   alert_id                Int         @id @default(autoincrement())
-  target_id               Int
-  alert_timestamp         DateTime    @default(now())
   actual_value            Decimal     @db.Decimal(12, 2)
   target_value_at_trigger Decimal     @db.Decimal(12, 2)
   status                  AlertStatus @default(NEW)
+  alert_timestamp         DateTime    @default(now())
+
+  target_id               Int
   acknowledged_by_user_id Int?
 
   // Relations
   target          EfficiencyTarget @relation(fields: [target_id], references: [target_id])
   acknowledged_by User?            @relation(fields: [acknowledged_by_user_id], references: [user_id])
 
-  @@map("ALERTS")
+  @@map("alerts")
 }
 
 enum AlertStatus {
@@ -260,3 +270,81 @@ enum AlertStatus {
   HANDLED
 }
 
+model DailySummary {
+  summary_id   Int      @id @default(autoincrement())
+  summary_date DateTime @db.Date
+  total_pax    Int?
+  total_cost   Decimal? @db.Decimal(15, 2)
+
+  meter_id     Int
+
+  // Relations
+  meter   Meter           @relation(fields: [meter_id], references: [meter_id])
+  details SummaryDetail[]
+
+  @@unique([summary_date, meter_id])
+  @@map("daily_summaries")
+}
+
+model SummaryDetail {
+  detail_id    Int     @id @default(autoincrement())
+  metric_name  String
+  metric_value Decimal @db.Decimal(12, 2)
+
+  summary_id   Int
+
+  // Relations
+  summary DailySummary @relation(fields: [summary_id], references: [summary_id], onDelete: Cascade)
+
+  @@map("summary_details")
+}
+
+model AnalyticsInsight {
+  insight_id            Int             @id @default(autoincrement())
+  insight_date          DateTime        @db.Date
+  title                 String
+  description           String          @db.Text
+  severity              InsightSeverity @default(LOW)
+  status                InsightStatus   @default(NEW)
+  source_data_ref       Json?
+  created_at            DateTime        @default(now())
+
+  meter_id              Int?
+  acknowledged_by_user_id Int?
+
+  // Relations
+  meter           Meter? @relation(fields: [meter_id], references: [meter_id])
+  acknowledged_by User?  @relation(fields: [acknowledged_by_user_id], references: [user_id])
+
+  @@map("analytics_insights")
+}
+
+enum InsightSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum InsightStatus {
+  NEW
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model ConsumptionPrediction {
+  prediction_id          Int      @id @default(autoincrement())
+  prediction_date        DateTime @db.Date
+  predicted_value        Decimal  @db.Decimal(12, 2)
+  confidence_lower_bound Decimal? @db.Decimal(12, 2)
+  confidence_upper_bound Decimal? @db.Decimal(12, 2)
+  model_version          String?
+  created_at             DateTime @default(now())
+
+  meter_id               Int
+
+  // Relations
+  meter Meter @relation(fields: [meter_id], references: [meter_id])
+
+  @@unique([prediction_date, meter_id, model_version])
+  @@map("consumption_predictions")
+}

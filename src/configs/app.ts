@@ -20,4 +20,4 @@ app.set('view engine', 'ejs');
 apiV1(app);
 
 app.use(ErrorHandler.handleNotFound);
-app.use(ErrorHandler.handleOther);
+app.use(ErrorHandler.errorHandler);

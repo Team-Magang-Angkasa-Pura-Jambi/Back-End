@@ -25,5 +25,6 @@ export const updateRoleSchema = z.object({
     .refine((data) => Object.keys(data).length > 0, {
       message: 'Body request untuk update tidak boleh kosong.',
     })
-    .strict(),
+    .strict()
+    .optional(),
 });

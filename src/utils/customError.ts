@@ -4,16 +4,19 @@
  * ===========================================================================
  */
 
+
+
 export class HttpError extends Error {
-  statusCode: number;
-  status: boolean;
+  public readonly statusCode: number;
+  public readonly errors: any; // Properti untuk menampung error terstruktur
 
-  constructor(statusCode: number, message: string, name: string) {
+  constructor(statusCode: number, message: string, errors?: any) {
     super(message);
-
     this.statusCode = statusCode;
-    this.status = false; // The 'status' is always false for an error response.
-    this.name = name;
+    this.errors = errors; // Simpan payload error
+
+    Object.setPrototypeOf(this, new.target.prototype);
+    Error.captureStackTrace(this);
   }
 }
 
