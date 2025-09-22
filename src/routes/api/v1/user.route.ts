@@ -1,69 +1,36 @@
 import type { Router } from 'express';
+import { createCrudRouter } from '../../../utils/routerFactory.js';
+import { UserService } from '../../../services/user.service.js';
+import { UserController } from '../../../controllers/user.controller.js';
 import {
-  userController,
-  UserController,
-} from '../../../controllers/user.controller.js';
-import { userService } from '../../../services/user.service.js';
+  userQuerySchema,
+  userSchemas,
+} from '../../../validations/user.validation.js';
+import { authorize } from '../../../middleware/auth.middleware.js';
 import { validate } from '../../../utils/validate.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 
-import {
-  authMiddleware,
-  authorize,
-} from '../../../middleware/auth.middleware.js';
-import {
-  createUserSchema,
-  deleteUserSchema,
-  getUserSchema,
-  getUsersSchema,
-  updateUserSchema,
-} from '../../../validations/user.validation.js';
+export default (router: Router) => {
+  const userRouter = createCrudRouter('/users', {
+    ServiceClass: UserService,
+    ControllerClass: UserController,
+    idParamName: 'userId',
 
-export const userRoutes = (router: Router) => {
-  const prefix = '/users';
+    schemas: {
+      // getAll: ,
+      create: userSchemas.create,
+      update: userSchemas.update,
+      params: userSchemas.byId,
+    },
 
-  router.get(
-    prefix + '/',
-    authorize('Admin', 'SuperAdmin'),
-    validate(getUsersSchema),
-    asyncHandler(userController.getUsers)
-  );
+    authorizations: {
+      getAll: ['Admin', 'SuperAdmin'],
+      getById: ['Admin', 'SuperAdmin'],
+      create: ['SuperAdmin'],
+      update: ['Admin', 'SuperAdmin'],
+      delete: ['SuperAdmin'],
+    },
+  });
 
-  router.get(
-    prefix + '-active',
-    authorize('SuperAdmin'),
-    validate(getUsersSchema),
-    asyncHandler(userController.getActiveUsers)
-  );
-
-  router.get(prefix + '/me', asyncHandler(userController.getUserProfile));
-
-  router.get(
-    prefix + '/:userId',
-    authorize('SuperAdmin'),
-    validate(getUserSchema),
-    asyncHandler(userController.getUser)
-  );
-  router.post(
-    prefix + '/',
-    authorize('SuperAdmin'),
-    validate(createUserSchema),
-    asyncHandler(userController.createUser)
-  );
-
-  router.use(authMiddleware);
-
-  router.delete(
-    prefix + '/:userId',
-    authorize('SuperAdmin'),
-    validate(deleteUserSchema),
-    asyncHandler(userController.deleteUser)
-  );
-
-  router.patch(
-    prefix + '/:userId',
-    authorize('Admin', 'SuperAdmin'),
-    validate(updateUserSchema),
-    asyncHandler(userController.updateUser)
-  );
+  router.use(userRouter);
 };

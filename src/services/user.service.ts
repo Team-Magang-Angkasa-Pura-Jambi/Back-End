@@ -1,267 +1,150 @@
-import prisma from '../configs/db.js';
-import type { Prisma, User } from '../generated/prisma/index.js';
-import {
-  Error400,
-  Error404,
-  Error409,
-  Error500,
-} from '../utils/customError.js';
-import { isPrismaError } from '../utils/PrismaError.js';
-
 import bcrypt from 'bcrypt';
-import type { GetUsersQuery } from '../validations/user.validation.js';
-import type { CreateUserBody, UpdateUserBody } from '../types/auth.type.js';
-import { BaseService } from '../utils/baseService.js';
+import type { Prisma, User } from '../generated/prisma/index.js';
+import prisma from '../configs/db.js';
+import { GenericBaseService } from '../utils/GenericBaseService.js';
 
-export class UserService extends BaseService {
-  public async findAll(filters: GetUsersQuery & { is_active?: boolean }) {
-    const { page = 1, limit = 10, search, role_id, is_active } = filters;
-    const skip = (page - 1) * limit;
+// Tipe data input untuk UserService, biasanya didapat dari z.infer<schema>
+type GetUsersQuery = {
+  page: number;
+  limit: number;
+  search?: string;
+  role_id?: number;
+  is_active?: boolean;
+};
+type CreateUserInput = {
+  username: string;
+  password: string;
+  role_id: number;
+  is_active?: boolean;
+  photo_profile_url?: string | null;
+};
+type UpdateUserInput = Partial<CreateUserInput>;
 
-    const where: Prisma.UserWhereInput = {
-      // Secara default, filter is_active jika tidak ditentukan secara eksplisit
-      is_active: is_active === undefined ? true : is_active,
-    };
-
-    if (search) {
-      where.username = {
-        contains: search,
-        mode: 'insensitive',
-      };
-    }
-
-    if (role_id) {
-      where.role_id = role_id;
-    }
-
-    const [total, users] = await prisma.$transaction([
-      prisma.user.count({ where }),
-      prisma.user.findMany({
-        where,
-        skip,
-        take: limit,
-        select: {
-          user_id: true,
-          username: true,
-          is_active: true,
-          role: {
-            select: {
-              role_id: true,
-              role_name: true,
-            },
-          },
-          created_at: true,
-          updatedAt: true,
-        },
-        orderBy: {
-          user_id: 'asc',
-        },
-      }),
-    ]);
-
-    return {
-      data: users,
-      meta: {
-        total,
-        page,
-        limit,
-        last_page: Math.ceil(total / limit),
-      },
-    };
-  }
-
-  public async findAllActive(filters: GetUsersQuery) {
-    const page = filters.page ?? 1;
-    const limit = filters.limit ?? 10;
-    const { search, role_id } = filters;
-
-    const skip = (page - 1) * limit;
-    const take = limit;
-
-    const where: Prisma.UserWhereInput = {};
-
-    where.is_active = true;
-
-    if (search) {
-      where.username = {
-        contains: search,
-        mode: 'insensitive',
-      };
-    }
-
-    if (role_id) {
-      where.role = {
-        role_id: role_id,
-      };
-    }
-
-    const [total, users] = await prisma.$transaction([
-      prisma.user.count({ where }),
-      prisma.user.findMany({
-        where,
-        skip,
-        take,
-        select: {
-          user_id: true,
-          username: true,
-          role: {
-            select: {
-              role_id: true,
-              role_name: true,
-            },
-          },
-          created_at: true,
-        },
-        orderBy: {
-          user_id: 'asc',
-        },
-      }),
-    ]);
-
-    return {
-      data: users,
-      meta: {
-        total,
-        page,
-        limit,
-        last_page: Math.ceil(total / limit),
-      },
-    };
-  }
-  public async findById(userId: number) {
-    const user = await prisma.user.findFirst({
-      where: { user_id: userId, is_active: true },
-      select: {
-        user_id: true,
-        username: true,
-        is_active: true,
-        role: true,
-        created_at: true,
-        updatedAt: true,
-      },
-    });
-
-    if (!user) {
-      throw new Error404(`Pengguna dengan ID ${userId} tidak ditemukan.`);
-    }
-    return user;
+export class UserService extends GenericBaseService<
+  typeof prisma.user,
+  User,
+  CreateUserInput,
+  UpdateUserInput,
+  Prisma.UserFindManyArgs,
+  Prisma.UserFindUniqueArgs,
+  Prisma.UserCreateArgs,
+  Prisma.UserUpdateArgs,
+  Prisma.UserDeleteArgs
+> {
+  constructor() {
+    super(prisma, prisma.user, 'user_id');
   }
 
   /**
-   * Menemukan satu pengguna berdasarkan username-nya (termasuk yang tidak aktif, untuk login).
+   * @override
+   * Implementasi 'create' dari kontrak abstrak base class.
    */
-  public async findByUsername(username: string) {
-    return prisma.user.findUnique({
-      where: { username },
-      include: {
-        role: true,
+  public override async create(data: CreateUserInput): Promise<User> {
+    const { password, ...restOfData } = data;
+
+    if (!password) {
+      throw new Error('Password is required but was not provided.');
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const args: Prisma.UserCreateArgs = {
+      data: {
+        ...restOfData,
+        password_hash: hashedPassword,
       },
-    });
+    };
+
+    return this._create(args);
   }
 
   /**
-   * Membuat pengguna baru.
+   * @override
+   * Implementasi 'update' dari kontrak abstrak base class.
    */
-  public async create(data: CreateUserBody) {
-    const hashedPassword = await bcrypt.hash(data.password, 10);
-
-    return this._handleCrudOperation(
-      () =>
-        prisma.user.create({
-          data: {
-            username: data.username,
-            password_hash: hashedPassword,
-            role_id: data.role_id,
-          },
-          select: {
-            user_id: true,
-            username: true,
-            is_active: true,
-            role: true,
-          },
-        }),
-      {
-        P2002: `Username '${data.username}' sudah terdaftar.`,
-      }
-    );
-  }
-
-  public async update(
+  public override async update(
     userId: number,
-    userData: UpdateUserBody
-  ): Promise<Omit<User, 'password_hash'>> {
-    const { username, password, role_id } = userData;
-
-    const dataToUpdate: Prisma.UserUpdateInput = {};
-
-    if (username) {
-      dataToUpdate.username = username;
-    }
+    data: UpdateUserInput
+  ): Promise<User> {
+    const { password, ...restOfData } = data;
+    const dataToUpdate: Prisma.UserUpdateInput = { ...restOfData };
 
     if (password) {
       dataToUpdate.password_hash = await bcrypt.hash(password, 10);
     }
 
-    if (role_id) {
-      dataToUpdate.role = {
-        connect: {
-          role_id: role_id,
-        },
-      };
-    }
+    const args: Omit<Prisma.UserUpdateArgs, 'where'> = {
+      data: dataToUpdate,
+    };
 
-    if (Object.keys(dataToUpdate).length === 0) {
-      throw new Error400('Tidak ada data yang dikirim untuk diupdate.');
-    }
-
-    return this._handleCrudOperation(
-      () =>
-        prisma.user.update({
-          where: { user_id: userId },
-
-          data: dataToUpdate,
-
-          select: {
-            user_id: true,
-            username: true,
-            role_id: true,
-            is_active: true,
-            created_at: true,
-            updatedAt: true,
-            photo_profile_url: true,
-          },
-        }),
-      {
-        P2025: `Username '${username}' sudah digunakan.`,
-        P2002: `Pengguna dengan ID '${userId}' tidak ditemukan.`,
-      }
-    );
-  }
-
-  public async softDelete(userId: number) {
-    await this.findById(userId); // Pastikan user ada dan aktif
-    return prisma.user.update({
-      where: { user_id: userId },
-      data: { is_active: false },
-      select: { user_id: true, username: true, is_active: true },
-    });
+    return this._update(userId, args);
   }
 
   /**
-   * Melakukan Hard Delete pada pengguna.
+   * Method spesifik untuk User: Mencari berdasarkan username.
    */
-  public async deletePermanent(userId: number) {
-    // Tidak perlu findById, karena P2025 akan ditangani oleh wrapper
-    return this._handleCrudOperation(
-      () =>
-        prisma.user.delete({
-          where: { user_id: userId },
-        }),
-      {
-        P2003:
-          'Pengguna ini tidak dapat dihapus permanen karena masih memiliki data terkait.',
-      }
+  public async findByUsername(
+    username: string
+  ): Promise<(User & { role: any }) | null> {
+    return this._handleCrudOperation(() =>
+      this._model.findUnique({
+        where: { username },
+        include: { role: true },
+      })
     );
+  }
+  /**
+   * Method spesifik untuk User: Mengambil data dengan paginasi dan filter.
+   */
+  public async findAllWithPagination(filters: GetUsersQuery) {
+    console.log(filters);
+
+    const { role_id, is_active, page, limit, search } = filters;
+
+    const where: Prisma.UserWhereInput = { is_active: true };
+    if (search) {
+      where.username = { contains: search, mode: 'insensitive' };
+    }
+    if (role_id) {
+      where.role_id = role_id;
+    }
+    if (is_active !== undefined) {
+      where.is_active = is_active;
+    }
+
+    const findArgs: Prisma.UserFindManyArgs = {
+      where,
+      skip: (page - 1) * limit,
+      take: limit,
+      select: {
+        user_id: true,
+        username: true,
+        is_active: true,
+        photo_profile_url: true,
+        role: { select: { role_id: true, role_name: true } },
+        created_at: true,
+      },
+      orderBy: { user_id: 'asc' },
+    };
+
+    const [total, users] = await this._prisma.$transaction([
+      this._model.count({ where }),
+      this._model.findMany(findArgs),
+    ]);
+
+    return {
+      data: users,
+      meta: { total, page, limit, last_page: Math.ceil(total / limit) },
+    };
+  }
+
+  /**
+   * Implementasi 'soft delete' dengan memanfaatkan helper '_update'.
+   */
+  public async softDelete(userId: number): Promise<User> {
+    const args: Omit<Prisma.UserUpdateArgs, 'where'> = {
+      data: { is_active: false },
+    };
+    return this._update(userId, args);
   }
 }
 

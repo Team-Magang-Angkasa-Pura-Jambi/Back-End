@@ -1,6 +1,9 @@
 import type { Router } from 'express';
 import { RoleService } from '../../../services/role.service.js';
-import { roleController, RoleController } from '../../../controllers/role.controller.js';
+import {
+  roleController,
+  RoleController,
+} from '../../../controllers/role.controller.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { validate } from '../../../utils/validate.js';
 import {

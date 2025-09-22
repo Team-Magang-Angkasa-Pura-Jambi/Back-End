@@ -11,6 +11,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+
 // =============================================
 // MODULE 1: AUTHENTICATION & USERS
 // =============================================
@@ -164,22 +165,22 @@ model ReadingDetail {
 // =============================================
 
 model PriceScheme {
-  scheme_id      Int      @id @default(autoincrement())
-  scheme_name    String   @unique
-  effective_date DateTime @db.Date
-  is_active      Boolean  @default(true)
+    scheme_id      Int      @id @default(autoincrement())
+    scheme_name    String   @unique
+    effective_date DateTime @db.Date
+    is_active      Boolean  @default(true)
 
-  energy_type_id Int
-  set_by_user_id Int
+    energy_type_id Int
+    set_by_user_id Int
 
-  // Relations
-  energy_type EnergyType @relation(fields: [energy_type_id], references: [energy_type_id])
-  set_by_user User       @relation(fields: [set_by_user_id], references: [user_id])
+    // Relations
+    energy_type EnergyType @relation(fields: [energy_type_id], references: [energy_type_id])
+    set_by_user User       @relation(fields: [set_by_user_id], references: [user_id])
 
-  // Reverse Relations
-  rates SchemeRate[]
+    // Reverse Relations
+    rates SchemeRate[]
 
-  @@map("price_schemes")
+    @@map("price_schemes")
 }
 
 model SchemeRate {

@@ -1,42 +1,33 @@
 import type { Request, Response, NextFunction } from 'express';
-import type { ParamsDictionary, Query } from 'express-serve-static-core';
 import { ZodError, type ZodObject } from 'zod';
 import { Error400 } from './customError.js';
 
 export const validate =
-  (schema: ZodObject) =>
+  <T extends ZodObject>(schema: T) =>
   async (req: Request, res: Response, next: NextFunction) => {
+    const { body, params, query } = req;
 
+    console.log({ params: req.params, body: req.body });
     try {
-      const parsedSchema = await schema.parseAsync({
-        body: req.body,
-        params: req.params,
-        query: req.query,
+      res.locals.validatedData = await schema.parseAsync({
+        body,
+        params,
+        query,
       });
 
-      res.locals.validatedData = parsedSchema;
-
       return next();
-    } catch (error) {
-      if (error instanceof ZodError) {
-        const errorList = Object.entries(error.flatten().fieldErrors)
+    } catch (err) {
+      if (err instanceof ZodError) {
+        const { fieldErrors, formErrors } = err.flatten();
+        const errorMessages = [
+          ...Object.entries(fieldErrors).flatMap(
+            ([key, msgs]) => msgs?.map((m) => `${key}: ${m}`) ?? []
+          ),
+          ...formErrors,
+        ];
 
-          .map(([field, messages]) => {
-            if (Array.isArray(messages)) {
-              return `${field}: ${messages.join(', ')}`;
-            }
-            return null;
-          })
-
-          .filter((message) => message !== null);
-
-        const errorMessages = errorList.join('; ');
-
-        const finalMessage =
-          errorMessages || error.flatten().formErrors.join(', ');
-
-        throw new Error400(`Invalid input. Errors: ${finalMessage}`);
+        return next(new Error400(`Invalid input. ${errorMessages.join('; ')}`));
       }
-      return next(error);
+      return next(err);
     }
   };

@@ -1,3 +1,4 @@
+import type { PrismaClient } from '@prisma/client';
 import { Prisma } from '../generated/prisma/index.js';
 import { Error400, Error404, Error409, Error500 } from './customError.js';
 
@@ -17,6 +18,11 @@ export interface CustomErrorMessages {
  * Menyediakan metode terpusat untuk penanganan error Prisma yang fleksibel.
  */
 export abstract class BaseService {
+  protected _prisma: PrismaClient; // Tambahkan properti ini
+
+  constructor(prisma: PrismaClient) {
+    this._prisma = prisma;
+  }
   /**
    * Menerjemahkan error teknis dari Prisma menjadi error bisnis yang lebih jelas.
    * @param error - Error yang ditangkap.
@@ -90,4 +96,3 @@ export abstract class BaseService {
     }
   }
 }
-

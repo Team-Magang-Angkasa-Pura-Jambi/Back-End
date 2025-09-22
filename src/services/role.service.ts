@@ -55,8 +55,6 @@ export class RoleService extends BaseService {
    * Memperbarui data peran yang ada.
    */
   public async update(roleId: number, data: UpdateRoleInput) {
-    console.log(data);
-
     return this._handleCrudOperation(
       () =>
         prisma.role.update({

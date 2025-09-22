@@ -1,75 +1,49 @@
-import { boolean, string, z } from 'zod';
+import { z } from 'zod';
+import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
+import { positiveInt, requiredString } from './schmeHelper.js';
 
-const numericString = z.string().regex(/^\d+$/, 'Harus berupa angka').trim();
-
-export const getUserSchema = z.object({
-  params: z.object({
-    userId: z.coerce
-      // Tambahan 1: Pesan error khusus jika input bukan format angka
-      .number({
-        error: 'ID parameter harus berupa format angka.',
-      })
-      .positive('ID parameter harus merupakan angka positif.')
-      // Tambahan 2: Memastikan ID adalah bilangan bulat (integer)
-      .int('ID parameter harus berupa bilangan bulat.'),
-  }),
+// Skema body untuk User
+const userBodySchema = z.object({
+  username: requiredString('Username').min(3),
+  password: requiredString('Password').min(6),
+  role_id: positiveInt('Role ID').default(2),
+  is_active: z.boolean().default(true),
 });
 
-export const getUsersSchema = z.object({
-  query: z.object({
-    search: z.string().optional(),
-
-    role_id: numericString.transform(Number).optional(),
-
-    page: numericString.default('1').transform(Number),
-
-    limit: numericString.default('10').transform(Number),
-  }),
-});
-export const createUserSchema = z.object({
-  body: z.object({
-    username: z.string({ error: 'Username is required' }).min(3),
-    password: z.string({ error: 'Password is required' }).min(6),
-    role_id: z.coerce
-      .number({ error: 'Role ID must be a number.' })
-      .int()
-      .positive()
-      .default(2),
-  }),
+// Skema params (misal pakai id number)
+const userParamsSchema = z.object({
+  userId: positiveInt('User ID'),
 });
 
-export const updateUserSchema = z.object({
-  body: z
-    .object({
-      username: z.string().min(3, 'Username minimal 3 karakter.').optional(),
-      password: z.string().min(6, 'Password minimal 6 karakter.').optional(),
-      role_id: z.coerce
-        .number()
-        .int()
-        .positive('Role ID harus angka positif.')
-        .optional(),
-      is_active: boolean().optional(),
-      photo_profile_url: string().optional(),
+// Buat schema CRUD pakai builder
+export const userSchemas = new CrudSchemaBuilder({
+  bodySchema: userBodySchema,
+  paramsSchema: userParamsSchema,
+})
+  .addCustomSchema(
+    'login',
+    z.object({
+      body: z.object({
+        username: requiredString('Username'),
+        password: requiredString('Password'),
+      }),
     })
-    .strict(),
+  )
+  .addCustomSchema(
+    'changePassword',
+    z.object({
+      body: z.object({
+        oldPassword: requiredString('Password lama'),
+        newPassword: requiredString('Password baru').min(6),
+      }),
+      params: userParamsSchema,
+    })
+  );
 
-  params: z.object({
-    userId: z.string().refine((val) => !isNaN(parseInt(val, 10)), {
-      message: 'User ID harus berupa angka.',
-    }),
-  }),
+export const userQuerySchema = z.object({
+  role_id: z.coerce.number().int().positive().optional(),
+  is_active: z.coerce.boolean().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(10),
+  search: z.string().trim().optional(),
 });
-
-export const deleteUserSchema = z.object({
-  params: z.object({
-    userId: z.coerce
-      // Tambahan 1: Pesan error khusus jika input bukan format angka
-      .number({
-        error: 'ID parameter harus berupa format angka.',
-      })
-      .positive('ID parameter harus merupakan angka positif.')
-      // Tambahan 2: Memastikan ID adalah bilangan bulat (integer)
-      .int('ID parameter harus berupa bilangan bulat.'),
-  }),
-});
-export type GetUsersQuery = z.infer<typeof getUsersSchema>['query'];
