@@ -1,24 +1,13 @@
-import type { MeterStatus } from "../generated/prisma/index.js";
+import { z } from 'zod';
+import type {
+  meterSchema,
+  queryMeter,
+} from '../validations/meter.validation.js';
 
-/**
- * Tipe data untuk body request saat membuat meteran baru.
- */
-export type CreateMeterBody = {
-  meter_code: string;
-  location?: string;
-  status?: MeterStatus;
-  energy_type_id: number;
-};
+export type CreateMeterBody = z.infer<typeof meterSchema.body>;
 
-/**
- * Tipe data untuk body request saat memperbarui meteran.
- * Semua field bersifat opsional.
- */
-export type UpdateMeterBody = Partial<CreateMeterBody>;
+export type UpdateMeterBody = z.infer<typeof meterSchema.bodyPartial>;
 
-/**
- * Tipe data untuk parameter URL yang berisi ID.
- */
-export type IdParams = {
-  id: string;
-};
+export type MeterParams = z.infer<typeof meterSchema.params>;
+
+export type GetMetersQuery = z.infer<typeof queryMeter>['query'];

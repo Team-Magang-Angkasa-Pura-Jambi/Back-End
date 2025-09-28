@@ -6,13 +6,19 @@ import { meterRoutes } from './meter.routes.js';
 import { energyTypeRoutes } from './energy.routes.js';
 import { roleRoutes } from './role.routes.js';
 import { readingRoutes } from './reading.routes.js';
-import { summaryRoutes } from './summary.routes.js';
-import { chartRoutes } from './chart.routes.js';
+
 import { readingTypeRoutes } from './readingType.route.js';
 import readingDetailRoute from './readingDetail.route.js';
 import priceSchemeRoute from './priceScheme.route.js';
-// import efficencyTargetRoute from './efficencyTarget.route.js';
 import userRoute from './user.route.js';
+import efficencyTargetRoute from './efficencyTarget.route.js';
+import paxRoutes from './pax.routes.js';
+import eventsLogBookRoutes from './eventsLogBook.routes.js';
+import dailySummaryRoute from './dailySummary.route.js';
+import summaryDetailRoute from './summaryDetail.route.js';
+import analysisRoute from './analysis.route.js';
+import SchemeRateRoute from './schemeRate.route.js';
+import recapRoute from './recap.route.js';
 
 export default (app: any) => {
   const router = Router();
@@ -21,7 +27,7 @@ export default (app: any) => {
   router.get('/', indexController.index);
 
   authRoutes(router);
-  summaryRoutes(router);
+
   router.use(authMiddleware);
   userRoute(router);
 
@@ -29,9 +35,16 @@ export default (app: any) => {
   energyTypeRoutes(router);
   roleRoutes(router);
   readingRoutes(router);
-  chartRoutes(router);
+
   readingTypeRoutes(router);
   readingDetailRoute(router);
   priceSchemeRoute(router);
-  // efficencyTargetRoute(router);
+  efficencyTargetRoute(router);
+  SchemeRateRoute(router);
+  paxRoutes(router);
+  eventsLogBookRoutes(router);
+  dailySummaryRoute(router);
+  summaryDetailRoute(router);
+  analysisRoute(router);
+  recapRoute(router);
 };

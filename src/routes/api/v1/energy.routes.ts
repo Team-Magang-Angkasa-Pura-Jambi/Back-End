@@ -1,39 +1,34 @@
 import type { Router } from 'express';
-import { energyTypeController } from '../../../controllers/energy.controller.js';
 import {
-  createEnergyTypeSchema,
-  updateEnergyTypeSchema,
+  energyTypeSchema,
+  queryEnergy,
 } from '../../../validations/energy.validation.js';
-import { asyncHandler } from '../../../utils/asyncHandler.js';
-import { validate } from '../../../utils/validate.js';
+
+import { createCrudRouter } from '../../../utils/routerFactory.js';
+import { EnergyTypeService } from '../../../services/energy.service.js';
+import { EnergyTypeController } from '../../../controllers/energy.controller.js';
 
 export const energyTypeRoutes = (router: Router) => {
-  const prefix = '/energy-types';
+  const energyTypeRouter = createCrudRouter('/energy-types', {
+    ServiceClass: EnergyTypeService,
+    ControllerClass: EnergyTypeController,
+    idParamName: 'energyTypeId',
 
-  router.get(prefix, asyncHandler(energyTypeController.getAllEnergyTypes));
-  router.get(
-    prefix + '-active',
-    asyncHandler(energyTypeController.getAllActiveEnergyTypes)
-  );
-  router.post(
-    prefix,
-    validate(createEnergyTypeSchema),
-    asyncHandler(energyTypeController.createEnergyType)
-  );
+    schemas: {
+      getAll: queryEnergy,
+      create: energyTypeSchema.create,
+      update: energyTypeSchema.update,
+      params: energyTypeSchema.byId,
+    },
 
-  router.get(
-    prefix + '/:id',
-    asyncHandler(energyTypeController.getEnergyTypeById)
-  );
+    authorizations: {
+      getAll: ['Admin', 'SuperAdmin', 'Technician'],
+      getById: ['Admin', 'SuperAdmin'],
+      create: ['SuperAdmin'],
+      update: ['Admin', 'SuperAdmin'],
+      delete: ['SuperAdmin'],
+    },
+  });
 
-  router.put(
-    prefix + '/:id',
-    validate(updateEnergyTypeSchema),
-    asyncHandler(energyTypeController.updateEnergyType)
-  );
-
-  router.delete(
-    prefix + '/:id',
-    asyncHandler(energyTypeController.deleteEnergyType)
-  );
+  router.use(energyTypeRouter);
 };

@@ -2,6 +2,8 @@ import bcrypt from 'bcrypt';
 import type { Prisma, User } from '../generated/prisma/index.js';
 import prisma from '../configs/db.js';
 import { GenericBaseService } from '../utils/GenericBaseService.js';
+import type { DefaultArgs } from '../generated/prisma/runtime/library.js';
+import type { CustomErrorMessages } from '../utils/baseService.js';
 
 // Tipe data input untuk UserService, biasanya didapat dari z.infer<schema>
 type GetUsersQuery = {
@@ -35,10 +37,26 @@ export class UserService extends GenericBaseService<
     super(prisma, prisma.user, 'user_id');
   }
 
-  /**
-   * @override
-   * Implementasi 'create' dari kontrak abstrak base class.
-   */
+  public override async findAll() {
+    const where: Prisma.UserWhereInput = {};
+
+    // ... (logika filter Anda)
+
+    // Buat objek argumen pencarian
+    const findArgs: Prisma.UserFindManyArgs = {
+      where,
+      // PERBAIKAN: Tambahkan 'include' di sini
+      include: {
+        role: true, // Ini akan memuat data dari tabel Role
+      },
+      orderBy: {
+        user_id: 'asc',
+      },
+    };
+
+    // Panggil findMany dengan argumen yang sudah lengkap
+    return this._model.findMany(findArgs);
+  }
   public override async create(data: CreateUserInput): Promise<User> {
     const { password, ...restOfData } = data;
 
@@ -96,8 +114,6 @@ export class UserService extends GenericBaseService<
    * Method spesifik untuk User: Mengambil data dengan paginasi dan filter.
    */
   public async findAllWithPagination(filters: GetUsersQuery) {
-    console.log(filters);
-
     const { role_id, is_active, page, limit, search } = filters;
 
     const where: Prisma.UserWhereInput = { is_active: true };

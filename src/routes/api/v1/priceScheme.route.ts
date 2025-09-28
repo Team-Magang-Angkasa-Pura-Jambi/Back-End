@@ -3,22 +3,28 @@
 import { Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
 import { PriceSchemeService } from '../../../services/priceShcema.service.js';
+import { priceSchema } from '../../../validations/priceSchema.validation.js';
 import { PriceSchemeController } from '../../../controllers/priceSchme.controller.js';
-import {
-  createPriceSchemeSchema,
-  priceSchemeParamsSchema,
-  updatePriceSchemeSchema,
-} from '../../../validations/priceSchema.validation.js';
 
 export default (router: Router) => {
   const priceSchemeRouter = createCrudRouter('/price-schemes', {
     ServiceClass: PriceSchemeService,
     ControllerClass: PriceSchemeController,
-    idParamName: 'scheme_id',
+    idParamName: 'schemeId',
+
     schemas: {
-      create: createPriceSchemeSchema,
-      update: updatePriceSchemeSchema,
-      params: priceSchemeParamsSchema,
+      getAll: priceSchema.listQuery,
+      create: priceSchema.create,
+      update: priceSchema.update,
+      params: priceSchema.byId,
+    },
+
+    authorizations: {
+      getAll: ['Admin', 'SuperAdmin'],
+      getById: ['Admin', 'SuperAdmin'],
+      create: ['SuperAdmin', 'Admin'],
+      update: ['Admin', 'SuperAdmin'],
+      delete: ['SuperAdmin'],
     },
   });
 

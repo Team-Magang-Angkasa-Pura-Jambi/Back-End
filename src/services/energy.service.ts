@@ -1,159 +1,75 @@
+// src/services/energyType.service.ts
+
 import prisma from '../configs/db.js';
-import { Prisma } from '../generated/prisma/index.js';
-import { BaseService } from '../utils/baseService.js';
-import { Error409 } from '../utils/customError.js';
+import type { EnergyType, Prisma, Meter } from '../generated/prisma/index.js';
 import type {
-  CreateEnergyTypeInput,
-  UpdateEnergyTypeInput,
-} from '../validations/energy.validation.js';
+  CreateEnergyTypeBody,
+  GetEnergyTypesQuery,
+  UpdateEnergyTypeBody,
+} from '../types/energy.type.js';
 
-/**
- * Service yang menangani semua logika bisnis terkait Jenis Energi.
- */
-export class EnergyTypeService extends BaseService {
-  /**
-   * Menemukan semua jenis energi.
-   */
-  public async findAll() {
-    return prisma.energyType.findMany({
-      orderBy: {
-        energy_type_id: 'asc',
-      },
-    });
-  }
+import { GenericBaseService } from '../utils/GenericBaseService.js';
 
-  public async findAllActive() {
-    return prisma.energyType.findMany({
-      where: {
-        is_active: true,
-      },
-      orderBy: {
-        energy_type_id: 'asc',
-      },
-    });
-  }
+// Tipe untuk query filter kustom
 
-  /**
-   * Menemukan satu jenis energi berdasarkan ID-nya.
-   */
-  public async findById(energyTypeId: number) {
-    return prisma.energyType.findUnique({
-      where: {
-        energy_type_id: energyTypeId,
-      },
-    });
+// Tipe hasil query yang menyertakan relasi
+type EnergyTypeWithRelations = Prisma.EnergyTypeGetPayload<{
+  include: { reading_types: true; meters: true };
+}>;
+
+// Tipe untuk hasil pencarian meter
+type MeterWithEnergyType = Prisma.MeterGetPayload<{
+  include: { energy_type: true };
+}>;
+
+export class EnergyTypeService extends GenericBaseService<
+  // PERBAIKAN: Semua tipe generik disesuaikan dengan model EnergyType
+  typeof prisma.energyType,
+  EnergyType,
+  CreateEnergyTypeBody,
+  UpdateEnergyTypeBody,
+  Prisma.EnergyTypeFindManyArgs,
+  Prisma.EnergyTypeFindUniqueArgs,
+  Prisma.EnergyTypeCreateArgs,
+  Prisma.EnergyTypeUpdateArgs,
+  Prisma.EnergyTypeDeleteArgs
+> {
+  constructor() {
+    super(prisma, prisma.energyType, 'energy_type_id');
   }
 
   /**
-   * Membuat jenis energi baru.
+   * Meng-override findAll untuk selalu menyertakan relasi.
    */
-  public async create(data: CreateEnergyTypeInput) {
-    const existingType = await prisma.energyType.findUnique({
-      where: { type_name: data.type_name },
-    });
-    if (existingType) {
-      throw new Error409(
-        `Jenis energi dengan nama '${data.type_name}' sudah ada.`
-      );
+  public override async findAll(
+    query: GetEnergyTypesQuery = {}
+  ): Promise<EnergyTypeWithRelations[]> {
+    const { typeName, ...restArgs } = query;
+    const where: Prisma.EnergyTypeWhereInput = {};
+
+    // Bangun klausa 'where' secara dinamis
+    if (typeName) {
+      where.type_name = {
+        contains: typeName,
+        mode: 'insensitive',
+      };
     }
 
-    return prisma.energyType.create({
-      data,
-    });
-  }
-
-  /**
-   * Memperbarui data jenis energi yang ada.
-   */
-  public async update(energyTypeId: number, data: UpdateEnergyTypeInput) {
-    const { type_name, unit_of_measurement } = data;
-
-    if (type_name) {
-      const existingType = await prisma.energyType.findFirst({
-        where: {
-          type_name: type_name,
-          NOT: {
-            energy_type_id: energyTypeId,
-          },
-        },
-      });
-
-      if (existingType) {
-        throw new Error409(
-          `Jenis energi dengan nama '${type_name}' sudah digunakan.`
-        );
-      }
-    }
-
-    const updateData = {
-      ...(type_name && { type_name }),
-      ...(unit_of_measurement && { unit_of_measurement }),
+    // Gabungkan semua argumen menjadi satu
+    const findArgs: Prisma.EnergyTypeFindManyArgs = {
+      ...restArgs, // Sebarkan argumen lain seperti orderBy, take, skip
+      where,
+      include: {
+        reading_types: true,
+        meters: true,
+      },
     };
 
-    if (Object.keys(updateData).length === 0) {
-      return prisma.energyType.findUnique({
-        where: {
-          energy_type_id: energyTypeId,
-        },
-      });
-    }
-
-    return prisma.energyType.update({
-      where: {
-        energy_type_id: energyTypeId,
-      },
-      data: updateData,
-    });
+    // Panggil metode 'findAll' dari parent dengan argumen yang sudah lengkap
+    return super.findAll(findArgs);
   }
 
-  /**
-   * Menghapus jenis energi.
-   */
-  public async delete(energyTypeId: number) {
-    try {
-      return await prisma.energyType.update({
-        where: {
-          energy_type_id: energyTypeId,
-        },
-
-        data: {
-          is_active: false,
-        },
-      });
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2003'
-      ) {
-        throw new Error409(
-          'Tidak dapat menghapus jenis energi karena masih digunakan oleh data lain (misal: meteran).'
-        );
-      }
-
-      throw error;
-    }
-  }
-
-  public async permanentDelete(energyTypeId: number) {
-    try {
-      return await prisma.energyType.delete({
-        where: {
-          energy_type_id: energyTypeId,
-        },
-      });
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2003'
-      ) {
-        throw new Error409(
-          'Tidak dapat menghapus jenis energi karena masih digunakan oleh data lain (misal: meteran).'
-        );
-      }
-
-      throw error;
-    }
-  }
+  // Metode findById, create, update, delete diwarisi dari GenericBaseService
 }
 
 export const energyTypeService = new EnergyTypeService();

@@ -59,7 +59,6 @@ export const createCrudRouter = (
     (router as any)[method](path, ...middlewares, asyncHandler(handler));
   };
 
-  // 🔹 Define CRUD routes
   buildRoute('getAll', prefix, 'get', schemas.getAll);
   buildRoute('create', prefix, 'post', schemas.create);
   buildRoute('getById', `${prefix}/:${idParamName}`, 'get', schemas.params);

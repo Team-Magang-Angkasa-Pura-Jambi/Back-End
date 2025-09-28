@@ -1,13 +1,14 @@
-// Tipe data untuk Body saat membuat EnergyType baru
-export type CreateEnergyTypeBody = {
-  type_name: string;
-  unit_of_measurement: string;
-};
+import { z } from 'zod';
+import type {
+  energyTypeSchema,
+  queryEnergy,
+} from '../validations/energy.validation.js';
+import type { getReadingsSchema } from '../validations/reading.validation.js';
 
-// Tipe data untuk Body saat memperbarui EnergyType
-export type UpdateEnergyTypeBody = Partial<CreateEnergyTypeBody>;
+export type CreateEnergyTypeBody = z.infer<typeof energyTypeSchema.body>;
 
-// Tipe data untuk Params saat mengambil/memperbarui/menghapus by ID
-export type EnergyTypeParams = {
-  id: string;
-};
+export type UpdateEnergyTypeBody = z.infer<typeof energyTypeSchema.bodyPartial>;
+
+export type EnergyTypeParams = z.infer<typeof energyTypeSchema.params>;
+
+export type GetEnergyTypesQuery = z.infer<typeof queryEnergy>['query'];

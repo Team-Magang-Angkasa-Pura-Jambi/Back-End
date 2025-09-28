@@ -1,23 +1,20 @@
-import type { z } from 'zod';
+import { z } from 'zod';
 import type {
-  createReadingSessionSchema,
-  getByIdSchema,
   getReadingsSchema,
+  queryLastReading,
+  readingSessionSchemas,
 } from '../validations/reading.validation.js';
 
-/**
- * Tipe data untuk body request saat membuat sesi pembacaan baru.
- */
 export type CreateReadingSessionBody = z.infer<
-  typeof createReadingSessionSchema
->['body'];
+  typeof readingSessionSchemas.body
+>;
 
-/**
- * Tipe data untuk parameter ID dari URL.
- */
-export type IdParams = z.infer<typeof getByIdSchema>['params'];
+export type UpdateReadingSessionBody = z.infer<
+  typeof readingSessionSchemas.bodyPartial
+>;
 
-/**
- * Tipe data untuk query parameters saat mengambil data pembacaan.
- */
-export type GetReadingsQuery = z.infer<typeof getReadingsSchema>['query'];
+export type ReadingSessionParams = z.infer<typeof readingSessionSchemas.params>;
+
+export type GetReadingSessionsQuery = z.infer<typeof getReadingsSchema>;
+
+export type GetQueryLastReading = z.infer<typeof queryLastReading>['query'];

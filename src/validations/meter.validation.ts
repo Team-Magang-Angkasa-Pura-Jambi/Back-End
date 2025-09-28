@@ -1,54 +1,27 @@
-import { number, z } from 'zod';
 import { MeterStatus } from '../generated/prisma/index.js';
+import { optionalString, positiveInt, requiredString } from './schmeHelper.js';
+import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
+import z from 'zod';
 
-/**
- * Skema validasi untuk parameter ID di URL.
- */
-export const idParamsSchema = z.object({
-  params: z.object({
-    id: z.string().regex(/^\d+$/, 'ID harus berupa angka positif.'),
-  }),
+const meterParamsSchema = z.object({
+  meterId: positiveInt('Meter ID'),
 });
 
-export const createMeterSchema = z.object({
-  body: z.object({
-    meter_code: z.string().min(1, { message: 'meter_code wajib diisi.' }),
-
-    energy_type_id: z.coerce.number({
-      error: 'energy_type_id harus berupa angka.',
-    }),
-
-    location: z.string().optional(),
-
-    status: z.nativeEnum(MeterStatus).optional(),
-  }),
+const meterBodySchema = z.object({
+  meter_code: requiredString('Meter Code'),
+  energy_type_id: positiveInt('Energy Type Id'),
+  location: optionalString('location'),
+  status: z.enum(MeterStatus).optional(),
 });
 
-/**
- * Skema validasi untuk body request saat memperbarui meteran.
- */
-export const updateMeterSchema = z.object({
-  params: z.object({
-    id: z.coerce
-      .number()
-      .positive('ID parameter harus merupakan angka positif.'),
-  }),
-
-  body: z
-    .object({
-      meter_code: z
-        .string()
-        .nonempty('Jika diisi, meter_code tidak boleh kosong.'),
-      location: z.string().nonempty('Jika diisi, lokasi tidak boleh kosong.'),
-      status: z.nativeEnum(MeterStatus),
-
-      energy_type_id: z.coerce
-        .number()
-        .positive('ID Tipe Energi harus angka positif.'),
-    })
-    .partial()
-
-    .refine((data) => Object.keys(data).length > 0, {
-      message: 'Body request untuk update tidak boleh kosong.',
-    }),
+export const meterSchema = new CrudSchemaBuilder({
+  bodySchema: meterBodySchema,
+  paramsSchema: meterParamsSchema,
 });
+
+export const queryMeter = meterSchema.getList(
+  z.object({
+    energyTypeId: positiveInt('energy type id').optional(),
+    typeName: optionalString('type name'),
+  })
+);

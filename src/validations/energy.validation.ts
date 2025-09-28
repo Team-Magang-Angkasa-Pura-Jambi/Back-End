@@ -1,26 +1,25 @@
 import { z } from 'zod';
+import { optionalString, positiveInt, requiredString } from './schmeHelper.js';
+import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
 
-export const createEnergyTypeSchema = z.object({
-  body: z.object({
-    type_name: z.string({
-      error: 'Nama jenis energi wajib diisi.',
-    }),
-    unit_of_measurement: z.string({
-      error: 'Satuan pengukuran wajib diisi.',
-    }),
-  }),
+export const EnergyTypeBodySchema = z.object({
+  type_name: requiredString('Energi Type'),
+  unit_of_measurement: requiredString('unit'),
 });
 
-export const updateEnergyTypeSchema = z.object({
-  body: z.object({
-    type_name: z.string().optional(),
-    unit_of_measurement: z.string().optional(),
-  }),
+const userParamsSchema = z
+  .object({
+    energyTypeId: positiveInt('User ID'),
+  })
+  .strict();
+
+export const energyTypeSchema = new CrudSchemaBuilder({
+  bodySchema: EnergyTypeBodySchema,
+  paramsSchema: userParamsSchema,
 });
 
-export type CreateEnergyTypeInput = z.infer<
-  typeof createEnergyTypeSchema
->['body'];
-export type UpdateEnergyTypeInput = z.infer<
-  typeof updateEnergyTypeSchema
->['body'];
+export const queryEnergy = z.object({
+  query: z.object({
+    typeName: optionalString('type name'),
+  }),
+});

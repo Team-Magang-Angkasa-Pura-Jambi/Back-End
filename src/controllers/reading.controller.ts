@@ -1,100 +1,101 @@
 import type { Request, Response } from 'express';
-import type { ReadingService } from '../services/reading.service.js';
+import { ReadingService } from '../services/reading.service.js';
 import type {
   CreateReadingSessionBody,
-  GetReadingsQuery,
-  IdParams,
+  GetReadingSessionsQuery,
+  UpdateReadingSessionBody,
 } from '../types/reading.types.js';
 import { res200, res201 } from '../utils/response.js';
 import { Error401 } from '../utils/customError.js';
+import { BaseController } from '../utils/baseController.js';
+import type { ReadingSession } from '../generated/prisma/index.js';
 
 /**
  * Controller untuk menangani request HTTP terkait Sesi Pembacaan.
  */
-export class ReadingController {
-  constructor(private readingService: ReadingService) {}
 
-  public getReadings = async (
-    req: Request<{}, {}, {}, GetReadingsQuery>,
+type CreateReadingSessionInternal = CreateReadingSessionBody & {
+  user_id: number;
+};
+export class ReadingController extends BaseController<
+  ReadingSession,
+  CreateReadingSessionBody,
+  UpdateReadingSessionBody,
+  GetReadingSessionsQuery,
+  ReadingService
+> {
+  constructor() {
+    super(new ReadingService(), 'sessionId');
+  }
+  public override getAll = async (
+    req: Request,
     res: Response
-  ) => {
-    const readings = await this.readingService.findAll(req.query);
-    res200({
-      res,
-      message: 'Berhasil mengambil data pembacaan.',
-      data: readings,
-    });
+  ): Promise<void> => {
+    const validatedQuery = res.locals.validatedData;
+    console.log(validatedQuery);
+
+    const result = await this.service.findAllWithFilters(validatedQuery);
+
+    res200({ res, message: 'success', data: result });
   };
 
-  public getById = async (req: Request<IdParams>, res: Response) => {
-    const sessionId = res.locals.validatedData.params.id;
-    const reading = await this.readingService.findById(sessionId);
-    res200({
-      res,
-      message: 'Berhasil mengambil detail sesi pembacaan.',
-      data: reading,
+  public getLastReading = async (
+    req: Request,
+    res: Response
+  ): Promise<void> => {
+    const { meterId, readingTypeId } = res.locals.validatedData.query;
+
+    const result = await this.service.findLastReading({
+      meterId,
+      readingTypeId,
     });
+
+    res200({ res, message: 'success', data: result });
   };
 
-  public create = async (
-    req: Request<{}, {}, CreateReadingSessionBody>,
+  public override create = async (
+    req: Request,
     res: Response
-  ) => {
+  ): Promise<void> => {
+    const validatedBody = res.locals.validatedData.body;
+    console.log(req.user);
     const user_id = req.user?.id;
-
     if (!user_id) {
-      throw new Error401('User not authenticated');
+      throw new Error401('User not authenticated or user ID is missing.');
     }
 
-    req.body.user_id = user_id;
-
-    res.locals.validatedData.body.user_id = user_id;
-
-    const newReading = await this.readingService.create(
-      res.locals.validatedData.body
-    );
-
-    
-    res201({
-      res,
-      message: 'Data pembacaan baru berhasil dibuat.',
-      data: newReading,
-    });
+    const internalData: CreateReadingSessionInternal = {
+      ...validatedBody,
+      user_id,
+      reading_date: validatedBody.reading_date
+        ? new Date(validatedBody.reading_date)
+        : new Date(),
+    };
+    const record = await this.service.create(internalData);
+    res.status(201).json({ status: 'success', data: record });
   };
 
   public createCorrection = async (
-    req: Request<IdParams, {}, CreateReadingSessionBody>,
+    req: Request,
     res: Response
-  ) => {
-    const originalSessionId = res.locals.validatedData.params.id;
-    const user_id = req.user?.id;
+  ): Promise<void> => {
+    const originalSessionId = res.locals.validatedData.params;
+    const validatedBody = res.locals.validatedData.body;
 
-    if (!user_id) {
-      throw new Error401('User not authenticated');
-    }
+    const internalData: CreateReadingSessionInternal = {
+      ...validatedBody,
+      user_id: res.locals.user.id,
+      reading_date: validatedBody.reading_date
+        ? new Date(validatedBody.reading_date)
+        : new Date(),
+    };
 
-    res.locals.validatedData.body.user_id = user_id;
-
-    const correctedReading = await this.readingService.createCorrection(
+    const record = await this.service.createCorrection(
       originalSessionId,
-      res.locals.validatedData.body
+      internalData
     );
-    
-    res201({
-      res,
-      message: 'Data koreksi berhasil dibuat.',
-      data: correctedReading,
-    });
-  };
-
-  public delete = async (req: Request<IdParams>, res: Response) => {
-    const sessionId = res.locals.validatedData.params.id;
-
-    const deletedReading = await this.readingService.delete(sessionId);
-    res200({
-      res,
-      message: 'Data pembacaan berhasil dihapus.',
-      data: deletedReading,
-    });
+    res.status(201).json({ status: 'success', data: record });
   };
 }
+
+export const readingController = new ReadingController();

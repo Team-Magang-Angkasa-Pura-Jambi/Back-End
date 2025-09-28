@@ -1,6 +1,12 @@
 import type { PrismaClient } from '@prisma/client';
 import { Prisma } from '../generated/prisma/index.js';
-import { Error400, Error404, Error409, Error500 } from './customError.js';
+import {
+  Error400,
+  Error404,
+  Error409,
+  Error500,
+  HttpError,
+} from './customError.js';
 
 /**
  * Mendefinisikan struktur untuk pesan error kustom yang bisa dikirim
@@ -84,6 +90,7 @@ export abstract class BaseService {
    * @param customMessages - Pesan kustom opsional untuk error spesifik.
    * @returns Hasil dari operasi jika berhasil.
    */
+
   protected async _handleCrudOperation<T>(
     operation: () => Promise<T>,
     customMessages?: CustomErrorMessages
@@ -91,7 +98,12 @@ export abstract class BaseService {
     try {
       return await operation();
     } catch (error) {
-      // Teruskan error dan pesan kustom ke handler terpusat kita
+      // PERBAIKAN: Cek dulu apakah error ini adalah error kustom kita
+      if (error instanceof HttpError) {
+        throw error; // Jika ya, lempar kembali apa adanya tanpa diubah
+      }
+
+      // Jika bukan, baru serahkan ke handler Prisma untuk diterjemahkan
       this._handlePrismaError(error, customMessages);
     }
   }

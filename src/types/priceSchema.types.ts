@@ -1,12 +1,10 @@
-import type z from 'zod';
-import type {
-  createPriceSchemeSchema,
-  updatePriceSchemeSchema,
-} from '../validations/priceSchema.validation.js';
+import { z } from 'zod';
+import type { priceSchema } from '../validations/priceSchema.validation.js';
 
-export type CreatePriceSchemeInput = z.infer<
-  typeof createPriceSchemeSchema
->['body'];
-export type UpdatePriceSchemeInput = z.infer<typeof updatePriceSchemeSchema>;
+export type CreatePriceSchemaBody = z.infer<typeof priceSchema.body>;
 
+export type UpdatePriceSchemaBody = z.infer<typeof priceSchema.bodyPartial>;
 
+export type PriceSchemaParams = z.infer<typeof priceSchema.params>;
+
+export type GetPriceSchemasQuery = z.infer<typeof priceSchema.listQuery>;

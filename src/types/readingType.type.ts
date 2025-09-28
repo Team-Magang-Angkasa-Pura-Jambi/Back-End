@@ -1,19 +1,16 @@
-import type { z } from 'zod';
+import { z } from 'zod';
 import type {
-  createReadingTypeSchema,
-  updateReadingTypeSchema,
+  queryGetByMeter,
+  readingTypeSchema,
 } from '../validations/readingType.validation.js';
 
-/**
- * Tipe data untuk body request saat membuat tipe pembacaan baru.
- */
-export type CreateReadingTypeInput = z.infer<
-  typeof createReadingTypeSchema
->['body'];
+export type CreateReadingTypeBody = z.infer<typeof readingTypeSchema.body>;
 
-/**
- * Tipe data untuk body request saat memperbarui tipe pembacaan.
- */
-export type UpdateReadingTypeInput = z.infer<
-  typeof updateReadingTypeSchema
->['body'];
+export type UpdateReadingTypeBody = z.infer<
+  typeof readingTypeSchema.bodyPartial
+>;
+
+export type ReadingTypeParams = z.infer<typeof readingTypeSchema.params>;
+
+export type GetReadingTypesQuery = z.infer<typeof readingTypeSchema.listQuery>;
+export type GetQueryMeterId = z.infer<typeof queryGetByMeter>['query'];

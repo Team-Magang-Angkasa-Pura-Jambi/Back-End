@@ -1,40 +1,36 @@
 import type { Router } from 'express';
 import { ReadingTypeService } from '../../../services/readingType.service.js';
-import { ReadingTypeController } from '../../../controllers/readingType.controller.js';
-import { asyncHandler } from '../../../utils/asyncHandler.js';
 import {
-  createReadingTypeSchema,
-  updateReadingTypeSchema,
+  readingTypeController,
+  ReadingTypeController,
+} from '../../../controllers/readingType.controller.js';
+import {
+  queryGetByMeter,
+  readingTypeSchema,
 } from '../../../validations/readingType.validation.js';
-import { validate } from '../../../utils/validate.js';
-import { getByIdSchema } from '../../../validations/reading.validation.js';
+import { createCrudRouter } from '../../../utils/routerFactory.js';
 
 export const readingTypeRoutes = (router: Router) => {
-  const prefix = '/reading-types';
-  const readingTypeService = new ReadingTypeService();
-  const readingTypeController = new ReadingTypeController(readingTypeService);
+  const readingTypeRouter = createCrudRouter('/reading-types', {
+    ServiceClass: ReadingTypeService,
+    ControllerClass: ReadingTypeController,
+    idParamName: 'readingTypeId',
 
-  router
-    .route(prefix)
-    .get(asyncHandler(readingTypeController.getAllReadingTypes))
-    .post(
-      validate(createReadingTypeSchema),
-      asyncHandler(readingTypeController.createReadingType)
-    );
+    schemas: {
+      getAll: queryGetByMeter,
+      create: readingTypeSchema.create,
+      update: readingTypeSchema.update,
+      params: readingTypeSchema.byId,
+    },
 
-  router
-    .route(`${prefix}/:id`)
-    .get(
-      validate(getByIdSchema),
-      asyncHandler(readingTypeController.getReadingTypeById)
-    )
-    .put(
-      validate(getByIdSchema),
-      validate(updateReadingTypeSchema),
-      asyncHandler(readingTypeController.updateReadingType)
-    )
-    .delete(
-      validate(getByIdSchema),
-      asyncHandler(readingTypeController.deleteReadingType)
-    );
+    authorizations: {
+      getAll: ['Admin', 'SuperAdmin'],
+      getById: ['Admin', 'SuperAdmin'],
+      create: ['SuperAdmin'],
+      update: ['Admin', 'SuperAdmin'],
+      delete: ['SuperAdmin'],
+    },
+  });
+
+  router.use(readingTypeRouter);
 };

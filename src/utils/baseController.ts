@@ -47,7 +47,10 @@ export abstract class BaseController<
    */
   public getAll = async (req: Request, res: Response) => {
     const queryData: TListQuery = res.locals.validatedData.query;
+    console.log(queryData);
+
     const result = await this.service.findAll(queryData);
+
     res200({ res, message: 'Berhasil mengambil semua data.', data: result });
   };
 

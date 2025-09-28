@@ -1,69 +1,65 @@
-// src/services/priceScheme.service.ts
-
 import prisma from '../configs/db.js';
 import type { PriceScheme, Prisma } from '../generated/prisma/index.js';
-import type { CreatePriceSchemeInput } from '../types/priceSchema.types.js';
-import type { CustomErrorMessages } from '../utils/baseService.js';
-import { Error404 } from '../utils/customError.js';
+import type {
+  CreatePriceSchemaBody,
+  UpdatePriceSchemaBody,
+} from '../types/priceSchema.types.js';
 import { GenericBaseService } from '../utils/GenericBaseService.js';
 
-// Tipe-tipe spesifik tetap didefinisikan untuk keamanan
-type PriceSchemeModel = PriceScheme;
-type PriceSchemeCreateInput = CreatePriceSchemeInput;
-type PriceSchemeUpdateInput = Prisma.PriceSchemeUpdateInput &
-  Record<string, any>;
+type PriceSchemeWithRates = Prisma.PriceSchemeGetPayload<{
+  include: { rates: true };
+}>;
 
-type PrismaCreateArgs = {
-  data: PriceSchemeCreateInput;
-  include?: any;
-  select?: any;
+type CreatePriceSchemaInternal = CreatePriceSchemaBody & {
+  set_by_user_id: number;
 };
 
-// Perhatikan: deklarasi generic sekarang lebih pendek!
 export class PriceSchemeService extends GenericBaseService<
-  PriceSchemeModel,
-  PriceSchemeCreateInput,
-  PriceSchemeUpdateInput
+  typeof prisma.priceScheme,
+  PriceScheme,
+  CreatePriceSchemaBody,
+  UpdatePriceSchemaBody,
+  Prisma.PriceSchemeFindManyArgs,
+  Prisma.PriceSchemeFindUniqueArgs,
+  Prisma.PriceSchemeCreateArgs,
+  Prisma.PriceSchemeUpdateArgs,
+  Prisma.PriceSchemeDeleteArgs
 > {
   constructor() {
-    // Logika di sini tidak berubah sama sekali
-    super(
-      prisma,
-      prisma.priceScheme, // Cukup kirim delegate-nya
-      'scheme_id'
-    );
+    super(prisma, prisma.priceScheme, 'scheme_id');
   }
 
-  public async findAllActiveWithRates(): Promise<PriceSchemeModel[]> {
+  public override async findAll(): Promise<PriceSchemeWithRates[]> {
     return this._handleCrudOperation(() =>
       this._model.findMany({
-        where: { is_active: true },
         include: {
-          rates: true, // Menyertakan relasi 'rates'
+          rates: true,
         },
       })
     );
   }
 
-  public async create(
-    args: PrismaCreateArgs,
-    customMessages?: CustomErrorMessages
-  ): Promise<PriceSchemeModel> {
-    const { energy_type_id } = args.data;
+  public override async create(
+    data: CreatePriceSchemaInternal
+  ): Promise<PriceScheme> {
+    const { energy_type_id, set_by_user_id, ...restOfData } = data;
 
-    
-    const energyTypeExists = await this._prisma.energyType.findUnique({
-      where: { energy_type_id },
-    });
+    const prismaData = {
+      ...restOfData,
 
-    if (!energyTypeExists) {
-      throw new Error404(
-        `Tipe energi dengan ID ${energy_type_id} tidak ditemukan.`
-      );
-    }
+      energy_type: {
+        connect: {
+          energy_type_id: energy_type_id,
+        },
+      },
 
-    // 3. Jika ditemukan, lanjutkan proses create dengan memanggil metode 'create' dari parent.
-    // Ini memastikan logika CRUD dasar dan error handling umum tetap berjalan.
-    return super.create(args, customMessages);
+      set_by_user: {
+        connect: {
+          user_id: set_by_user_id,
+        },
+      },
+    };
+
+    return this._create({ data: prismaData });
   }
 }

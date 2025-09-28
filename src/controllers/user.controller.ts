@@ -1,5 +1,3 @@
-// src/controllers/user.controller.ts
-
 import type { Request, Response } from 'express';
 import { res200 } from '../utils/response.js';
 import { UserService } from '../services/user.service.js';
@@ -9,24 +7,19 @@ import type {
   CreateUserBody,
   GetUsersQuery,
   UpdateUserBody,
-} from '../types/user.type.js'; // Disarankan import dari file schema
+} from '../types/user.type.js';
 
 export class UserController extends BaseController<
   User,
   CreateUserBody,
   UpdateUserBody,
-  GetUsersQuery, // <-- [FIX] Tambahkan tipe query
+  GetUsersQuery,
   UserService
 > {
   constructor() {
     super(new UserService(), 'userId');
   }
 
-  /**
-   * @override
-   * [FIX] Meng-override method 'delete' dari base class untuk menjalankan
-   * logika soft delete yang spesifik untuk User.
-   */
   public override delete = async (req: Request, res: Response) => {
     const { userId } = res.locals.validatedData.params;
     if (!this.service.softDelete) {

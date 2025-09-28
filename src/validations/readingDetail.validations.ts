@@ -1,57 +1,20 @@
 import { z } from 'zod';
+import { positiveInt } from './schmeHelper.js';
+import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
 
-export const createReadingDetailSchema = z.object({
-  body: z.object({
-    value: z.number({
-      error: 'Nilai harus berupa angka',
-    }),
+export const ReadingDetailSchema = z.object({
+  value: positiveInt('value'),
 
-    session_id: z
-      .number({
-        error: 'ID Sesi wajib diisi',
-      })
-      .int()
-      .positive('ID Sesi harus bilangan bulat positif'),
+  session_id: positiveInt('Session Id'),
 
-    reading_type_id: z
-      .number({
-        error: 'ID Tipe Pembacaan wajib diisi',
-      })
-      .int()
-      .positive('ID Tipe Pembacaan harus bilangan bulat positif'),
-  }),
-});
-
-export const updateReadingDetailSchema = z.object({
-  body: z.object({
-    value: z
-      .number({
-        error: 'Nilai harus berupa angka',
-      })
-      .optional(),
-
-    session_id: z
-      .number({
-        error: 'ID Sesi wajib diisi',
-      })
-      .int()
-      .positive('ID Sesi harus bilangan bulat positif')
-      .optional(),
-
-    reading_type_id: z
-      .number({
-        error: 'ID Tipe Pembacaan wajib diisi',
-      })
-      .int()
-      .positive('ID Tipe Pembacaan harus bilangan bulat positif')
-      .optional(),
-  }),
+  reading_type_id: positiveInt('reading type id'),
 });
 
 export const readingDetailParamsSchema = z.object({
-  params: z.object({
-    detail_id: z.string().refine((val) => !isNaN(parseInt(val, 10)), {
-      message: 'User ID harus berupa angka.',
-    }),
-  }),
+  detailId: positiveInt('Detail Id'),
+});
+
+export const readingDetailSchema = new CrudSchemaBuilder({
+  bodySchema: ReadingDetailSchema,
+  paramsSchema: readingDetailParamsSchema,
 });

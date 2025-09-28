@@ -1,49 +1,43 @@
-import { z } from 'zod';
+import z from 'zod';
+import { isoDate, positiveInt, positiveNumber } from './schmeHelper.js';
+import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
 
-/**
- * Skema untuk memvalidasi satu item detail pembacaan.
- */
-const readingDetailSchema = z.object({
-  reading_type_id: z.number().int().positive().optional(), // Dibuat opsional untuk penentuan otomatis
-  value: z.number().gte(0),
+export const readingSessionBodySchema = z.object({
+  reading_date: isoDate('Tanggal Pembacaan').optional(),
+  meter_id: positiveInt('ID Meteran'),
+  is_correction_for_id: positiveInt('ID Sesi Asli').nullable().optional(),
+  details: z
+    .array(
+      z.object({
+        value: positiveNumber('Nilai Pembacaan'),
+        reading_type_id: positiveInt('ID Tipe Pembacaan'),
+      })
+    )
+    .min(1, 'Minimal harus ada satu detail pembacaan.'),
 });
 
-/**
- * Skema untuk memvalidasi body saat membuat sesi pembacaan baru.
- */
-export const createReadingSessionSchema = z.object({
-  body: z.object({
-    meter_id: z.number().int().positive(),
-    user_id: z.number().int().positive().default(1),
-    timestamp: z.string().datetime().default(new Date().toISOString()),
-    details: z.array(readingDetailSchema).nonempty(),
-  }),
+export const readingSessionParamsSchema = z.object({
+  sessionId: positiveInt('ID Sesi'),
+});
+export const readingSessionSchemas = new CrudSchemaBuilder({
+  bodySchema: readingSessionBodySchema,
+  paramsSchema: readingSessionParamsSchema,
 });
 
-/**
- * Skema untuk memvalidasi parameter ID dari URL.
- */
-export const getByIdSchema = z.object({
-  params: z.object({
-    id: z.coerce.number().int().positive(),
-  }),
-});
-
-/**
- * Skema untuk memvalidasi query parameters saat mengambil daftar pembacaan.
- * Semua field bersifat opsional.
- */
 export const getReadingsSchema = z.object({
+  energyTypeName: z.enum(['Electricity', 'Water', 'Fuel']).optional(),
+  date: z.coerce.date().optional(),
+  meterId: z.coerce.number().int().positive().optional(),
+  userId: z.coerce.number().int().positive().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(10),
+  search: z.string().trim().optional(),
+  sortBy: z.string().optional(),
+  sortOrder: z.enum(['asc', 'desc']).default('asc'),
+});
+export const queryLastReading = z.object({
   query: z.object({
-    // [REVISED] Menggunakan enum untuk memastikan nilai yang masuk valid.
-    energyTypeName: z.enum(['Electricity', 'Water', 'Fuel']).optional(),
-    date: z.string().datetime().optional(),
-    meterId: z.coerce.number().int().positive().optional(),
-    userId: z.coerce.number().int().positive().optional(),
+    meterId: positiveInt('meter ID'),
+    readingTypeId: positiveInt('reading Type Id'),
   }),
 });
-
-/**
- * Skema untuk membuat koreksi (sama dengan create).
- */
-export const createCorrectionSchema = createReadingSessionSchema;

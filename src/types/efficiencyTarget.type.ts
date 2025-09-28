@@ -1,32 +1,10 @@
-// src/types/efficiencyTarget.type.ts
+import { z } from 'zod';
+import type { efficiencyScheme } from '../validations/efficiencyTargets.validation.js';
 
-import type { EfficiencyTarget } from '../generated/prisma/index.js';
-import type { CrudTypes } from '../utils/generic.type.js';
-import type {
-  createEfficiencyTargetSchema,
-  efficiencyTargetParamsSchema,
-  updateEfficiencyTargetSchema,
-} from '../validations/efficiencyTargets.validation.js';
+export type CreateEfficiencyBody = z.infer<typeof efficiencyScheme.body>;
 
-/**
- * Tipe dasar untuk model EfficiencyTarget dari Prisma.
- */
-export type EfficiencyTargetModel = EfficiencyTarget;
+export type UpdateEfficiencyBody = z.infer<typeof efficiencyScheme.bodyPartial>;
 
-/**
- * [LANGKAH 1] Gunakan pabrik 'CrudTypes' untuk menghasilkan semua tipe input sekaligus.
- */
-type EfficiencyTargetCrudTypes = CrudTypes<
-  typeof createEfficiencyTargetSchema,
-  typeof updateEfficiencyTargetSchema,
-  typeof efficiencyTargetParamsSchema
->;
+export type EfficiencyParams = z.infer<typeof efficiencyScheme.params>;
 
-/**
- * [LANGKAH 2] Ekspor tipe-tipe individual dari hasil pabrik.
- */
-export type EfficiencyTargetCreateInput =
-  EfficiencyTargetCrudTypes['CreateInput'];
-export type EfficiencyTargetUpdateInput =
-  EfficiencyTargetCrudTypes['UpdateInput'];
-export type EfficiencyTargetParams = EfficiencyTargetCrudTypes['Params'];
+export type GetEfficiencyQuery = z.infer<typeof efficiencyScheme.listQuery>;

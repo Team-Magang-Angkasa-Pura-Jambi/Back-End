@@ -73,6 +73,7 @@ model EnergyType {
   reading_types      ReadingType[]
   price_schemes      PriceScheme[]
   efficiency_targets EfficiencyTarget[]
+  summary_details       SummaryDetail[]
 
   @@map("energy_types")
 }
@@ -98,10 +99,10 @@ model Meter {
 }
 
 enum MeterStatus {
-  Active
-  UnderMaintenance
-  Inactive
-  DELETED // For soft deletes
+    Active
+    UnderMaintenance
+    Inactive
+    DELETED // For soft deletes
 }
 
 model ReadingSession {
@@ -148,7 +149,6 @@ model ReadingType {
 model ReadingDetail {
   detail_id       Int     @id @default(autoincrement())
   value           Decimal @db.Decimal(12, 2)
-
   session_id      Int
   reading_type_id Int
 
@@ -274,29 +274,41 @@ enum AlertStatus {
 model DailySummary {
   summary_id   Int      @id @default(autoincrement())
   summary_date DateTime @db.Date
-  total_pax    Int?
   total_cost   Decimal? @db.Decimal(15, 2)
-
+  
   meter_id     Int
 
-  // Relations
-  meter   Meter           @relation(fields: [meter_id], references: [meter_id])
-  details SummaryDetail[]
+  // Relasi
+  meter        Meter      @relation(fields: [meter_id], references: [meter_id])
+  details      SummaryDetail[]
 
   @@unique([summary_date, meter_id])
+  // PENAMBAHAN: Indeks pada meter_id untuk mempercepat filter
+  @@index([meter_id]) 
   @@map("daily_summaries")
 }
 
 model SummaryDetail {
-  detail_id    Int     @id @default(autoincrement())
-  metric_name  String
-  metric_value Decimal @db.Decimal(12, 2)
+  detail_id         Int      @id @default(autoincrement())
+  current_reading   Decimal  @db.Decimal(12, 2)
+  previous_reading  Decimal  @db.Decimal(12, 2)
+  consumption_value Decimal  @db.Decimal(12, 2)
+  consumption_cost  Decimal  @db.Decimal(15, 2)
+  wbp_value         Decimal? @db.Decimal(12, 2)
+  lwbp_value        Decimal? @db.Decimal(12, 2)
+  
+  summary_id      Int
+  energy_type_id  Int
+  metric_name       String
 
-  summary_id   Int
+  // Relasi
+  summary       DailySummary @relation(fields: [summary_id], references: [summary_id], onDelete: Cascade)
+  energy_type   EnergyType   @relation(fields: [energy_type_id], references: [energy_type_id])
 
-  // Relations
-  summary DailySummary @relation(fields: [summary_id], references: [summary_id], onDelete: Cascade)
-
+  @@unique([summary_id, energy_type_id, metric_name])
+  // PENAMBAHAN: Indeks pada foreign keys untuk mempercepat join dan filter
+  @@index([summary_id])
+  @@index([energy_type_id])
   @@map("summary_details")
 }
 

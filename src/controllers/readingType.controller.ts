@@ -1,73 +1,27 @@
-import type { Request, Response } from 'express';
-import type { ReadingTypeService } from '../services/readingType.service.js';
-import { res200, res201 } from '../utils/response.js';
-import type { IdParams } from '../types/reading.types.js';
+import { ReadingTypeService } from '../services/readingType.service.js';
+import { BaseController } from '../utils/baseController.js';
 import type {
-  CreateReadingTypeInput,
-  UpdateReadingTypeInput,
+  CreateReadingTypeBody,
+  GetReadingTypesQuery,
+  UpdateReadingTypeBody,
 } from '../types/readingType.type.js';
+import type { ReadingType } from '../generated/prisma/index.js';
+import { res200 } from '../utils/response.js';
+import type { Request, Response } from 'express';
+import { Error404 } from '../utils/customError.js';
 
 /**
  * Controller untuk menangani request HTTP terkait Tipe Pembacaan.
  */
-export class ReadingTypeController {
-  constructor(private readingTypeService: ReadingTypeService) {}
-
-  public getAllReadingTypes = async (req: Request, res: Response) => {
-    const readingTypes = await this.readingTypeService.findAll();
-    res200({
-      res,
-      message: 'Berhasil mengambil semua data tipe pembacaan.',
-      data: readingTypes,
-    });
-  };
-
-  public getReadingTypeById = async (req: Request<IdParams>, res: Response) => {
-    const readingTypeId = req.params.id;
-    const readingType = await this.readingTypeService.findById(readingTypeId);
-    res200({
-      res,
-      message: 'Data tipe pembacaan berhasil ditemukan.',
-      data: readingType,
-    });
-  };
-
-  public createReadingType = async (
-    req: Request<{}, {}, CreateReadingTypeInput>,
-    res: Response
-  ) => {
-    const newReadingType = await this.readingTypeService.create(req.body);
-    res201({
-      res,
-      message: 'Tipe pembacaan baru berhasil dibuat.',
-      data: newReadingType,
-    });
-  };
-
-  public updateReadingType = async (
-    req: Request<IdParams, {}, UpdateReadingTypeInput>,
-    res: Response
-  ) => {
-    const readingTypeId = req.params.id;
-    const updatedReadingType = await this.readingTypeService.update(
-      readingTypeId,
-      req.body
-    );
-    res200({
-      res,
-      message: 'Data tipe pembacaan berhasil diperbarui.',
-      data: updatedReadingType,
-    });
-  };
-
-  public deleteReadingType = async (req: Request<IdParams>, res: Response) => {
-    const readingTypeId = req.params.id;
-    const deletedReadingType =
-      await this.readingTypeService.delete(readingTypeId);
-    res200({
-      res,
-      message: 'Tipe pembacaan berhasil dihapus.',
-      data: deletedReadingType,
-    });
-  };
+export class ReadingTypeController extends BaseController<
+  ReadingType,
+  CreateReadingTypeBody,
+  UpdateReadingTypeBody,
+  GetReadingTypesQuery,
+  ReadingTypeService
+> {
+  constructor() {
+    super(new ReadingTypeService(), 'readingTypeId');
+  }
 }
+export const readingTypeController = new ReadingTypeController();

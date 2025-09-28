@@ -46,12 +46,22 @@ export abstract class GenericBaseService<
   /**
    * Kontrak untuk membuat entitas baru. Menerima data input sederhana.
    */
-  public abstract create(data: TCreateInput): Promise<TModel>;
+  public async create(data: TCreateInput): Promise<TModel> {
+    // Memanggil helper _create dengan membungkus data input
+    // ke dalam objek { data: ... } yang diharapkan Prisma.
+    const args = { data } as TCreateArgs;
+    return this._create(args);
+  }
 
   /**
    * Kontrak untuk memperbarui entitas. Menerima data input sederhana.
    */
-  public abstract update(id: number, data: TUpdateInput): Promise<TModel>;
+  public async update(id: number, data: TUpdateInput): Promise<TModel> {
+    // Memanggil helper _update dengan membungkus data input
+    // ke dalam objek { data: ... } yang diharapkan Prisma.
+    const args = { data } as unknown as Omit<TUpdateArgs, 'where'>;
+    return this._update(id, args);
+  }
 
   // --- METHOD CRUD PUBLIK LAINNYA ---
 

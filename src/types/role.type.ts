@@ -1,9 +1,8 @@
 import type z from 'zod';
-import type {
-  createRoleSchema,
-  updateRoleSchema,
-} from '../validations/role.validation.js';
+import type { roleSchemas } from '../validations/role.validation.js';
 
 // Mengekstrak tipe dari skema Zod untuk body request
-export type CreateRoleInput = z.infer<typeof createRoleSchema>['body'];
-export type UpdateRoleInput = z.infer<typeof update RoleSchema>['body'];
+export type CreateRoleBody = z.infer<typeof roleSchemas.create>['body'];
+export type UpdateRoleBody = z.infer<typeof roleSchemas.update>['body'];
+export type GetRolesQuery = z.infer<typeof roleSchemas.listQuery>;
+export type UserParams = z.infer<typeof roleSchemas.params>;

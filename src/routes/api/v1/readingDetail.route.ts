@@ -1,45 +1,30 @@
 import { Router } from 'express';
 import { ReadingDetailService } from '../../../services/readingDetail.service.js';
 import { ReadingDetailController } from '../../../controllers/readingDetail.controller.js';
-import {
-  createReadingDetailSchema,
-  readingDetailParamsSchema,
-  updateReadingDetailSchema,
-} from '../../../validations/readingDetail.validations.js';
-import { validate } from '../../../utils/validate.js';
-import { asyncHandler } from '../../../utils/asyncHandler.js';
-
-const readingDetailService = new ReadingDetailService();
-const readingDetailController = new ReadingDetailController(
-  readingDetailService
-);
+import { readingDetailSchema } from '../../../validations/readingDetail.validations.js';
+import { createCrudRouter } from '../../../utils/routerFactory.js';
 
 export default (router: Router) => {
-  const prefix = '/reading-details';
+  const readingDetailRouter = createCrudRouter('/reading-details', {
+    ServiceClass: ReadingDetailService,
+    ControllerClass: ReadingDetailController,
+    idParamName: 'detailId',
 
-  router.get(prefix, readingDetailController.getReadingDetails);
+    schemas: {
+      getAll: readingDetailSchema.listQuery,
+      create: readingDetailSchema.create,
+      update: readingDetailSchema.update,
+      params: readingDetailSchema.byId,
+    },
 
-  router.post(
-    prefix,
-    validate(createReadingDetailSchema),
-    asyncHandler(readingDetailController.createReadingDetail)
-  );
+    authorizations: {
+      getAll: ['Admin', 'SuperAdmin'],
+      getById: ['Admin', 'SuperAdmin'],
+      create: ['SuperAdmin'],
+      update: ['Admin', 'SuperAdmin'],
+      delete: ['SuperAdmin'],
+    },
+  });
 
-  router.get(
-    `${prefix}/:detail_id`,
-    validate(readingDetailParamsSchema),
-    asyncHandler(readingDetailController.getReadingDetailById)
-  );
-
-  router.patch(
-    `${prefix}/:detail_id`,
-    validate(updateReadingDetailSchema),
-    asyncHandler(readingDetailController.updateReadingDetail)
-  );
-
-  router.delete(
-    `${prefix}/:detail_id`,
-    validate(readingDetailParamsSchema),
-    asyncHandler(readingDetailController.deleteReadingDetail)
-  );
+  router.use(readingDetailRouter);
 };

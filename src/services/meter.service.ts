@@ -1,124 +1,71 @@
 import prisma from '../configs/db.js';
-import type { CreateMeterBody, UpdateMeterBody } from '../types/meter.tpye.js';
-import { BaseService } from '../utils/baseService.js';
-import { Error409 } from '../utils/customError.js';
+import type { $Enums, Meter, Prisma } from '../generated/prisma/index.js';
+import type { DefaultArgs } from '../generated/prisma/runtime/library.js';
+import type {
+  CreateMeterBody,
+  GetMetersQuery,
+  UpdateMeterBody,
+} from '../types/meter.tpye.js';
+import type { CustomErrorMessages } from '../utils/baseService.js';
+import { GenericBaseService } from '../utils/GenericBaseService.js';
 
-/**
- * Service yang menangani semua logika bisnis terkait data meteran.
- */
-export class MeterService extends BaseService {
-  public async findAll() {
-    return this._handleCrudOperation(() =>
-      prisma.meter.findMany({
-        include: {
-          energy_type: true, // Sertakan detail jenis energi
-        },
-        orderBy: {
-          meter_id: 'asc',
-        },
-      })
-    );
+// 1. Definisikan tipe untuk query filter yang sederhana
+type MeterQuery = Prisma.MeterFindManyArgs & GetMetersQuery;
+
+// Definisikan tipe hasil query yang menyertakan relasi energy_type
+type MeterWithEnergyType = Prisma.MeterGetPayload<{
+  include: { energy_type: true };
+}>;
+
+export class MeterService extends GenericBaseService<
+  typeof prisma.meter,
+  Meter,
+  CreateMeterBody,
+  UpdateMeterBody,
+  Prisma.MeterFindManyArgs,
+  Prisma.MeterFindUniqueArgs,
+  Prisma.MeterCreateArgs,
+  Prisma.MeterUpdateArgs,
+  Prisma.MeterDeleteArgs
+> {
+  private readonly _include = {
+    energy_type: true,
+  };
+
+  constructor() {
+    super(prisma, prisma.meter, 'meter_id');
   }
 
-  public async findAllActive() {
-    return this._handleCrudOperation(() =>
-      prisma.meter.findMany({
-        where: {
-          status: 'Active',
-        },
-        include: {
-          energy_type: true, // Sertakan detail jenis energi
-        },
-        orderBy: {
-          meter_id: 'asc',
-        },
-      })
-    );
-  }
+  public override async findAll(
+    query: MeterQuery = {}
+  ): Promise<MeterWithEnergyType[]> {
+    const { energyTypeId, typeName } = query;
+    const where: Prisma.MeterWhereInput = {};
 
-  /**
-   * Menemukan satu meteran berdasarkan ID-nya.
-   */
-  public async findById(meterId: number) {
-    return this._handleCrudOperation(() =>
-      prisma.meter.findUnique({
-        where: {
-          meter_id: meterId,
+    // Bangun klausa 'where' secara dinamis
+    if (energyTypeId) {
+      where.energy_type_id = energyTypeId;
+    }
+    if (typeName) {
+      where.energy_type = {
+        type_name: {
+          contains: typeName,
+          mode: 'insensitive',
         },
-        include: {
-          energy_type: true,
-        },
-      })
-    );
-  }
-
-  /**
-   * Membuat meteran baru.
-   */
-  public async create(data: CreateMeterBody) {
-    // Cek apakah meter_code sudah ada untuk mencegah duplikasi
-    const existingMeter = await prisma.meter.findUnique({
-      where: { meter_code: data.meter_code },
-    });
-    if (existingMeter) {
-      throw new Error409(`Meteran dengan kode ${data.meter_code} sudah ada.`);
+      };
     }
 
-    return this._handleCrudOperation(() =>
-      prisma.meter.create({
-        data,
-      })
-    );
-  }
+    const findArgs: Prisma.MeterFindManyArgs = {
+      where,
+      // PERBAIKAN UTAMA: Selalu sertakan relasi energy_type
+      include: {
+        energy_type: true,
+      },
+      orderBy: {
+        meter_id: 'asc',
+      },
+    };
 
-  /**
-   * Memperbarui data meteran yang ada.
-   */
-  public async update(meterId: number, data: UpdateMeterBody) {
-    // Jika meter_code diubah, cek duplikasi
-    if (data.meter_code) {
-      const existingMeter = await prisma.meter.findFirst({
-        where: {
-          meter_code: data.meter_code,
-          NOT: {
-            meter_id: meterId,
-          },
-        },
-      });
-      if (existingMeter) {
-        throw new Error409(
-          `Meteran dengan kode ${data.meter_code} sudah digunakan.`
-        );
-      }
-    }
-
-    return this._handlePrismaError(() =>
-      prisma.meter.update({
-        where: {
-          meter_id: meterId,
-        },
-        data,
-      })
-    );
-  }
-
-  /**
-   * Menghapus meteran.
-   */
-  public async delete(meter_id: number) {
-    // PERHATIAN: Pastikan tidak ada data 'ReadingSession' yang terkait sebelum menghapus
-    // Logika ini bisa ditambahkan di sini jika diperlukan.
-    return this._handleCrudOperation(() =>
-      prisma.meter.update({
-        where: {
-          meter_id,
-        },
-        data: {
-          status: 'DELETED',
-        },
-      })
-    );
+    return this._handleCrudOperation(() => this._model.findMany(findArgs));
   }
 }
-
-export const meterService = new MeterService();

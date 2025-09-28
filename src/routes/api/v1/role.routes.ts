@@ -1,30 +1,29 @@
 import type { Router } from 'express';
+import { createCrudRouter } from '../../../utils/routerFactory.js';
+import { roleSchemas } from '../../../validations/role.validation.js';
 import { RoleService } from '../../../services/role.service.js';
-import {
-  roleController,
-  RoleController,
-} from '../../../controllers/role.controller.js';
-import { asyncHandler } from '../../../utils/asyncHandler.js';
-import { validate } from '../../../utils/validate.js';
-import {
-  createRoleSchema,
-  updateRoleSchema,
-} from '../../../validations/role.validation.js';
+import { RoleController } from '../../../controllers/role.controller.js';
 
 export const roleRoutes = (router: Router) => {
-  const prefix = '/roles';
+  const roleRouter = createCrudRouter('/roles', {
+    ServiceClass: RoleService,
+    ControllerClass: RoleController,
+    idParamName: 'roleId',
 
-  // Endpoint untuk mengambil semua dan membuat peran
-  // PERHATIAN: Sebaiknya endpoint POST, PUT, DELETE hanya untuk SuperAdmin
-  router
-    .route(prefix)
-    .get(asyncHandler(roleController.getAllRoles))
-    .post(validate(createRoleSchema), asyncHandler(roleController.createRole));
+    schemas: {
+      getAll: roleSchemas.listQuery,
+      create: roleSchemas.create,
+      update: roleSchemas.update,
+      params: roleSchemas.byId,
+    },
 
-  // Endpoint untuk operasi pada satu peran by ID
-  router
-    .route(`${prefix}/:id`)
-    .get(asyncHandler(roleController.getRoleById))
-    .put(validate(updateRoleSchema), asyncHandler(roleController.updateRole))
-    .delete(asyncHandler(roleController.deleteRole));
+    authorizations: {
+      getAll: ['Admin', 'SuperAdmin'],
+      getById: ['Admin', 'SuperAdmin'],
+      create: ['SuperAdmin'],
+      update: ['Admin', 'SuperAdmin'],
+      delete: ['SuperAdmin'],
+    },
+  });
+  router.use(roleRouter);
 };
