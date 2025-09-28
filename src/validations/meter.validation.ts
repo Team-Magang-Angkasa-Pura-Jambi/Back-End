@@ -10,7 +10,7 @@ const meterParamsSchema = z.object({
 const meterBodySchema = z.object({
   meter_code: requiredString('Meter Code'),
   energy_type_id: positiveInt('Energy Type Id'),
-  location: optionalString('location'),
+  category_id: positiveInt('category Id'),
   status: z.enum(MeterStatus).optional(),
 });
 

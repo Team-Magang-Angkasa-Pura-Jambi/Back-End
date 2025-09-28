@@ -2,7 +2,7 @@ import type { Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
 import { UserService } from '../../../services/user.service.js';
 import { UserController } from '../../../controllers/user.controller.js';
-import { userSchemas } from '../../../validations/user.validation.js';
+import { userQuerySchema, userSchemas } from '../../../validations/user.validation.js';
 
 export default (router: Router) => {
   const userRouter = createCrudRouter('/users', {
@@ -11,7 +11,7 @@ export default (router: Router) => {
     idParamName: 'userId',
 
     schemas: {
-      getAll: userSchemas.listQuery,
+      getAll: userQuerySchema,
       create: userSchemas.create,
       update: userSchemas.update,
       params: userSchemas.byId,

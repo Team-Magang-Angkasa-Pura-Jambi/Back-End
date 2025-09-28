@@ -60,6 +60,7 @@ export class MeterService extends GenericBaseService<
       // PERBAIKAN UTAMA: Selalu sertakan relasi energy_type
       include: {
         energy_type: true,
+        category: true,
       },
       orderBy: {
         meter_id: 'asc',

@@ -4,15 +4,8 @@ import prisma from '../configs/db.js';
 import { GenericBaseService } from '../utils/GenericBaseService.js';
 import type { DefaultArgs } from '../generated/prisma/runtime/library.js';
 import type { CustomErrorMessages } from '../utils/baseService.js';
+import type { GetUsersQuery } from '../types/user.type.js';
 
-// Tipe data input untuk UserService, biasanya didapat dari z.infer<schema>
-type GetUsersQuery = {
-  page: number;
-  limit: number;
-  search?: string;
-  role_id?: number;
-  is_active?: boolean;
-};
 type CreateUserInput = {
   username: string;
   password: string;
@@ -37,24 +30,43 @@ export class UserService extends GenericBaseService<
     super(prisma, prisma.user, 'user_id');
   }
 
-  public override async findAll() {
+  public override async findAll(query: GetUsersQuery): Promise<User> {
+    const { limit, page, isActive, roleName, search } = query;
     const where: Prisma.UserWhereInput = {};
 
-    // ... (logika filter Anda)
+    // 1. Perbaiki filter 'is_active'
+    if (isActive !== undefined) {
+      where.is_active = isActive;
+    }
 
-    // Buat objek argumen pencarian
+    // 2. Perbaiki filter 'role_name'
+    if (roleName) {
+      where.role = {
+        role_name: roleName,
+      };
+    }
+
+    // 3. Tambahkan fungsionalitas 'search'
+    if (search) {
+      where.username = {
+        contains: search,
+        mode: 'insensitive', // Agar tidak case-sensitive (a == A)
+      };
+    }
+
     const findArgs: Prisma.UserFindManyArgs = {
       where,
-      // PERBAIKAN: Tambahkan 'include' di sini
+      // 4. Tambahkan fungsionalitas paginasi (limit & page)
+      skip: (page - 1) * limit,
+      take: limit,
       include: {
-        role: true, // Ini akan memuat data dari tabel Role
+        role: true,
       },
       orderBy: {
         user_id: 'asc',
       },
     };
 
-    // Panggil findMany dengan argumen yang sudah lengkap
     return this._model.findMany(findArgs);
   }
   public override async create(data: CreateUserInput): Promise<User> {

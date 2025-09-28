@@ -10,4 +10,4 @@ export type UpdateUserBody = z.infer<typeof userSchemas.bodyPartial>;
 
 export type UserParams = z.infer<typeof userSchemas.params>;
 
-export type GetUsersQuery = z.infer<typeof userQuerySchema>;
+export type GetUsersQuery = z.infer<typeof userQuerySchema>['query'];

@@ -38,20 +38,19 @@ export class RecapService extends BaseService {
       const [summaries, paxData, target] = await Promise.all([
         this._prisma.dailySummary.findMany({
           where: {
-            meter: { energy_type: { type_name: energyType } },
+            meter: {
+              energy_type: { type_name: energyType },
+              // category_id: { categoryId },
+            },
             summary_date: { gte: startDate, lte: endDate },
           },
           // **OPTIMIZATION**: Only include the specific detail we need
           include: {
-            details: {
-              where: {
-                metric_name: {
-                  startsWith: METRIC_NAME.DAILY_USAGE,
-                },
-              },
-            },
+            details: true,
           },
         }),
+        // console.log(summary),
+
         this._prisma.paxData.findMany({
           where: { data_date: { gte: startDate, lte: endDate } },
         }),

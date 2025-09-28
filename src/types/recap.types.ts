@@ -7,9 +7,9 @@ export type GetRecapQuery = z.infer<typeof getRecapSchema>['query'];
 // Tipe untuk setiap baris data di dalam tabel
 export interface RecapDataRow {
   date: Date;
+  target: number | null;
   wbp: number | null;
   lwbp: number | null;
-  target: number | null;
   pax: number | null;
   cost: number | null;
 }

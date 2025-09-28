@@ -3,7 +3,10 @@
 import { Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
 import { PriceSchemeService } from '../../../services/priceShcema.service.js';
-import { priceSchema } from '../../../validations/priceSchema.validation.js';
+import {
+  priceSchema,
+  queryPriceSchema,
+} from '../../../validations/priceSchema.validation.js';
 import { PriceSchemeController } from '../../../controllers/priceSchme.controller.js';
 
 export default (router: Router) => {
@@ -13,7 +16,7 @@ export default (router: Router) => {
     idParamName: 'schemeId',
 
     schemas: {
-      getAll: priceSchema.listQuery,
+      getAll: queryPriceSchema,
       create: priceSchema.create,
       update: priceSchema.update,
       params: priceSchema.byId,

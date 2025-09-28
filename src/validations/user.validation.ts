@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
 import { positiveInt, requiredString } from './schmeHelper.js';
+import { RoleName } from '../generated/prisma/index.js';
 
 // Skema body untuk User
 const userBodySchema = z.object({
@@ -41,9 +42,11 @@ export const userSchemas = new CrudSchemaBuilder({
   );
 
 export const userQuerySchema = z.object({
-  role_id: z.coerce.number().int().positive().optional(),
-  is_active: z.coerce.boolean().optional(),
-  page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().positive().max(100).default(10),
-  search: z.string().trim().optional(),
+  query: z.object({
+    roleName: z.enum(RoleName).optional(),
+    isActive: z.coerce.boolean().optional(),
+    page: z.coerce.number().int().positive().default(1),
+    limit: z.coerce.number().int().positive().max(100).default(10),
+    search: z.string().trim().optional(),
+  }),
 });

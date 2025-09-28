@@ -52,7 +52,8 @@ export class ReadingTypeService extends GenericBaseService<
     const findArgs: Prisma.ReadingTypeFindManyArgs = {
       where,
       include: {
-        energy_type: true, // Selalu sertakan relasi energy_type
+        energy_type: true,
+        applicable_to_categories: true, // Selalu sertakan relasi energy_type
       },
       orderBy: {
         reading_type_id: 'asc',

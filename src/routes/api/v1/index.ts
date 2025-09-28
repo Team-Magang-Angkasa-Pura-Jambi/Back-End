@@ -19,6 +19,8 @@ import summaryDetailRoute from './summaryDetail.route.js';
 import analysisRoute from './analysis.route.js';
 import SchemeRateRoute from './schemeRate.route.js';
 import recapRoute from './recap.route.js';
+import meterCategoryRoute from './meterCategory.route.js';
+import taxRoute from './tax.route.js';
 
 export default (app: any) => {
   const router = Router();
@@ -47,4 +49,6 @@ export default (app: any) => {
   summaryDetailRoute(router);
   analysisRoute(router);
   recapRoute(router);
+  meterCategoryRoute(router);
+  taxRoute(router);
 };

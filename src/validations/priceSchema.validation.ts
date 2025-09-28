@@ -22,3 +22,9 @@ export const priceSchema = new CrudSchemaBuilder({
   bodySchema: Schema,
   paramsSchema: paramsSchema,
 });
+
+export const queryPriceSchema = priceSchema.getList(
+  z.object({
+    energyTypeId: positiveInt('energy type id').optional(),
+  })
+);

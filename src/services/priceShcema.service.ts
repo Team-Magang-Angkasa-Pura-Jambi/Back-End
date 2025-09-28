@@ -2,6 +2,7 @@ import prisma from '../configs/db.js';
 import type { PriceScheme, Prisma } from '../generated/prisma/index.js';
 import type {
   CreatePriceSchemaBody,
+  GetPriceSchemasQuery,
   UpdatePriceSchemaBody,
 } from '../types/priceSchema.types.js';
 import { GenericBaseService } from '../utils/GenericBaseService.js';
@@ -29,14 +30,23 @@ export class PriceSchemeService extends GenericBaseService<
     super(prisma, prisma.priceScheme, 'scheme_id');
   }
 
-  public override async findAll(): Promise<PriceSchemeWithRates[]> {
-    return this._handleCrudOperation(() =>
-      this._model.findMany({
-        include: {
-          rates: true,
-        },
-      })
-    );
+  public override async findAll(
+    query: GetPriceSchemasQuery
+  ): Promise<PriceSchemeWithRates[]> {
+    const { energyTypeId } = query;
+    const where: Prisma.PriceSchemeWhereInput = {};
+
+    if (energyTypeId) {
+      where.energy_type_id = energyTypeId;
+    }
+
+    const findArgs: Prisma.PriceSchemeFindManyArgs = {
+      where,
+      include: {
+        rates: true,
+      },
+    };
+    return this._handleCrudOperation(() => this._model.findMany(findArgs));
   }
 
   public override async create(
