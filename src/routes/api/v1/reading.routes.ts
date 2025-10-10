@@ -6,6 +6,7 @@ import {
 } from '../../../controllers/reading.controller.js';
 import { validate } from '../../../utils/validate.js';
 import {
+  getHistoryQuerySchema,
   getReadingsSchema,
   queryLastReading,
   readingSessionSchemas,
@@ -42,6 +43,12 @@ export const readingRoutes = (router: Router) => {
     validate(queryLastReading),
     asyncHandler(readingController.getLastReading)
   );
+  router.get(
+    prefix + '/history',
+    validate(getHistoryQuerySchema),
+    asyncHandler(readingController.findHistory)
+  );
 
   router.use(userRouter);
 };
+  

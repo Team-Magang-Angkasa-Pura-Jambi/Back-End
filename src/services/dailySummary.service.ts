@@ -86,106 +86,184 @@ export class DailySummaryService extends GenericBaseService<
   public async getMonthlySummaryReport(
     year: number,
     month: number
-  ): Promise<MonthlySummaryReport> {
-    const startDate = new Date(Date.UTC(year, month - 1, 1));
-    const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
-
-    // Mendefinisikan semua logika di dalam sebuah fungsi untuk dieksekusi oleh error handler
-    const buildReport = async (): Promise<MonthlySummaryReport> => {
-      // LANGKAH 1: Lakukan semua query agregasi secara paralel untuk efisiensi
-      const [detailAggregates, paxAggregate] = await Promise.all([
-        // Query untuk menjumlahkan konsumsi dan biaya, dikelompokkan per jenis energi
-        prisma.summaryDetail.groupBy({
-          by: ['energy_type_id'],
-          where: {
-            summary: {
-              summary_date: { gte: startDate, lte: endDate },
-            },
-          },
-          _sum: {
-            consumption_value: true,
-            consumption_cost: true,
-          },
-        }),
-        // Query untuk menjumlahkan total pax dari tabel PaxData
-        prisma.paxData.aggregate({
-          where: {
-            data_date: { gte: startDate, lte: endDate },
-          },
-          _sum: {
-            total_pax: true,
-          },
-        }),
-      ]);
-
-      // Jika tidak ada data konsumsi sama sekali, kembalikan laporan kosong
-      if (detailAggregates.length === 0) {
-        return this.buildEmptyReport(year, month, startDate, endDate);
-      }
-
-      // LANGKAH 2: Ambil data pendukung (detail EnergyType)
-      const energyTypeIds = detailAggregates.map((agg) => agg.energy_type_id);
-      const energyTypes = await prisma.energyType.findMany({
-        where: {
-          energy_type_id: { in: energyTypeIds },
-        },
-      });
-      // Buat Map untuk pencarian cepat (O(1) lookup)
-      const energyTypeMap = new Map(
-        energyTypes.map((et) => [et.energy_type_id, et])
+  ): Promise<MonthlyComparisonReport> {
+    // Jalankan semua logika di dalam error handler
+    const buildReport = async (): Promise<MonthlyComparisonReport> => {
+      // LANGKAH 2: TENTUKAN PERIODE BULAN INI DAN BULAN SEBELUMNYA
+      const currentStartDate = new Date(Date.UTC(year, month - 1, 1));
+      const currentEndDate = new Date(
+        Date.UTC(year, month, 0, 23, 59, 59, 999)
       );
 
-      // LANGKAH 3: Bangun hasil summary dari data agregasi
-      const summary = detailAggregates.map((agg) => {
-        const energyType = energyTypeMap.get(agg.energy_type_id);
+      const previousMonthDate = new Date(currentStartDate);
+      previousMonthDate.setUTCMonth(previousMonthDate.getUTCMonth() - 1);
+      const prevStartDate = new Date(
+        Date.UTC(
+          previousMonthDate.getUTCFullYear(),
+          previousMonthDate.getUTCMonth(),
+          1
+        )
+      );
+      const prevEndDate = new Date(
+        Date.UTC(
+          previousMonthDate.getUTCFullYear(),
+          previousMonthDate.getUTCMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999
+        )
+      );
 
-        // Konversi hasil 'Decimal' dari Prisma menjadi 'number' biasa
-        const totalConsumption = agg._sum.consumption_value?.toNumber() ?? 0;
-        const totalCost = agg._sum.consumption_cost?.toNumber() ?? 0;
+      // LANGKAH 3: AMBIL DATA KEDUA PERIODE SECARA PARALEL
+      const [currentData, previousData] = await Promise.all([
+        this._getMonthlyData(currentStartDate, currentEndDate),
+        this._getMonthlyData(prevStartDate, prevEndDate),
+      ]);
 
-        return {
-          energyType: energyType?.type_name || 'Unknown',
-          unit: energyType?.unit_of_measurement || '',
-          totalConsumption,
-          totalCost,
-        };
-      });
+      // Jika tidak ada data di bulan ini, kembalikan laporan kosong
+      if (currentData.summary.length === 0 && currentData.totalPax === 0) {
+        return this.buildEmptyReport(
+          year,
+          month,
+          currentStartDate,
+          currentEndDate
+        );
+      }
 
-      // Ambil hasil total pax dari agregasi
-      const totalPax = paxAggregate._sum.total_pax ?? 0;
+      // LANGKAH 4: BANDINGKAN DATA
+      // Buat Map dari data bulan lalu untuk pencarian cepat
+      const previousSummaryMap = new Map(
+        previousData.summary.map((s) => [s.energyType, s])
+      );
 
-      // LANGKAH 4: Format informasi periode laporan
-      const reportPeriod = {
-        year,
-        month,
-        monthName: new Intl.DateTimeFormat('id-ID', { month: 'long' }).format(
-          startDate
-        ),
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      };
+      const summary: EnergySummary[] = currentData.summary.map(
+        (currentSummary) => {
+          const previousSummary = previousSummaryMap.get(
+            currentSummary.energyType
+          );
 
-      // Gabungkan semua bagian menjadi satu laporan akhir
-      const finalReport: MonthlySummaryReport = {
-        reportPeriod,
-        totalPax,
+          const prevConsumption = previousSummary?.totalConsumption ?? 0;
+          const prevCost = previousSummary?.totalCost ?? 0;
+
+          return {
+            energyType: currentSummary.energyType,
+            unit: currentSummary.unit,
+            totalConsumption: {
+              currentValue: currentSummary.totalConsumption,
+              previousValue: prevConsumption,
+              percentageChange: this._calculatePercentageChange(
+                currentSummary.totalConsumption,
+                prevConsumption
+              ),
+            },
+            totalCost: {
+              currentValue: currentSummary.totalCost,
+              previousValue: prevCost,
+              percentageChange: this._calculatePercentageChange(
+                currentSummary.totalCost,
+                prevCost
+              ),
+            },
+          };
+        }
+      );
+
+      // LANGKAH 5: BANGUN LAPORAN AKHIR
+      const finalReport: MonthlyComparisonReport = {
+        reportPeriod: {
+          year,
+          month,
+          monthName: new Intl.DateTimeFormat('id-ID', { month: 'long' }).format(
+            currentStartDate
+          ),
+          startDate: currentStartDate.toISOString(),
+          endDate: currentEndDate.toISOString(),
+        },
+        totalPax: {
+          currentValue: currentData.totalPax,
+          previousValue: previousData.totalPax,
+          percentageChange: this._calculatePercentageChange(
+            currentData.totalPax,
+            previousData.totalPax
+          ),
+        },
         summary,
       };
 
       return finalReport;
     };
 
-    // Jalankan fungsi logika di dalam error handler yang sudah ada
     return this._handleCrudOperation(buildReport);
   }
 
-  // Pastikan Anda memiliki metode helper ini
+  private async _getMonthlyData(startDate: Date, endDate: Date) {
+    const [detailAggregates, paxAggregate] = await Promise.all([
+      prisma.summaryDetail.groupBy({
+        by: ['energy_type_id'],
+        where: {
+          summary: {
+            summary_date: { gte: startDate, lte: endDate },
+          },
+        },
+        _sum: { consumption_value: true, consumption_cost: true },
+      }),
+      prisma.paxData.aggregate({
+        where: { data_date: { gte: startDate, lte: endDate } },
+        _sum: { total_pax: true },
+      }),
+    ]);
+
+    if (detailAggregates.length === 0) {
+      return { totalPax: paxAggregate._sum.total_pax ?? 0, summary: [] };
+    }
+
+    const energyTypeIds = detailAggregates.map((agg) => agg.energy_type_id);
+    const energyTypes = await prisma.energyType.findMany({
+      where: { energy_type_id: { in: energyTypeIds } },
+    });
+    const energyTypeMap = new Map(
+      energyTypes.map((et) => [et.energy_type_id, et])
+    );
+
+    const summary = detailAggregates.map((agg) => {
+      const energyType = energyTypeMap.get(agg.energy_type_id);
+      return {
+        energyType: energyType?.type_name || 'Unknown',
+        unit: energyType?.unit_of_measurement || '',
+        totalConsumption: agg._sum.consumption_value?.toNumber() ?? 0,
+        totalCost: agg._sum.consumption_cost?.toNumber() ?? 0,
+      };
+    });
+
+    return {
+      totalPax: paxAggregate._sum.total_pax ?? 0,
+      summary,
+    };
+  }
+
+  // HELPER BARU: Menghitung persentase perubahan dengan aman
+  private _calculatePercentageChange(
+    current: number,
+    previous: number
+  ): number | null {
+    if (previous === 0) {
+      // Jika sebelumnya 0 dan sekarang ada nilainya, perubahan tidak terhingga.
+      // Kembalikan null untuk diinterpretasikan di frontend.
+      return current > 0 ? null : 0;
+    }
+    const change = ((current - previous) / previous) * 100;
+    return parseFloat(change.toFixed(2)); // Bulatkan ke 2 desimal
+  }
+
+  // HELPER LAMA: Diperbarui agar sesuai dengan struktur data baru
   private buildEmptyReport(
     year: number,
     month: number,
     startDate: Date,
     endDate: Date
-  ): MonthlySummaryReport {
+  ): MonthlyComparisonReport {
     return {
       reportPeriod: {
         year,
@@ -196,10 +274,12 @@ export class DailySummaryService extends GenericBaseService<
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
       },
-      totalPax: 0,
+      totalPax: { currentValue: 0, previousValue: 0, percentageChange: 0 },
       summary: [],
     };
   }
+
+  // Pastikan Anda memiliki metode helper ini
 }
 
 export const dailySummaryService = new DailySummaryService();

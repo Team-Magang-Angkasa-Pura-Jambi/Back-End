@@ -21,8 +21,8 @@ export const meterRoutes = (router: Router) => {
     },
 
     authorizations: {
-      getAll: ['Admin', 'SuperAdmin'],
-      getById: ['Admin', 'SuperAdmin'],
+      getAll: ['Admin', 'SuperAdmin', 'Technician'],
+      getById: ['Admin', 'SuperAdmin', 'Technician'],
       create: ['SuperAdmin', 'Admin'],
       update: ['Admin', 'SuperAdmin'],
       delete: ['SuperAdmin'],

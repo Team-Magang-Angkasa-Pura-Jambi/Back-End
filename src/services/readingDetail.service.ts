@@ -47,3 +47,5 @@ export class ReadingDetailService extends GenericBaseService<
     return super.findAll(findArgs);
   }
 }
+
+export const readingDetailService = new ReadingDetailService();

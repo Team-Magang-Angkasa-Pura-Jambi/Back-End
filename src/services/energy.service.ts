@@ -2,25 +2,15 @@
 
 import prisma from '../configs/db.js';
 import type { EnergyType, Prisma, Meter } from '../generated/prisma/index.js';
+import type { DefaultArgs } from '../generated/prisma/runtime/library.js';
 import type {
   CreateEnergyTypeBody,
   GetEnergyTypesQuery,
   UpdateEnergyTypeBody,
 } from '../types/energy.type.js';
+import type { CustomErrorMessages } from '../utils/baseService.js';
 
 import { GenericBaseService } from '../utils/GenericBaseService.js';
-
-// Tipe untuk query filter kustom
-
-// Tipe hasil query yang menyertakan relasi
-type EnergyTypeWithRelations = Prisma.EnergyTypeGetPayload<{
-  include: { reading_types: true; meters: true };
-}>;
-
-// Tipe untuk hasil pencarian meter
-type MeterWithEnergyType = Prisma.MeterGetPayload<{
-  include: { energy_type: true };
-}>;
 
 export class EnergyTypeService extends GenericBaseService<
   // PERBAIKAN: Semua tipe generik disesuaikan dengan model EnergyType
@@ -38,16 +28,20 @@ export class EnergyTypeService extends GenericBaseService<
     super(prisma, prisma.energyType, 'energy_type_id');
   }
 
-  /**
-   * Meng-override findAll untuk selalu menyertakan relasi.
-   */
-  public override async findAll(
-    query: GetEnergyTypesQuery = {}
-  ): Promise<EnergyTypeWithRelations[]> {
-    const { typeName, ...restArgs } = query;
+  public findAll(
+    args?: Prisma.EnergyTypeFindManyArgs<DefaultArgs> | undefined,
+    customMessages?: CustomErrorMessages
+  ): Promise<
+    {
+      energy_type_id: number;
+      type_name: string;
+      unit_of_measurement: string;
+      is_active: boolean;
+    }[]
+  > {
+    const { typeName, ...restArgs } = args;
     const where: Prisma.EnergyTypeWhereInput = {};
 
-    // Bangun klausa 'where' secara dinamis
     if (typeName) {
       where.type_name = {
         contains: typeName,
@@ -61,15 +55,12 @@ export class EnergyTypeService extends GenericBaseService<
       where,
       include: {
         reading_types: true,
-        meters: true,
+        meters: { select: { meter_code: true, meter_id: true } },
       },
     };
 
-    // Panggil metode 'findAll' dari parent dengan argumen yang sudah lengkap
     return super.findAll(findArgs);
   }
-
-  // Metode findById, create, update, delete diwarisi dari GenericBaseService
 }
 
 export const energyTypeService = new EnergyTypeService();

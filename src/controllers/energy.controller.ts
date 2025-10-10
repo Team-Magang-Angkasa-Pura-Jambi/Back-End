@@ -6,7 +6,6 @@ import type {
   UpdateEnergyTypeBody,
 } from '../types/energy.type.js';
 import { EnergyTypeService } from '../services/energy.service.js';
-import type { NextFunction, Request, Response } from 'express';
 
 export class EnergyTypeController extends BaseController<
   EnergyType,

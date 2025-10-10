@@ -1,11 +1,25 @@
+// src/validations/recap.validation.ts
+
 import { z } from 'zod';
+import { isoDate, positiveInt } from './schmeHelper.js';
 
 export const getRecapSchema = z.object({
   query: z.object({
     energyType: z.enum(['Electricity', 'Water', 'Fuel']),
-    startDate: z.coerce.date({ error: 'Tanggal mulai wajib diisi.' }),
-    endDate: z.coerce.date({ error: 'Tanggal akhir wajib diisi.' }),
-    sortBy: z.string().optional(),
-    sortOrder: z.enum(['asc', 'desc']).default('desc'),
+    startDate: isoDate('Tanggal Mulai'),
+    endDate: isoDate('Tanggal Selesai'),
+    meterId: positiveInt('ID Meter').optional(),
+    sortBy: z
+      .enum(['date', 'wbp', 'lwbp', 'consumption', 'target', 'pax', 'cost'])
+      .optional(),
+    sortOrder: z.enum(['asc', 'desc']).optional(),
+  }),
+});
+
+export const recalculateRecapSchema = z.object({
+  body: z.object({
+    startDate: isoDate('Tanggal Mulai'),
+    endDate: isoDate('Tanggal Selesai'),
+    meterId: positiveInt('ID Meter').optional(),
   }),
 });

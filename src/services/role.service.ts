@@ -5,6 +5,8 @@ import type {
   Role,
   RoleName,
 } from '../generated/prisma/index.js';
+import type { DefaultArgs } from '../generated/prisma/runtime/library.js';
+import type { CustomErrorMessages } from '../utils/baseService.js';
 import { GenericBaseService } from '../utils/GenericBaseService.js';
 
 type CreateRoleInput = {
@@ -24,9 +26,22 @@ export class RoleService extends GenericBaseService<
   Prisma.RoleUpdateArgs,
   Prisma.RoleDeleteArgs
 > {
- 
   constructor() {
     super(prisma, prisma.role, 'role_id');
+  }
+
+  public findById(
+    id: number,
+    args?: Omit<Prisma.RoleFindUniqueArgs<DefaultArgs>, 'where'> | undefined,
+    customMessages?: CustomErrorMessages
+  ): Promise<{ role_id: number; role_name: $Enums.RoleName }> {
+    return prisma.role.findUniqueOrThrow({
+      where: { role_id: id },
+      include: {
+        users: true,
+        _count: true,
+      },
+    });
   }
 }
 export const roleService = new RoleService();

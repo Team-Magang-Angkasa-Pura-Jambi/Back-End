@@ -5,6 +5,7 @@ import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
 export const ReadingTypeBodySchema = z.object({
   type_name: requiredString('type name'),
   energy_type_id: positiveInt('energy type name'),
+  reading_unit: z.string().default('kWh'),
 });
 const ReadingTypeParamsSchema = z.object({
   readingTypeId: positiveInt('User ID'),

@@ -6,7 +6,6 @@ export const validate =
   <T extends ZodObject>(schema: T) =>
   async (req: Request, res: Response, next: NextFunction) => {
     const { body, params, query } = req;
-    console.log(req.query);
 
     try {
       res.locals.validatedData = await schema.parseAsync({

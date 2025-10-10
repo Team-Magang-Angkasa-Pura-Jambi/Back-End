@@ -59,8 +59,10 @@ export class MeterService extends GenericBaseService<
       where,
       // PERBAIKAN UTAMA: Selalu sertakan relasi energy_type
       include: {
-        energy_type: true,
         category: true,
+        tariff_group: true,
+        energy_type: true,
+        _count: true,
       },
       orderBy: {
         meter_id: 'asc',
@@ -69,4 +71,35 @@ export class MeterService extends GenericBaseService<
 
     return this._handleCrudOperation(() => this._model.findMany(findArgs));
   }
+
+  public findById(
+    id: number,
+    args?: Omit<Prisma.MeterFindUniqueArgs<DefaultArgs>, 'where'> | undefined,
+    customMessages?: CustomErrorMessages
+  ): Promise<{
+    meter_id: number;
+    meter_code: string;
+    status: $Enums.MeterStatus;
+    energy_type_id: number;
+    category_id: number;
+    tariff_group_id: number;
+  }> {
+    return prisma.meter.findUniqueOrThrow({
+      where: { meter_id: id },
+      include: {
+        daily_summaries: true,
+        reading_sessions: true,
+        category: true,
+        tariff_group: true,
+        energy_type: true,
+        classifications: true,
+        efficiency_targets: true,
+        insights: true,
+        predictions: true,
+        _count: true,
+      },
+    });
+  }
 }
+
+export const meterService = new MeterService();

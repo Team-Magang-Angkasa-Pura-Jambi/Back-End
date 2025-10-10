@@ -23,9 +23,8 @@ const summaryDetailQueryFilters = z.object({
     .string()
     .regex(/^\d{4}-\d{2}$/, 'Format bulan harus YYYY-MM')
     .optional(),
+  meterId: positiveInt('meter id'),
 });
-
-
 
 export const getMonthlyReportSchema = z.object({
   // Kita bungkus dalam 'query' karena data berasal dari req.query
@@ -44,5 +43,3 @@ export const getMonthlyReportSchema = z.object({
 });
 // Gabungkan filter kustom dengan metode getList dari builder Anda
 export const querySchema = summaryScheme.getList(summaryDetailQueryFilters);
-
-

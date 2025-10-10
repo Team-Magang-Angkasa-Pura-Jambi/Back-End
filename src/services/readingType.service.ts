@@ -62,4 +62,16 @@ export class ReadingTypeService extends GenericBaseService<
 
     return this._handleCrudOperation(() => this._model.findMany(findArgs));
   }
+
+  // public async create(data: {
+  //   type_name: string;
+  //   energy_type_id: number;
+  // }): Promise<{
+  //   reading_type_id: number;
+  //   type_name: string;
+  //   reading_unit: string;
+  //   energy_type_id: number;
+  // }> {
+  //   return this._handleCrudOperation(() => this._model.create({ data }));
+  // }
 }

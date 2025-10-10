@@ -1,6 +1,9 @@
 import type { Request, Response } from 'express';
 import type { DailySummary, SummaryDetail } from '../generated/prisma/index.js';
-import { SummaryDetailService } from '../services/summaryDetail.service.js';
+import {
+  summaryDetailService,
+  SummaryDetailService,
+} from '../services/summaryDetail.service.js';
 
 import type {
   CreateSummaryDetailBody,
@@ -17,8 +20,6 @@ export class SummaryDetailController extends BaseController<
   SummaryDetailService
 > {
   constructor() {
-    super(new SummaryDetailService(), 'detailId');
+    super(summaryDetailService, 'detailId');
   }
-
-  
 }

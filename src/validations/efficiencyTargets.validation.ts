@@ -12,8 +12,9 @@ const efficiencyBodyScheme = z
     period_end: z.coerce.date({
       error: 'Tanggal akhir periode wajib diisi.',
     }),
-    energy_type_id: positiveInt('ID tipe energi'),
+    meter_id: positiveInt('ID meter'),
   })
+
   .refine((data) => data.period_end >= data.period_start, {
     message: 'Tanggal akhir periode tidak boleh lebih awal dari tanggal mulai.',
     path: ['period_end'],

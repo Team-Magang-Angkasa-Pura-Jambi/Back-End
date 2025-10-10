@@ -1,6 +1,5 @@
 import type { Request, Response } from 'express';
 import { res200 } from '../utils/response.js';
-import { UserService } from '../services/user.service.js';
 import type { User } from '../generated/prisma/index.js';
 import { BaseController } from '../utils/baseController.js';
 import type {
@@ -8,6 +7,7 @@ import type {
   GetUsersQuery,
   UpdateUserBody,
 } from '../types/user.type.js';
+import { UserService } from '../services/user.service.js';
 
 export class UserController extends BaseController<
   User,
@@ -20,18 +20,18 @@ export class UserController extends BaseController<
     super(new UserService(), 'userId');
   }
 
-  public override delete = async (req: Request, res: Response) => {
-    const { userId } = res.locals.validatedData.params;
-    if (!this.service.softDelete) {
-      throw new Error('Metode softDelete tidak tersedia pada service ini.');
-    }
+  // public override delete = async (req: Request, res: Response) => {
+  //   const { userId } = res.locals.validatedData.params;
+  //   if (!this.service.softDelete) {
+  //     throw new Error('Metode softDelete tidak tersedia pada service ini.');
+  //   }
 
-    const deletedUser = await this.service.softDelete(userId);
+  //   const deletedUser = await this.service.softDelete(userId);
 
-    res200({
-      res,
-      message: 'Pengguna berhasil dinonaktifkan (soft delete).',
-      data: deletedUser,
-    });
-  };
+  //   res200({
+  //     res,
+  //     message: 'Pengguna berhasil dinonaktifkan (soft delete).',
+  //     data: deletedUser,
+  //   });
+  // };
 }

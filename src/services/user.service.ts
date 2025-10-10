@@ -2,24 +2,21 @@ import bcrypt from 'bcrypt';
 import type { Prisma, User } from '../generated/prisma/index.js';
 import prisma from '../configs/db.js';
 import { GenericBaseService } from '../utils/GenericBaseService.js';
+
+import type {
+  CreateUserBody,
+  GetUsersQuery,
+  UpdateUserBody,
+} from '../types/user.type.js';
+import { Error404 } from '../utils/customError.js';
 import type { DefaultArgs } from '../generated/prisma/runtime/library.js';
 import type { CustomErrorMessages } from '../utils/baseService.js';
-import type { GetUsersQuery } from '../types/user.type.js';
-
-type CreateUserInput = {
-  username: string;
-  password: string;
-  role_id: number;
-  is_active?: boolean;
-  photo_profile_url?: string | null;
-};
-type UpdateUserInput = Partial<CreateUserInput>;
 
 export class UserService extends GenericBaseService<
   typeof prisma.user,
   User,
-  CreateUserInput,
-  UpdateUserInput,
+  CreateUserBody,
+  UpdateUserBody,
   Prisma.UserFindManyArgs,
   Prisma.UserFindUniqueArgs,
   Prisma.UserCreateArgs,
@@ -30,7 +27,7 @@ export class UserService extends GenericBaseService<
     super(prisma, prisma.user, 'user_id');
   }
 
-  public override async findAll(query: GetUsersQuery): Promise<User> {
+  public async findAll(query: GetUsersQuery) {
     const { limit, page, isActive, roleName, search } = query;
     const where: Prisma.UserWhereInput = {};
 
@@ -54,7 +51,7 @@ export class UserService extends GenericBaseService<
       };
     }
 
-    const findArgs: Prisma.UserFindManyArgs = {
+    return prisma.user.findMany({
       where,
       // 4. Tambahkan fungsionalitas paginasi (limit & page)
       skip: (page - 1) * limit,
@@ -65,12 +62,35 @@ export class UserService extends GenericBaseService<
       orderBy: {
         user_id: 'asc',
       },
-    };
-
-    return this._model.findMany(findArgs);
+    });
   }
-  public override async create(data: CreateUserInput): Promise<User> {
-    const { password, ...restOfData } = data;
+
+  public override async findById(id: number): Promise<User> {
+    return prisma.user.findUniqueOrThrow({
+      where: { user_id: id },
+      include: {
+        role: true,
+        reading_sessions: true,
+        events_logbook: true,
+        alerts_acknowledged: true,
+        efficiency_targets_set: true,
+        insights_acknowledged: true,
+        notifications: true,
+        price_schemes_set: true,
+      },
+    });
+  }
+
+  public override async create(data: CreateUserBody): Promise<User> {
+    const { password, roleName, ...restOfData } = data;
+
+    const role = await prisma.role.findUnique({
+      where: { role_name: roleName },
+    });
+    restOfData.role_id = role.role_id;
+    if (!role) {
+      throw new Error404('Role not found.');
+    }
 
     if (!password) {
       throw new Error('Password is required but was not provided.');
@@ -81,6 +101,14 @@ export class UserService extends GenericBaseService<
       data: {
         ...restOfData,
         password_hash: hashedPassword,
+      },
+      select: {
+        username: true,
+        role: true,
+        user_id: true,
+        photo_profile_url: true,
+        is_active: true,
+        created_at: true,
       },
     };
 
@@ -93,25 +121,42 @@ export class UserService extends GenericBaseService<
    */
   public override async update(
     userId: number,
-    data: UpdateUserInput
+    data: UpdateUserBody
   ): Promise<User> {
-    const { password, ...restOfData } = data;
-    const dataToUpdate: Prisma.UserUpdateInput = { ...restOfData };
-
+    const { password, roleName, ...restOfData } = data;
+    const dataToUpdate = { ...restOfData };
+    if (roleName) {
+      const role_id = await prisma.role.findUnique({
+        where: { role_name: roleName },
+        select: { role_id: true },
+      });
+      dataToUpdate.role_id = role_id?.role_id;
+    }
     if (password) {
       dataToUpdate.password_hash = await bcrypt.hash(password, 10);
     }
 
     const args: Omit<Prisma.UserUpdateArgs, 'where'> = {
       data: dataToUpdate,
+      select: {
+        username: true,
+        role: true,
+        user_id: true,
+        photo_profile_url: true,
+        is_active: true,
+        created_at: true,
+      },
     };
 
     return this._update(userId, args);
   }
 
-  /**
-   * Method spesifik untuk User: Mencari berdasarkan username.
-   */
+  // public async findByUsername(username: string): Promise<User | null> {
+  //   return prisma.user.findUnique({
+  //     where: { username },
+  //   });
+  // }
+
   public async findByUsername(
     username: string
   ): Promise<(User & { role: any }) | null> {
@@ -121,58 +166,6 @@ export class UserService extends GenericBaseService<
         include: { role: true },
       })
     );
-  }
-  /**
-   * Method spesifik untuk User: Mengambil data dengan paginasi dan filter.
-   */
-  public async findAllWithPagination(filters: GetUsersQuery) {
-    const { role_id, is_active, page, limit, search } = filters;
-
-    const where: Prisma.UserWhereInput = { is_active: true };
-    if (search) {
-      where.username = { contains: search, mode: 'insensitive' };
-    }
-    if (role_id) {
-      where.role_id = role_id;
-    }
-    if (is_active !== undefined) {
-      where.is_active = is_active;
-    }
-
-    const findArgs: Prisma.UserFindManyArgs = {
-      where,
-      skip: (page - 1) * limit,
-      take: limit,
-      select: {
-        user_id: true,
-        username: true,
-        is_active: true,
-        photo_profile_url: true,
-        role: { select: { role_id: true, role_name: true } },
-        created_at: true,
-      },
-      orderBy: { user_id: 'asc' },
-    };
-
-    const [total, users] = await this._prisma.$transaction([
-      this._model.count({ where }),
-      this._model.findMany(findArgs),
-    ]);
-
-    return {
-      data: users,
-      meta: { total, page, limit, last_page: Math.ceil(total / limit) },
-    };
-  }
-
-  /**
-   * Implementasi 'soft delete' dengan memanfaatkan helper '_update'.
-   */
-  public async softDelete(userId: number): Promise<User> {
-    const args: Omit<Prisma.UserUpdateArgs, 'where'> = {
-      data: { is_active: false },
-    };
-    return this._update(userId, args);
   }
 }
 

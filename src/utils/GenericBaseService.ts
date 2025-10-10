@@ -46,9 +46,9 @@ export abstract class GenericBaseService<
   /**
    * Kontrak untuk membuat entitas baru. Menerima data input sederhana.
    */
-  public async create(data: TCreateInput): Promise<TModel> {
-    // Memanggil helper _create dengan membungkus data input
-    // ke dalam objek { data: ... } yang diharapkan Prisma.
+  public override async create(data: TCreateInput): Promise<TModel> {
+   
+    
     const args = { data } as TCreateArgs;
     return this._create(args);
   }

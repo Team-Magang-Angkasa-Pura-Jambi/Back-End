@@ -41,3 +41,5 @@ export class EventLogbookService extends GenericBaseService<
     return this._create({ data: prismaData });
   }
 }
+
+export const eventLogbookService = new EventLogbookService();

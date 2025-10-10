@@ -1,5 +1,4 @@
 import type { Request, Response } from 'express';
-import { ReadingService } from '../services/reading.service.js';
 import type {
   CreateReadingSessionBody,
   GetReadingSessionsQuery,
@@ -8,6 +7,7 @@ import type {
 import { res200, res201 } from '../utils/response.js';
 import { Error401 } from '../utils/customError.js';
 import { BaseController } from '../utils/baseController.js';
+import { readingService, ReadingService } from '../services/reading.service.js';
 import type { ReadingSession } from '../generated/prisma/index.js';
 
 /**
@@ -32,7 +32,6 @@ export class ReadingController extends BaseController<
     res: Response
   ): Promise<void> => {
     const validatedQuery = res.locals.validatedData;
-    console.log(validatedQuery);
 
     const result = await this.service.findAllWithFilters(validatedQuery);
 
@@ -43,11 +42,13 @@ export class ReadingController extends BaseController<
     req: Request,
     res: Response
   ): Promise<void> => {
-    const { meterId, readingTypeId } = res.locals.validatedData.query;
+    const { meterId, readingTypeId, readingDate } =
+      res.locals.validatedData.query;
 
     const result = await this.service.findLastReading({
       meterId,
       readingTypeId,
+      readingDate,
     });
 
     res200({ res, message: 'success', data: result });
@@ -58,7 +59,6 @@ export class ReadingController extends BaseController<
     res: Response
   ): Promise<void> => {
     const validatedBody = res.locals.validatedData.body;
-    console.log(req.user);
     const user_id = req.user?.id;
     if (!user_id) {
       throw new Error401('User not authenticated or user ID is missing.');
@@ -75,27 +75,12 @@ export class ReadingController extends BaseController<
     res.status(201).json({ status: 'success', data: record });
   };
 
-  public createCorrection = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
-    const originalSessionId = res.locals.validatedData.params;
-    const validatedBody = res.locals.validatedData.body;
+  public findHistory = async (req: Request, res: Response): Promise<void> => {
+    const { query } = res.locals.validatedData;
 
-    const internalData: CreateReadingSessionInternal = {
-      ...validatedBody,
-      user_id: res.locals.user.id,
-      reading_date: validatedBody.reading_date
-        ? new Date(validatedBody.reading_date)
-        : new Date(),
-    };
+    const result = await this.service.getHistory(query);
 
-    const record = await this.service.createCorrection(
-      originalSessionId,
-      internalData
-    );
-    res.status(201).json({ status: 'success', data: record });
+    res200({ res, message: result.message, data: result.data });
   };
 }
-
 export const readingController = new ReadingController();

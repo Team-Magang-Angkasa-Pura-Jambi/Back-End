@@ -6,7 +6,7 @@ import type {
 } from '../types/pax.type.js';
 import { GenericBaseService } from '../utils/GenericBaseService.js';
 
-export class paxService extends GenericBaseService<
+export class PaxService extends GenericBaseService<
   typeof prisma.paxData,
   PaxData,
   CreatePaxParamsBody,
@@ -21,3 +21,5 @@ export class paxService extends GenericBaseService<
     super(prisma, prisma.paxData, 'pax_id');
   }
 }
+
+export const paxService = new PaxService();

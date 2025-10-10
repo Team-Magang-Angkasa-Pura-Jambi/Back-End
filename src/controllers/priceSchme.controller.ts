@@ -2,7 +2,10 @@
 
 import type { Request, Response } from 'express';
 import type { PriceScheme } from '../generated/prisma/index.js';
-import { PriceSchemeService } from '../services/priceShcema.service.js';
+import {
+  priceSchemeService,
+  PriceSchemeService,
+} from '../services/priceShcema.service.js';
 import type {
   CreatePriceSchemaBody,
   GetPriceSchemasQuery,
@@ -20,7 +23,7 @@ export class PriceSchemeController extends BaseController<
   PriceSchemeService
 > {
   constructor() {
-    super(new PriceSchemeService(), 'schemeId');
+    super(priceSchemeService, 'schemeId');
   }
 
   public override create = async (

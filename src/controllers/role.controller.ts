@@ -18,6 +18,6 @@ export class RoleController extends BaseController<
   RoleService
 > {
   constructor() {
-    super(new RoleService(), 'roleId');
+    super(roleService, 'roleId');
   }
 }

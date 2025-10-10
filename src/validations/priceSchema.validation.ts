@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { positiveInt, requiredString } from './schmeHelper.js';
+import { positiveInt, positiveNumber, requiredString } from './schmeHelper.js';
 import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
 
 const Schema = z.object({
@@ -11,7 +11,25 @@ const Schema = z.object({
 
   is_active: z.boolean().optional().default(true),
 
-  energy_type_id: positiveInt('energy type id'),
+  tariff_group_id: positiveInt('tariff group id'),
+
+  rates: z
+    .array(
+      z.object({
+        reading_type_id: positiveInt('Reading Type ID'),
+        value: positiveNumber('Rate Value'),
+      })
+    )
+    .min(1, 'At least one rate must be provided.')
+    .refine(
+      (items) =>
+        new Set(items.map((i) => i.reading_type_id)).size === items.length,
+      {
+        message: 'Each reading type can only have one rate per scheme.',
+      }
+    ),
+
+  tax_ids: z.array(positiveInt('Tax ID')).optional(),
 });
 
 const paramsSchema = z.object({
@@ -25,6 +43,7 @@ export const priceSchema = new CrudSchemaBuilder({
 
 export const queryPriceSchema = priceSchema.getList(
   z.object({
-    energyTypeId: positiveInt('energy type id').optional(),
+    tariffGroupId: positiveInt('tariff group id').optional(),
   })
 );
+  

@@ -3,7 +3,7 @@ import { isoDate, positiveInt, positiveNumber } from './schmeHelper.js';
 import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
 
 export const readingSessionBodySchema = z.object({
-  reading_date: isoDate('Tanggal Pembacaan').optional(),
+  reading_date: isoDate('Tanggal Pembacaan'),
   meter_id: positiveInt('ID Meteran'),
   is_correction_for_id: positiveInt('ID Sesi Asli').nullable().optional(),
   details: z
@@ -39,5 +39,24 @@ export const queryLastReading = z.object({
   query: z.object({
     meterId: positiveInt('meter ID'),
     readingTypeId: positiveInt('reading Type Id'),
+    readingDate: isoDate('reading date'),
+  }),
+});
+
+export const getHistoryQuerySchema = z.object({
+  query: z.object({
+    energyTypeName: z.enum(['Electricity', 'Water', 'Fuel']).optional(),
+    startDate: z
+      .string()
+      .datetime({ message: 'Start date must be a valid ISO string' })
+      .optional(),
+    endDate: z
+      .string()
+      .datetime({ message: 'End date must be a valid ISO string' })
+      .optional(),
+    // `coerce` akan secara otomatis mengubah string dari query menjadi number
+    meterId: z.coerce.number().int().positive().optional(),
+    sortBy: z.enum(['reading_date', 'created_at']).optional(),
+    sortOrder: z.enum(['asc', 'desc']).optional(),
   }),
 });

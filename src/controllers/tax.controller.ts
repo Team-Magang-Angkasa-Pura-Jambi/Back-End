@@ -5,7 +5,7 @@ import type {
   GetTaxQuery,
   UpdateTaxBody,
 } from '../types/tax.type.js';
-import { TaxService } from '../services/tax.service.js';
+import { taxService, TaxService } from '../services/tax.service.js';
 
 export class TaxController extends BaseController<
   Tax,
@@ -15,6 +15,6 @@ export class TaxController extends BaseController<
   TaxService
 > {
   constructor() {
-    super(new TaxService(), 'taxId');
+    super(taxService, 'taxId');
   }
 }

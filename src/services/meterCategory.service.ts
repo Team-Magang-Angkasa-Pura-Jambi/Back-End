@@ -23,25 +23,17 @@ export class MeterCategoryService extends GenericBaseService<
     super(prisma, prisma.meterCategory, 'category_id');
   }
 
-  public findAll(
-    args?: Prisma.MeterFindManyArgs<DefaultArgs> | undefined,
+  public findById(
+    id: number,
+    args?: Omit<Prisma.MeterFindUniqueArgs<DefaultArgs>, 'where'> | undefined,
     customMessages?: CustomErrorMessages
-  ): Promise<MeterCategory[]> {
-    const findArgs: Prisma.MeterCategoryFindManyArgs = {
-      //   where,
-      // PERBAIKAN UTAMA: Selalu sertakan relasi energy_type
+  ): Promise<{ name: string; category_id: number }> {
+    return prisma.meterCategory.findUniqueOrThrow({
+      where: { category_id: id },
       include: {
-        // energy_type: true,
-        // category: true,
-        allowed_reading_types: true,
         meters: true,
         _count: true,
       },
-      orderBy: {
-        // meter_id: 'asc',
-      },
-    };
-
-    return this._handleCrudOperation(() => this._model.findMany(findArgs));
+    });
   }
 }

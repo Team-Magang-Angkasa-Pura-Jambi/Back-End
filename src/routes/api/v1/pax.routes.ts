@@ -1,12 +1,12 @@
 import type { Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
-import { paxService } from '../../../services/pax.service.js';
 import { PaxController } from '../../../controllers/pax.controller.js';
 import { paxScheme } from '../../../validations/paxData.validation.js';
+import { PaxService } from '../../../services/pax.service.js';
 
 export default (router: Router) => {
   const paxRouter = createCrudRouter('/pax', {
-    ServiceClass: paxService,
+    ServiceClass: PaxService,
     ControllerClass: PaxController,
     idParamName: 'paxId',
 

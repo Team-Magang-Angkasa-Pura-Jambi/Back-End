@@ -5,6 +5,8 @@ import type {
   CreateEfficiencyBody,
   UpdateEfficiencyBody,
 } from '../types/efficiencyTarget.type.js';
+import type { DefaultArgs } from '../generated/prisma/runtime/library.js';
+import type { CustomErrorMessages } from '../utils/baseService.js';
 type CreateEfficiencyInternal = CreateEfficiencyBody & {
   set_by_user_id: number;
 };
@@ -23,17 +25,42 @@ export class EfficiencyTargetService extends GenericBaseService<
     super(prisma, prisma.efficiencyTarget, 'target_id');
   }
 
+  public override async findAll(
+    args?: Prisma.EfficiencyTargetFindManyArgs<DefaultArgs>
+  ): Promise<EfficiencyTarget[]> {
+    const queryArgs = {
+      ...args,
+      include: {
+        meter: {
+          select: {
+            meter_code: true,
+            energy_type: {
+              select: { type_name: true, unit_of_measurement: true },
+            },
+          },
+        },
+        // PERUBAHAN: Hanya pilih username dari user yang menyetel target
+        set_by_user: {
+          select: {
+            username: true,
+          },
+        },
+      },
+    };
+    return this._handleCrudOperation(() => this._model.findMany(queryArgs));
+  }
+
   public override async create(
     data: CreateEfficiencyInternal
   ): Promise<EfficiencyTarget> {
-    const { energy_type_id, set_by_user_id, ...restOfData } = data;
+    const { meter_id, set_by_user_id, ...restOfData } = data; // energy_type_id tidak lagi ada di sini
 
     const prismaData = {
       ...restOfData,
 
-      energy_type: {
+      meter: {
         connect: {
-          energy_type_id: energy_type_id,
+          meter_id,
         },
       },
 
@@ -44,6 +71,20 @@ export class EfficiencyTargetService extends GenericBaseService<
       },
     };
 
-    return this._create({ data: prismaData });
+    // PERUBAHAN: Tambahkan `include` untuk menyertakan data relasi dalam respons.
+    return this._create({
+      data: prismaData,
+      include: {
+        meter: true,
+        // PERUBAHAN: Hanya pilih username dari user yang menyetel target
+        set_by_user: {
+          select: {
+            username: true,
+          },
+        },
+      },
+    });
   }
 }
+
+export const efficiencyTargetService = new EfficiencyTargetService();

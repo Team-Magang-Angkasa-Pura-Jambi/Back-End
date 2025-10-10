@@ -1,13 +1,16 @@
 import { z } from 'zod';
 import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
-import { positiveInt, requiredString } from './schmeHelper.js';
+import { optionalString, positiveInt, requiredString } from './schmeHelper.js';
 import { RoleName } from '../generated/prisma/index.js';
 
 // Skema body untuk User
+
 const userBodySchema = z.object({
   username: requiredString('Username').min(3),
   password: requiredString('Password').min(6),
-  role_id: positiveInt('Role ID').default(2),
+  role_id: positiveInt('role id').optional(),
+  roleName: requiredString('role id').default(RoleName.Technician),
+  photo_profile_url: optionalString('photo profile url'),
   is_active: z.boolean().default(true),
 });
 

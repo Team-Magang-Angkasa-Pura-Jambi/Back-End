@@ -1,0 +1,22 @@
+# docker-compose.yml
+
+version: '3.8'
+
+services:
+  # Layanan Backend TypeScript Anda
+  backend-ts:
+    build: . # Asumsikan Dockerfile untuk TypeScript ada di root
+    ports:
+      - "3000:3000" # Mapping port dari host ke container
+    environment:
+      # Kirim URL layanan ML sebagai environment variable
+      ML_API_URL: http://ml-api:8000
+    depends_on:
+      - ml-api # Pastikan layanan ML berjalan sebelum backend TS
+
+  # Layanan Machine Learning Python
+  ml-api:
+    build:
+      context: ./scripts # Path ke folder yang berisi Dockerfile Python
+    ports:
+      - "8000:8000"

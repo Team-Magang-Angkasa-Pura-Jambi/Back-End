@@ -61,3 +61,5 @@ export class SummaryDetailService extends GenericBaseService<
     return this._handleCrudOperation(() => this._model.findMany(findArgs));
   }
 }
+
+export const summaryDetailService = new SummaryDetailService();

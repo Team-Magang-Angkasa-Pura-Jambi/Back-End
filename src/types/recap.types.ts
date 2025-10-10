@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { getRecapSchema } from '../validations/recap.validation.js';
+import type { UsageCategory } from '../generated/prisma/index.js';
 
 // Tipe untuk query yang sudah divalidasi
 export type GetRecapQuery = z.infer<typeof getRecapSchema>['query'];
@@ -10,6 +11,8 @@ export interface RecapDataRow {
   target: number | null;
   wbp: number | null;
   lwbp: number | null;
+  consumption: number | null; // PERBAIKAN: Tambahkan properti consumption
+  classification: UsageCategory | null;
   pax: number | null;
   cost: number | null;
 }
@@ -17,6 +20,9 @@ export interface RecapDataRow {
 export interface RecapSummary {
   /** The total financial cost for the entire period. */
   totalCost: number;
+
+  /** The total financial cost for the entire period before tax. */
+  totalCostBeforeTax: number;
 
   /** The prorated efficiency target for the selected period. */
   totalTarget: number;
@@ -34,8 +40,5 @@ export interface RecapSummary {
 // Tipe untuk keseluruhan respons API
 export interface RecapApiResponse {
   data: RecapDataRow[];
-  meta: {
-    totalCost: number;
-    totalTarget: number;
-  };
+  meta: RecapSummary;
 }

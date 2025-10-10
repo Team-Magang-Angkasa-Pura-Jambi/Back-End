@@ -47,7 +47,6 @@ export abstract class BaseController<
    */
   public getAll = async (req: Request, res: Response) => {
     const queryData: TListQuery = res.locals.validatedData.query;
-    console.log(queryData);
 
     const result = await this.service.findAll(queryData);
 
@@ -64,7 +63,7 @@ export abstract class BaseController<
    * [FIX] Method create sekarang memanggil service dengan lebih sederhana,
    * sesuai dengan kontrak interface yang baru.
    */
-  public create = async (req: Request, res: Response) => {
+  public override create = async (req: Request, res: Response) => {
     const body: TCreateInput = res.locals.validatedData.body;
     const result = await this.service.create(body);
     res201({ res, message: 'Berhasil membuat data baru.', data: result });

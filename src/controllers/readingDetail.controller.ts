@@ -1,4 +1,7 @@
-import { ReadingDetailService } from '../services/readingDetail.service.js';
+import {
+  readingDetailService,
+  ReadingDetailService,
+} from '../services/readingDetail.service.js';
 
 import type {
   CreateReadingDetailBody,
@@ -16,6 +19,6 @@ export class ReadingDetailController extends BaseController<
   ReadingDetailService
 > {
   constructor() {
-    super(new ReadingDetailService(), 'detailId');
+    super(readingDetailService, 'detailId');
   }
 }

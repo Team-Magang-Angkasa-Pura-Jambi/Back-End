@@ -1,5 +1,5 @@
 import type { PaxData } from '../generated/prisma/index.js';
-import { paxService } from '../services/pax.service.js';
+import { paxService, PaxService } from '../services/pax.service.js';
 import type {
   CreatePaxParamsBody,
   GetPaxParamsQuery,
@@ -12,9 +12,9 @@ export class PaxController extends BaseController<
   CreatePaxParamsBody,
   UpdatePaxParamsBody,
   GetPaxParamsQuery,
-  paxService
+  PaxService
 > {
   constructor() {
-    super(new paxService(), 'paxId');
+    super(paxService, 'paxId');
   }
 }
