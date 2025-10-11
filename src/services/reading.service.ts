@@ -525,13 +525,29 @@ export class ReadingService extends GenericBaseService<
     const kwhYesterday = getKwhConsumption(previousSummary.details);
 
     // 2. Panggil API ML
-    const classificationResult =
-      await machineLearningService.classifyDailyUsage({
+    let classificationResult;
+    try {
+      classificationResult = await machineLearningService.classifyDailyUsage({
         kwh_today: kwhToday,
         kwh_yesterday: kwhYesterday,
         pax_today: paxToday.total_pax,
         pax_yesterday: paxYesterday.total_pax,
       });
+    } catch (error) {
+      console.error('[Classifier] Gagal memanggil ML API:', error);
+      // BARU: Kirim notifikasi ke SuperAdmin jika server ML error
+      const superAdmins = await tx.user.findMany({
+        where: { role: { role_name: RoleName.SuperAdmin }, is_active: true },
+      });
+      for (const admin of superAdmins) {
+        await notificationService.create({
+          user_id: admin.user_id,
+          title: 'Error Sistem: Server Machine Learning',
+          message: `Sistem gagal terhubung ke server machine learning saat mencoba melakukan klasifikasi. Error: ${error.message}`,
+        });
+      }
+      return; // Hentikan proses klasifikasi
+    }
 
     if (!classificationResult) {
       console.error(

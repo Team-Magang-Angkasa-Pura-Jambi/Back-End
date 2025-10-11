@@ -37,11 +37,11 @@ export class NotificationController extends BaseController<
     // Pastikan userId diambil dari user yang terautentikasi untuk keamanan
     validatedQuery.userId = userId;
 
-    const result = await this.service.findAllWithQuery(validatedQuery);
+    const data = await this.service.findAllWithQuery(validatedQuery);
     res200({
       res,
       message: 'Successfully retrieved notifications.',
-      data: result,
+      data: { data },
     });
   };
 

@@ -23,13 +23,25 @@ export class AlertService extends GenericBaseService<
     super(prisma, prisma.alert, 'alert_id');
   }
 
-  public async findAllWithQuery(query: GetAlertsQuery): Promise<{
+  public async findAllWithQuery(
+    query: GetAlertsQuery,
+    scope: 'all' | 'system' | 'meters' = 'all'
+  ): Promise<{
     data: Alert[];
     meta: { total: number; page: number; limit: number; last_page: number };
   }> {
     const { page, limit, startDate, endDate, status, meterId, search } = query;
 
     const where: Prisma.AlertWhereInput = {};
+
+    // BARU: Tambahkan filter berdasarkan scope
+    if (scope === 'system') {
+      where.meter_id = null;
+    } else if (scope === 'meters') {
+      where.meter_id = {
+        not: null,
+      };
+    }
 
     if (startDate && endDate) {
       where.alert_timestamp = {
@@ -136,6 +148,44 @@ export class AlertService extends GenericBaseService<
         },
       })
     );
+  }
+
+  /**
+   * BARU: Mengambil beberapa alert terbaru.
+   * @param scope - Filter untuk 'system' atau 'meters'.
+   * @param limit - Jumlah alert yang akan diambil.
+   * @returns Daftar alert terbaru.
+   */
+  public async getLatest(
+    scope?: 'system' | 'meters',
+    limit = 5
+  ): Promise<Alert[]> {
+    return this._handleCrudOperation(async () => {
+      const where: Prisma.AlertWhereInput = {};
+
+      if (scope === 'system') {
+        where.meter_id = null;
+      } else if (scope === 'meters') {
+        where.meter_id = { not: null };
+      }
+
+      const alerts = await this._model.findMany({
+        where,
+        take: limit,
+        orderBy: {
+          alert_timestamp: 'desc',
+        },
+        include: {
+          meter: {
+            select: {
+              meter_code: true,
+            },
+          },
+          acknowledged_by: { select: { username: true } },
+        },
+      });
+      return alerts as Alert[];
+    });
   }
 }
 

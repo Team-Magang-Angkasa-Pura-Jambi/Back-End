@@ -22,3 +22,9 @@ export const alertIdParamSchema = z.object({
 });
 
 export const emptySchema = z.object({});
+
+export const getLatestAlertsSchema = z.object({
+  query: z.object({
+    scope: z.enum(['system', 'meters']).optional(),
+  }),
+});

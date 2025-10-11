@@ -1,15 +1,13 @@
 import { Router } from 'express';
-import {
-  authMiddleware,
-  authorize,
-} from '../../../middleware/auth.middleware.js';
 import { validate } from '../../../utils/validate.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
+import { authorize } from '../../../middleware/auth.middleware.js';
 import { alertController } from '../../../controllers/alert.controller.js';
 import {
   alertIdParamSchema,
   emptySchema,
   getAlertsSchema,
+  getLatestAlertsSchema,
 } from '../../../validations/alert.validation.js';
 
 export default (router: Router) => {
@@ -17,26 +15,52 @@ export default (router: Router) => {
 
   router.get(
     prefix,
+    authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(getAlertsSchema),
     asyncHandler(alertController.getAll)
   );
 
+  // BARU: Endpoint untuk alert yang tidak terkait meter (sistem)
+  router.get(
+    `${prefix}/system`,
+    authorize('Admin', 'SuperAdmin', 'Technician'),
+    validate(getAlertsSchema),
+    asyncHandler(alertController.getSystemAlerts)
+  );
+
+  // BARU: Endpoint untuk semua alert yang terkait meter
+  router.get(
+    `${prefix}/meters`,
+    authorize('Admin', 'SuperAdmin', 'Technician'),
+    validate(getAlertsSchema),
+    asyncHandler(alertController.getMeterAlerts)
+  );
+
+  // BARU: Endpoint untuk mengambil beberapa alert terbaru
+  router.get(
+    `${prefix}/latest`,
+    authorize('Admin', 'SuperAdmin', 'Technician'),
+    validate(getLatestAlertsSchema),
+    asyncHandler(alertController.getLatest)
+  );
+
   router.get(
     `${prefix}/unread-count`,
-
+    authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(emptySchema),
     asyncHandler(alertController.getUnreadCount)
   );
 
   router.patch(
     `${prefix}/acknowledge-all`,
-
+    authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(emptySchema),
     asyncHandler(alertController.acknowledgeAll)
   );
 
   router.patch(
     `${prefix}/:alertId/acknowledge`,
+    authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(alertIdParamSchema),
     asyncHandler(alertController.acknowledge)
   );

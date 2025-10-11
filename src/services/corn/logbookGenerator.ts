@@ -2,6 +2,8 @@ import { schedule } from 'node-cron';
 import prisma from '../../configs/db.js';
 import { dailyLogbookService } from '../dailyLogbook.service.js';
 import { RoleName } from '../../generated/prisma/index.js';
+import { notificationService } from '../notification.service.js';
+import { alertService } from '../alert.service.js';
 
 /**
  * Fungsi ini memeriksa apakah logbook untuk hari kemarin sudah ada.
@@ -50,15 +52,10 @@ async function generateLogbookForYesterdayIfNeeded() {
       select: { user_id: true },
     });
 
-    for (const admin of admins) {
-      await prisma.notification.create({
-        data: {
-          user_id: admin.user_id,
-          title: 'Laporan Kinerja Sistem',
-          message: performanceMessage,
-        },
-      });
-    }
+    await alertService.create({
+      title: 'Laporan Kinerja: Pembuatan Logbook',
+      description: performanceMessage,
+    });
     console.log(
       `[CRON - Logbook] Tugas selesai dalam ${durationInSeconds.toFixed(2)} detik.`
     );

@@ -18,6 +18,59 @@ class AlertController {
     }
   };
 
+  public getSystemAlerts = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const query = res.locals.validatedData.query;
+      const { data, meta } = await alertService.findAllWithQuery(
+        query,
+        'system'
+      );
+
+      res200({
+        res,
+        data: { data, meta },
+        message: 'Alert sistem berhasil diambil.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public getMeterAlerts = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    const query = res.locals.validatedData.query;
+    const { data, meta } = await alertService.findAllWithQuery(query, 'meters');
+    res200({
+      res,
+      data: { data, meta },
+      message: 'Alert meter berhasil diambil.',
+    });
+  };
+
+  public getLatest = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { scope } = res.locals.validatedData.query;
+      const result = await alertService.getLatest(scope);
+      res200({
+        res,
+        data: result,
+        message: 'Alert terbaru berhasil diambil.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
   public getUnreadCount = async (
     req: Request,
     res: Response,

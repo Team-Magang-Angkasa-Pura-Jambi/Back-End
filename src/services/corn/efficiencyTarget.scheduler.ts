@@ -3,6 +3,7 @@ import prisma from '../../configs/db.js';
 import { MeterStatus, RoleName } from '../../generated/prisma/index.js';
 import { notificationService } from '../notification.service.js';
 import { Prisma } from '../../generated/prisma/index.js';
+import { alertService } from '../alert.service.js';
 
 const EFFICIENCY_IMPROVEMENT_PERCENTAGE = 0.05; // Target efisiensi 5% lebih baik
 
@@ -120,13 +121,11 @@ export function startEfficiencyTargetScheduler() {
 
         // Kirim notifikasi kinerja sistem
         const performanceMessage = `Tugas penjadwalan target efisiensi selesai dalam ${durationInSeconds.toFixed(2)} detik. ${createdTargetsCount} target berhasil dibuat.`;
-        for (const admin of admins) {
-          await notificationService.create({
-            user_id: admin.user_id,
-            title: 'Laporan Kinerja Sistem',
-            message: performanceMessage,
-          });
-        }
+        await alertService.create({
+          title: 'Laporan Kinerja: Penjadwalan Target',
+          description: performanceMessage,
+        });
+
         console.log(
           `[CRON - EfficiencyTarget] Tugas selesai dalam ${durationInSeconds.toFixed(2)} detik.`
         );

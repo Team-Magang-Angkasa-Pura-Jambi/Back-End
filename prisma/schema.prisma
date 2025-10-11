@@ -82,6 +82,8 @@ model Meter {
   classifications  DailyUsageClassification[]
   efficiency_targets EfficiencyTarget[]
   daily_logbooks   DailyLogbook[]
+  // BARU: Tambahkan relasi balik ke model Alert
+  alerts           Alert[]
 
   @@map("meters")
 }
@@ -343,17 +345,26 @@ model SummaryDetail {
 }
 
 model Alert {
-  alert_id                  Int         @id @default(autoincrement())
-  actual_value              Decimal     @db.Decimal(12, 2)
-  target_value_at_trigger   Decimal     @db.Decimal(12, 2)
-  status                    AlertStatus @default(NEW)
-  alert_timestamp           DateTime    @default(now())
-  target_id                 Int
-  acknowledged_by_user_id   Int?
+  alert_id                Int         @id @default(autoincrement())
+  title                   String
+  description             String      @db.Text
+  status                  AlertStatus @default(NEW)
+  alert_timestamp         DateTime    @default(now())
 
-  target          EfficiencyTarget @relation(fields: [target_id], references: [target_id])
+  // Opsional: untuk alert yang spesifik pada meter atau target
+  meter_id                Int?
+  target_id               Int?
+  acknowledged_by_user_id Int?
+
+  // Data kontekstual saat alert dibuat
+  actual_value            Decimal?    @db.Decimal(12, 2)
+  target_value_at_trigger Decimal?    @db.Decimal(12, 2)
+
+  meter           Meter?           @relation(fields: [meter_id], references: [meter_id])
+  target          EfficiencyTarget? @relation(fields: [target_id], references: [target_id])
   acknowledged_by User?            @relation(fields: [acknowledged_by_user_id], references: [user_id])
 
+  @@index([meter_id])
   @@index([target_id])
   @@map("alerts")
 }
