@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    /* Basic Options */
+    /* Opsi Dasar */
     "target": "ES2022",
     "module": "NodeNext",
     "rootDir": "./src",
@@ -9,13 +9,14 @@
     "forceConsistentCasingInFileNames": true,
 
     /* === BAGIAN PENTING UNTUK MENGABAIKAN ERROR === */
-    // Menonaktifkan semua pengecekan tipe yang ketat.
+
+    // 1. Menonaktifkan semua aturan pengecekan tipe yang ketat.
     "strict": false,
     
-    // KUNCI UTAMA: Memaksa TypeScript membuat output .js meskipun ada error.
+    // 2. KUNCI UTAMA: Memaksa TypeScript membuat output .js meskipun ada error.
     "noEmitOnError": false, 
     
-    // Mempercepat build dengan tidak memeriksa tipe dari library eksternal.
+    // 3. Mempercepat build dengan tidak memeriksa tipe dari library eksternal.
     "skipLibCheck": true,
 
     /* Opsi tambahan untuk menekan lebih banyak peringatan */
@@ -23,7 +24,7 @@
     "noUnusedParameters": false,
     "noImplicitAny": false,
 
-    /* Opsi lain */
+    /* Opsi Lainnya */
     "sourceMap": true
   },
   "include": ["src/**/*"],
