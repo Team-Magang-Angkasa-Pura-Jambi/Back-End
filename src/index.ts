@@ -2,13 +2,13 @@ import 'dotenv/config';
 import { startDataCheckCron } from './services/corn/dataChecker.js';
 import { startPredictionRunnerCron } from './services/corn/predictionRunner.js';
 import { server, socketServer } from './socket-instance.js';
-
-const port = 8080;
+const port = process.env.PORT || 8080;
 const host = process.env.HOST_LOCAL_AREA || 'localhost';
 try {
-  server.listen(port, () => {
+  server.listen(Number(port), () => {
     console.log(`server is on http://${host}:${port}/api/v1`);
-    socketServer.listen(port);
+    socketServer.listen(Number(port));
+    // tidak diperlukan karena sudah terpasang pada 'server' http.
   });
   startDataCheckCron();
   startPredictionRunnerCron(); // BARU: Aktifkan cron job prediksi

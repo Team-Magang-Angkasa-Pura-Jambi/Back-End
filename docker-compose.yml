@@ -10,6 +10,7 @@ services:
       - "3000:3000" # Mapping port dari host ke container
     environment:
       # Kirim URL layanan ML sebagai environment variable
+      PORT: 3000 # Memberitahu aplikasi untuk berjalan di port 3000 di dalam container
       ML_API_URL: http://ml-api:8000
     depends_on:
       - ml-api # Pastikan layanan ML berjalan sebelum backend TS
