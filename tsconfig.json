@@ -1,25 +1,31 @@
 {
   "compilerOptions": {
     /* Basic Options */
-    "target": "ES2022", // Target versi ECMAScript yang modern tapi stabil
-    "module": "NodeNext", // Pilihan terbaik untuk proyek Node.js modern
-    "rootDir": "./src", // Folder kode sumber TypeScript
-    "outDir": "./dist", // Folder output JavaScript setelah kompilasi
-    "esModuleInterop": true, // Wajib untuk kompatibilitas modul CommonJS
-    "forceConsistentCasingInFileNames": false, // Mencegah bug terkait casing nama file
+    "target": "ES2022",
+    "module": "NodeNext",
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
 
-    /* Strict Type-Checking Options */
-    "strict": false, // Mengaktifkan semua aturan pengecekan tipe yang ketat
-    "skipLibCheck": true, // Mempercepat kompilasi dengan melewatkan pengecekan file .d.ts
+    /* === BAGIAN PENTING UNTUK MENGABAIKAN ERROR === */
+    // Menonaktifkan semua pengecekan tipe yang ketat.
+    "strict": false,
+    
+    // KUNCI UTAMA: Memaksa TypeScript membuat output .js meskipun ada error.
+    "noEmitOnError": false, 
+    
+    // Mempercepat build dengan tidak memeriksa tipe dari library eksternal.
+    "skipLibCheck": true,
 
-    /* Tambahan yang Berguna */
-    "sourceMap": true, // Membuat source map untuk debugging
+    /* Opsi tambahan untuk menekan lebih banyak peringatan */
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noImplicitAny": false,
 
-    /* Opsi untuk Mengabaikan Error saat Build */
-    "noEmitOnError": false, // PENTING: Tetap membuat file JS meskipun ada error.
-    "noUnusedLocals": false, // Izinkan variabel lokal yang tidak terpakai.
-    "noUnusedParameters": false // Izinkan parameter fungsi yang tidak terpakai.
+    /* Opsi lain */
+    "sourceMap": true
   },
-  "include": ["src/**/*"], // Hanya kompilasi file di dalam folder 'src'
-  "exclude": ["node_modules", "dist"] // Abaikan folder-folder ini
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }
