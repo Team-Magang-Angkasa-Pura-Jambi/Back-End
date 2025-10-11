@@ -1201,11 +1201,12 @@ export class ReadingService extends GenericBaseService<
     query: GetReadingSessionsQuery
   ): Promise<ReadingSessionApiResponse> {
     const { energyTypeName, startDate, endDate, meterId, sortBy, sortOrder } =
-      query;
+      query; // Tambahkan 'date' di sini
 
     return this._handleCrudOperation(async () => {
       // LANGKAH 1: Membangun klausa 'where' secara dinamis
       const whereClause = this._buildWhereClause(
+        query.date, // Kirim 'date' ke buildWhereClause
         energyTypeName,
         startDate,
         endDate,
@@ -1219,9 +1220,16 @@ export class ReadingService extends GenericBaseService<
       const readingSessions = await this._prisma.readingSession.findMany({
         where: whereClause,
         include: {
+          // PERBAIKAN: Ambil daily_logbook melalui relasi meter
           meter: {
-            select: {
-              meter_code: true,
+            include: {
+              energy_type: true,
+              // Ambil logbook yang relevan untuk setiap meter
+              daily_logbooks: {
+                where: {
+                  log_date: whereClause.reading_date, // Filter logbook berdasarkan rentang tanggal yang sama
+                },
+              },
             },
           },
           user: {
@@ -1253,6 +1261,7 @@ export class ReadingService extends GenericBaseService<
   }
 
   private _buildWhereClause(
+    date?: string,
     energyTypeName?: string,
     startDate?: string,
     endDate?: string,
@@ -1274,7 +1283,9 @@ export class ReadingService extends GenericBaseService<
       };
     }
 
-    if (startDate && endDate) {
+    if (date) {
+      where.reading_date = this._normalizeDate(date);
+    } else if (startDate && endDate) {
       where.reading_date = {
         gte: new Date(startDate),
         lte: new Date(endDate),

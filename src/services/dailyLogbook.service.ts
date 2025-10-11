@@ -77,6 +77,7 @@ export class DailyLogbookService extends GenericBaseService<
     query: GetLogbooksQuery
   ): Promise<{ data: DailyLogbook[]; meta: any }> {
     const { limit, page, startDate, endDate } = query;
+
     const where: Prisma.DailyLogbookWhereInput = {};
 
     if (startDate && endDate) {
@@ -88,6 +89,13 @@ export class DailyLogbookService extends GenericBaseService<
 
     const findArgs: Prisma.DailyLogbookFindManyArgs = {
       where,
+      include: {
+        meter: {
+          select: {
+            energy_type: { select: { type_name: true } },
+          },
+        },
+      },
       skip: (page - 1) * limit,
       take: limit,
       orderBy: {

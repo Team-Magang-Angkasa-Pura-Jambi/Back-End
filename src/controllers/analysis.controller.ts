@@ -1,15 +1,62 @@
-import type { Request, Response } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import { AnalysisService } from '../services/analysis.service.js';
-import { asyncHandler } from '../utils/asyncHandler.js';
 import { res200 } from '../utils/response.js';
 
 class AnalysisController {
-  private service = new AnalysisService();
+  private analysisService = new AnalysisService();
 
-  public getAnalysis = async (req: Request, res: Response) => {
-    const validatedQuery = res.locals.validatedData.query;
-    const result = await this.service.getMonthlyAnalysis(validatedQuery);
-    res200({ res, message: 'success', data: result });
+  public getMonthlyAnalysis = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const query = res.locals.validatedData.query;
+      const result = await this.analysisService.getMonthlyAnalysis(query);
+      res200({
+        res,
+        data: result,
+        message: 'Analisis bulanan berhasil diambil.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public getClassificationSummary = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const query = res.locals.validatedData.query;
+      const result = await this.analysisService.getClassificationSummary(query);
+      res200({
+        res,
+        data: result,
+        message: 'Ringkasan klasifikasi berhasil diambil.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public getTodaySummary = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { energyType } = res.locals.validatedData.query;
+      const result = await this.analysisService.getTodaySummary(energyType);
+      res200({
+        res,
+        data: result,
+        message: 'Ringkasan konsumsi hari ini berhasil diambil.',
+      });
+    } catch (error) {
+      next(error);
+    }
   };
 }
 

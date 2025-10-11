@@ -1,9 +1,19 @@
 import prisma from '../configs/db.js';
+import { Prisma, UsageCategory } from '../generated/prisma/index.js';
 import type {
   GetAnalysisQuery,
   DailyAnalysisRecord,
 } from '../types/analysis.types.js';
 import { Error404 } from '../utils/customError.js';
+
+// BARU: Tipe untuk hasil ringkasan klasifikasi
+export type ClassificationSummary = {
+  [key in UsageCategory]?: number;
+} & {
+  totalDaysInMonth: number;
+  totalDaysWithData: number;
+  totalDaysWithClassification: number;
+};
 
 type MeterAnalysisData = {
   meterId: number;
@@ -51,6 +61,7 @@ export class AnalysisService {
       include: {
         details: true,
         meter: true, // Sertakan data meter untuk mendapatkan nama dan ID
+        classification: true, // BARU: Sertakan data klasifikasi
       },
     });
 
@@ -108,6 +119,9 @@ export class AnalysisService {
 
       const dayData = dataByMeter.get(meterId)!.dailyData.get(dateString) || {};
       dayData.actual_consumption = totalConsumption;
+      // BARU: Tambahkan data klasifikasi ke data harian
+      dayData.consumption_cost = summary.total_cost?.toNumber() ?? null;
+      dayData.classification = summary.classification?.classification ?? null;
       dataByMeter.get(meterId)!.dailyData.set(dateString, dayData);
     }
 
@@ -143,7 +157,9 @@ export class AnalysisService {
         timeSeries.push({
           date: currentDate,
           actual_consumption: dayData?.actual_consumption ?? null,
+          consumption_cost: dayData?.consumption_cost ?? null,
           prediction: dayData?.prediction ?? null,
+          classification: dayData?.classification ?? null, // BARU: Kirim data klasifikasi
           efficiency_target: targetsByMeter.get(meterId) ?? null,
         });
       }
@@ -156,5 +172,136 @@ export class AnalysisService {
     }
 
     return finalResults;
+  }
+
+  /**
+   * BARU: Menghitung ringkasan jumlah klasifikasi (BOROS, HEMAT, NORMAL)
+   * untuk periode dan filter yang diberikan.
+   */
+  public async getClassificationSummary(
+    query: GetAnalysisQuery
+  ): Promise<ClassificationSummary> {
+    const { energyType, month, meterId } = query;
+
+    // 1. Tentukan rentang tanggal dari parameter 'month'
+    const targetDate = month
+      ? new Date(`${month}-01T00:00:00.000Z`)
+      : new Date();
+    const year = targetDate.getUTCFullYear();
+    const monthIndex = targetDate.getUTCMonth();
+
+    const startDate = new Date(Date.UTC(year, monthIndex, 1));
+    const endDate = new Date(
+      Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999)
+    );
+
+    // BARU: Hitung jumlah hari dalam bulan yang dipilih
+    const totalDaysInMonth = endDate.getUTCDate();
+
+    // 2. Buat klausa 'where' yang dinamis
+    const whereClause: Prisma.DailyUsageClassificationWhereInput = {
+      classification_date: { gte: startDate, lte: endDate },
+      meter: {
+        energy_type: { type_name: energyType },
+        ...(meterId && { meter_id: meterId }),
+      },
+      // Hanya hitung klasifikasi yang valid
+      classification: {
+        in: [UsageCategory.BOROS, UsageCategory.HEMAT, UsageCategory.NORMAL],
+      },
+    };
+
+    // 3. Lakukan agregasi menggunakan `groupBy`
+    const groupedData = await prisma.dailyUsageClassification.groupBy({
+      by: ['classification'],
+      where: whereClause,
+      _count: {
+        classification: true,
+      },
+    });
+
+    // 4. Format hasil ke dalam objek yang rapi
+    const summary: ClassificationSummary = {
+      totalDaysInMonth,
+      totalDaysWithData: 0,
+      totalDaysWithClassification: 0,
+      BOROS: 0,
+      HEMAT: 0,
+      NORMAL: 0,
+    };
+
+    let totalDays = 0;
+    let totalDaysWithData = 0;
+    for (const group of groupedData) {
+      const count = group._count.classification;
+      if (group.classification) {
+        summary[group.classification] = count;
+      }
+      totalDays += count;
+    }
+
+    // PERBAIKAN: Buat klausa 'where' terpisah untuk DailySummary
+    const summaryWhereClause: Prisma.DailySummaryWhereInput = {
+      summary_date: { gte: startDate, lte: endDate },
+      meter: {
+        energy_type: { type_name: energyType },
+        ...(meterId && { meter_id: meterId }),
+      },
+      classification: null, // Cari summary yang belum punya klasifikasi
+    };
+    const totalSummaries = await prisma.dailySummary.count({
+      where: summaryWhereClause,
+    });
+    totalDaysWithData = totalDays + totalSummaries;
+    summary.totalDaysWithClassification = totalDays;
+    summary.totalDaysWithData = totalDaysWithData;
+
+    return summary;
+  }
+
+  /**
+   * BARU: Mengambil ringkasan konsumsi untuk hari ini.
+   * @param energyType - (Opsional) Filter berdasarkan tipe energi.
+   */
+  public async getTodaySummary(energyType?: 'Electricity' | 'Water' | 'Fuel') {
+    // PERBAIKAN: Tentukan tanggal hari ini berdasarkan zona waktu Indonesia (Asia/Jakarta)
+    // untuk memastikan tanggal yang benar digunakan, terlepas dari zona waktu server.
+    const nowInJakarta = new Date(
+      new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' })
+    );
+    const year = nowInJakarta.getFullYear();
+    const month = nowInJakarta.getMonth();
+    const day = nowInJakarta.getDate();
+    const today = new Date(Date.UTC(year, month, day));
+
+    const whereClause: Prisma.DailySummaryWhereInput = {
+      summary_date: today,
+    };
+
+    if (energyType) {
+      whereClause.meter = {
+        energy_type: {
+          type_name: energyType,
+        },
+      };
+    }
+
+    const todaySummaries = await prisma.dailySummary.findMany({
+      where: whereClause,
+      include: {
+        meter: {
+          select: {
+            meter_code: true,
+            energy_type: {
+              select: { type_name: true, unit_of_measurement: true },
+            },
+          },
+        },
+        classification: { select: { classification: true } },
+      },
+      orderBy: { meter: { energy_type: { type_name: 'asc' } } },
+    });
+
+    return todaySummaries;
   }
 }
