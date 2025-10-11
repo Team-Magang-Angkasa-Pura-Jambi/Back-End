@@ -23,7 +23,7 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noImplicitAny": false,
-
+    "allowJs": true,
     /* Opsi Lainnya */
     "sourceMap": true
   },
