@@ -11,7 +11,7 @@
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
     "test": "jest",
-    "postinstall": "prisma generate"
+     "postinstall": "npx prisma generate"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts",
