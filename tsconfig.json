@@ -13,7 +13,12 @@
     "skipLibCheck": true, // Mempercepat kompilasi dengan melewatkan pengecekan file .d.ts
 
     /* Tambahan yang Berguna */
-    "sourceMap": true // Membuat source map untuk debugging
+    "sourceMap": true, // Membuat source map untuk debugging
+
+    /* Opsi untuk Mengabaikan Error saat Build */
+    "noEmitOnError": false, // PENTING: Tetap membuat file JS meskipun ada error.
+    "noUnusedLocals": false, // Izinkan variabel lokal yang tidak terpakai.
+    "noUnusedParameters": false // Izinkan parameter fungsi yang tidak terpakai.
   },
   "include": ["src/**/*"], // Hanya kompilasi file di dalam folder 'src'
   "exclude": ["node_modules", "dist"] // Abaikan folder-folder ini
