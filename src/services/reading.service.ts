@@ -11,6 +11,7 @@ import {
   RoleName,
   UsageCategory,
   type ReadingDetail,
+  InsightSeverity,
 } from '../generated/prisma/index.js';
 import type {
   CreateReadingSessionBody,
@@ -564,25 +565,24 @@ export class ReadingService extends GenericBaseService<
     });
 
     // 3. Jika hasilnya "BOROS", buat alert dan kirim notifikasi.
+    // PERUBAHAN: Membuat AnalyticsInsight (Alert) bukan Notification.
     if (usageCategory === UsageCategory.BOROS) {
       const title = 'Peringatan: Terdeteksi Pemakaian Boros';
       const message = `Pemakaian listrik untuk meteran ${
         meter.meter_code
       } pada tanggal ${summary.summary_date.toLocaleDateString()} diklasifikasikan sebagai BOROS.`;
 
-      // Kirim notifikasi ke semua admin
-      const admins = await tx.user.findMany({
-        where: {
-          role: { role_name: { in: [RoleName.Admin, RoleName.SuperAdmin] } },
+      // Buat 'Alert' menggunakan AnalyticsInsight
+      await tx.alert.create({
+        data: {
+          title,
+          description: message,
+          severity: InsightSeverity.HIGH,
+          insight_date: summary.summary_date,
+          meter_id: meter.meter_id,
+          source_data_ref: { summaryId: summary.summary_id },
         },
       });
-      for (const admin of admins) {
-        await notificationService.create({
-          user_id: admin.user_id,
-          title,
-          message,
-        });
-      }
     }
   }
 
@@ -633,6 +633,7 @@ export class ReadingService extends GenericBaseService<
     }
 
     // 4. Bandingkan konsumsi dengan target
+    // PERUBAHAN: Membuat AnalyticsInsight (Alert) jika target terlampaui.
     if (totalConsumption.greaterThan(target.target_value)) {
       // 5. Hitung persentase kelebihan
       const excess = totalConsumption.minus(target.target_value);
@@ -642,7 +643,6 @@ export class ReadingService extends GenericBaseService<
       const admins = await tx.user.findMany({
         where: {
           role: { role_name: { in: [RoleName.Admin, RoleName.SuperAdmin] } },
-          is_active: true,
         },
         select: { user_id: true },
       });
@@ -650,14 +650,19 @@ export class ReadingService extends GenericBaseService<
       const message = `Pemakaian harian untuk meteran ${meter.meter_code} melebihi target sebesar ${percentage}%.`;
       const title = 'Peringatan: Target Efisiensi Terlampaui';
 
-      for (const admin of admins) {
-        // PERBAIKAN: Gunakan notificationService untuk konsistensi
-        await notificationService.create({
-          user_id: admin.user_id,
+      await tx.alert.create({
+        data: {
           title,
-          message,
-        });
-      }
+          description: message,
+          severity: InsightSeverity.MEDIUM,
+          insight_date: summary.summary_date,
+          meter_id: meter.meter_id,
+          source_data_ref: {
+            summaryId: summary.summary_id,
+            targetId: target.target_id,
+          },
+        },
+      });
     }
   }
   /**

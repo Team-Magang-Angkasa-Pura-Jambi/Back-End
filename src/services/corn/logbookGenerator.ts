@@ -1,6 +1,7 @@
 import { schedule } from 'node-cron';
 import prisma from '../../configs/db.js';
 import { dailyLogbookService } from '../dailyLogbook.service.js';
+import { RoleName } from '../../generated/prisma/index.js';
 
 /**
  * Fungsi ini memeriksa apakah logbook untuk hari kemarin sudah ada.
@@ -8,45 +9,71 @@ import { dailyLogbookService } from '../dailyLogbook.service.js';
  */
 async function generateLogbookForYesterdayIfNeeded() {
   console.log(
-    '[CRON - Logbook] Memulai pengecekan untuk pembuatan logbook harian...'
+    `[CRON - Logbook] Memulai tugas pembuatan logbook harian pada ${new Date().toLocaleString(
+      'id-ID',
+      { timeZone: 'Asia/Jakarta' }
+    )}`
   );
 
   try {
-    // 1. Tentukan tanggal "kemarin" berdasarkan UTC
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setUTCDate(today.getUTCDate() - 1);
-    yesterday.setUTCHours(0, 0, 0, 0); // Normalisasi ke awal hari
+    // 1. Tentukan tanggal "kemarin" berdasarkan zona waktu Jakarta
+    const jobStartDate = new Date();
+    const nowInJakarta = new Date(
+      new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' })
+    );
+    const yesterdayInJakarta = new Date(nowInJakarta);
+    yesterdayInJakarta.setDate(nowInJakarta.getDate() - 1);
 
-    // 2. Cek apakah log untuk tanggal kemarin sudah ada di database
-    const existingLog = await prisma.dailyLogbook.findUnique({
-      where: { log_date: yesterday },
-    });
-
-    // 3. Logika Pengecekan Status
-    if (existingLog) {
-      console.log(
-        `[CRON - Logbook] Log untuk tanggal ${
-          yesterday.toISOString().split('T')[0]
-        } sudah ada. Tidak ada tindakan yang diperlukan.`
-      );
-      return; // Hentikan proses jika log sudah ada
-    }
-
-    // 4. Jika log belum ada, jalankan proses pembuatan
+    // 2. Panggil service untuk membuat logbook.
+    // Service akan menangani logika upsert (membuat jika belum ada, atau memperbarui jika sudah ada).
     console.log(
       `[CRON - Logbook] Log untuk ${
-        yesterday.toISOString().split('T')[0]
-      } tidak ditemukan. Memulai proses pembuatan...`
+        yesterdayInJakarta.toISOString().split('T')[0]
+      } akan dibuat/diperbarui.`
     );
-    await dailyLogbookService.generateDailyLog(yesterday);
+    const createdLogs =
+      await dailyLogbookService.generateDailyLog(yesterdayInJakarta);
+
+    // BARU: Kirim notifikasi kinerja setelah tugas selesai
+    const jobEndDate = new Date();
+    const durationInSeconds =
+      (jobEndDate.getTime() - jobStartDate.getTime()) / 1000;
+    const performanceMessage = `Tugas pembuatan logbook harian selesai dalam ${durationInSeconds.toFixed(
+      2
+    )} detik. ${createdLogs.length} logbook telah dibuat/diperbarui.`;
+
+    const admins = await prisma.user.findMany({
+      where: {
+        role: { role_name: { in: [RoleName.Admin, RoleName.SuperAdmin] } },
+        is_active: true,
+      },
+      select: { user_id: true },
+    });
+
+    for (const admin of admins) {
+      await prisma.notification.create({
+        data: {
+          user_id: admin.user_id,
+          title: 'Laporan Kinerja Sistem',
+          message: performanceMessage,
+        },
+      });
+    }
+    console.log(
+      `[CRON - Logbook] Tugas selesai dalam ${durationInSeconds.toFixed(2)} detik.`
+    );
   } catch (error) {
     console.error('[CRON - Logbook] Terjadi kesalahan:', error);
   }
 }
 
 export function startDailyLogbookCron() {
-  console.log('⏰ Cron job untuk logbook harian otomatis diaktifkan.');
-  // Menjalankan tugas setiap jam.
-  schedule('0 * * * *', generateLogbookForYesterdayIfNeeded);
+  console.log(
+    '⏰ Cron job untuk logbook harian otomatis diaktifkan (setiap hari jam 02:00 WIB).'
+  );
+  // Menjalankan tugas setiap hari pada jam 02:00 pagi zona waktu Jakarta.
+  schedule('0 2 * * *', generateLogbookForYesterdayIfNeeded, {
+    scheduled: true,
+    timezone: 'Asia/Jakarta',
+  });
 }

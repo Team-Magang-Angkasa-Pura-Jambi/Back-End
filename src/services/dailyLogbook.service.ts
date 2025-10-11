@@ -1,12 +1,14 @@
 import { Prisma } from '../generated/prisma/index.js';
 import prisma from '../configs/db.js';
 import type {
+  RoleName,
   CreateDailyLogbookBody,
   DailyLogbook,
   GetLogbooksQuery,
   UpdateDailyLogbookBody,
 } from '../types/dailyLogbook.type.js';
 import { GenericBaseService } from '../utils/GenericBaseService.js';
+import { notificationService } from './notification.service.js';
 
 // Tipe data internal untuk mempermudah passing data antar metode
 type SummaryWithRelations = Prisma.DailySummaryGetPayload<{
@@ -53,6 +55,30 @@ function formatChange(change: number, metricName: string): string {
     return `penurunan ${metricName} sebesar ${Math.abs(change).toFixed(1)}%`;
   }
   return `penggunaan ${metricName} stabil`;
+}
+
+/**
+ * BARU: Menormalkan tanggal ke awal hari (00:00:00) di zona waktu Asia/Jakarta.
+ * Ini penting untuk memastikan konsistensi query tanggal terlepas dari zona waktu server.
+ * @param date - Objek Date atau string tanggal.
+ * @returns Objek Date baru yang sudah dinormalisasi ke UTC berdasarkan tanggal di Jakarta.
+ */
+function normalizeToJakartaDate(date: Date | string): Date {
+  const d = new Date(date);
+  // Buat tanggal baru dengan komponen dari zona waktu Jakarta
+  const year = d.toLocaleString('en-US', {
+    year: 'numeric',
+    timeZone: 'Asia/Jakarta',
+  });
+  const month = d.toLocaleString('en-US', {
+    month: '2-digit',
+    timeZone: 'Asia/Jakarta',
+  });
+  const day = d.toLocaleString('en-US', {
+    day: '2-digit',
+    timeZone: 'Asia/Jakarta',
+  });
+  return new Date(`${year}-${month}-${day}T00:00:00.000Z`);
 }
 
 export class DailyLogbookService extends GenericBaseService<
@@ -121,8 +147,7 @@ export class DailyLogbookService extends GenericBaseService<
    */
   public async generateDailyLog(date: Date) {
     return this._handleCrudOperation(async () => {
-      const targetDate = new Date(date);
-      targetDate.setUTCHours(0, 0, 0, 0);
+      const targetDate = normalizeToJakartaDate(date);
 
       const previousDate = new Date(targetDate);
       previousDate.setUTCDate(targetDate.getUTCDate() - 1);

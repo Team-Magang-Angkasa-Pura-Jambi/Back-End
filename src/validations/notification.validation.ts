@@ -19,3 +19,13 @@ export const markAsReadSchema = z.object({
     notificationId: positiveInt('Notification ID'),
   }),
 });
+
+export const emptySchema = z.object({});
+
+export const bulkDeleteNotificationsSchema = z.object({
+  body: z.object({
+    notificationIds: z
+      .array(positiveInt('Notification ID'))
+      .min(1, 'Setidaknya satu ID notifikasi diperlukan.'),
+  }),
+});

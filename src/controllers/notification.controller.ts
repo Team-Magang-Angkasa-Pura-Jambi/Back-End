@@ -88,6 +88,37 @@ export class NotificationController extends BaseController<
       data: result,
     });
   };
+
+  public deleteAll = async (req: Request, res: Response): Promise<void> => {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      throw new Error401('User not authenticated.');
+    }
+    const result = await this.service.deleteAll(userId);
+    res200({
+      res,
+      message: `Successfully deleted ${result.count} notifications.`,
+    });
+  };
+
+  public bulkDelete = async (req: Request, res: Response): Promise<void> => {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      throw new Error401('User not authenticated.');
+    }
+
+    const { notificationIds } = res.locals.validatedData.body;
+
+    const result = await this.service.deleteManyByIds(userId, notificationIds);
+
+    res200({
+      res,
+      message: `Successfully deleted ${result.count} notifications.`,
+      data: {
+        count: result.count,
+      },
+    });
+  };
 }
 
 export const notificationController = new NotificationController();

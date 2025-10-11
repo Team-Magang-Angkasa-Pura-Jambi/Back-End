@@ -1,16 +1,14 @@
 import bcrypt from 'bcrypt';
-import type { Prisma, User } from '../generated/prisma/index.js';
 import prisma from '../configs/db.js';
-import { GenericBaseService } from '../utils/GenericBaseService.js';
-
+import { Prisma, RoleName } from '../generated/prisma/index.js';
 import type {
   CreateUserBody,
-  GetUsersQuery,
   UpdateUserBody,
-} from '../types/user.type.js';
-import { Error404 } from '../utils/customError.js';
-import type { DefaultArgs } from '../generated/prisma/runtime/library.js';
-import type { CustomErrorMessages } from '../utils/baseService.js';
+  User,
+} from '../types/user.types.js';
+import { Error409 } from '../utils/customError.js';
+import { GenericBaseService } from '../utils/GenericBaseService.js';
+import { notificationService } from './notification.service.js';
 
 export class UserService extends GenericBaseService<
   typeof prisma.user,
@@ -27,70 +25,60 @@ export class UserService extends GenericBaseService<
     super(prisma, prisma.user, 'user_id');
   }
 
-  public override async findAll(
-    query: GetUsersQuery
-  ): Promise<Prisma.UserGetPayload<{ include: { role: true } }>[]> {
-    const { limit, page, isActive, roleName, search } = query;
-    const where: Prisma.UserWhereInput = {};
+  public override async create(data: CreateUserBody): Promise<User> {
+    return this._handleCrudOperation(async () => {
+      const existingUser = await this._model.findUnique({
+        where: { username: data.username },
+      });
 
-    // 1. Perbaiki filter 'is_active'
-    if (isActive !== undefined) {
-      where.is_active = isActive;
-    }
+      if (existingUser) {
+        throw new Error409('Username sudah digunakan.');
+      }
 
-    // 2. Perbaiki filter 'role_name'
-    if (roleName) {
-      where.role = {
-        role_name: roleName,
-      };
-    }
+      const hashedPassword = await bcrypt.hash(data.password, 10);
 
-    // 3. Tambahkan fungsionalitas 'search'
-    if (search) {
-      where.username = {
-        contains: search,
-        mode: 'insensitive', // Agar tidak case-sensitive (a == A)
-      };
-    }
+      const newUser = await this._model.create({
+        data: {
+          username: data.username,
+          password_hash: hashedPassword,
+          role_id: data.role_id,
+          is_active: data.is_active,
+        },
+        include: {
+          role: true,
+        },
+      });
 
-    const findArgs: Prisma.UserFindManyArgs = {
-      where,
-      // 4. Tambahkan fungsionalitas paginasi (limit & page)
-      skip: (page - 1) * limit,
-      take: limit,
-      include: {
-        role: true,
-      },
-      orderBy: {
-        user_id: 'asc',
-      },
-    };
+      // BARU: Kirim notifikasi ke semua admin dan superadmin
+      const admins = await this._prisma.user.findMany({
+        where: {
+          role: { role_name: { in: [RoleName.Admin, RoleName.SuperAdmin] } },
+          is_active: true,
+        },
+        select: { user_id: true },
+      });
 
-    return this._model.findMany(findArgs);
-  }
+      const message = `Pengguna baru dengan nama "${
+        newUser.username
+      }" dan peran "${newUser.role.role_name}" telah ditambahkan ke sistem.`;
 
-  public override async findById(
-    id: number,
-    args?: Omit<Prisma.UserFindUniqueArgs<DefaultArgs>, 'where'> | undefined,
-    customMessages?: CustomErrorMessages
-  ): Promise<User> {
-    const findArgs = {
-      ...args,
-      include: {
-        role: true,
-        // Relasi lain bisa ditambahkan di sini jika diperlukan untuk detail dasar
-      },
-    };
-    return this._model.findUniqueOrThrow({
-      where: { user_id: id },
-      ...findArgs,
+      for (const admin of admins) {
+        await notificationService.create({
+          user_id: admin.user_id,
+          title: 'Pengguna Baru Dibuat',
+          message,
+          link: `/management/users/${newUser.user_id}`, // Contoh link ke halaman detail user
+        });
+      }
+
+      return newUser as User;
     });
   }
 
   /**
-   * BARU: Mengambil dan menyatukan riwayat aktivitas pengguna dari berbagai sumber.
-   * @param userId - ID pengguna yang akan dicari riwayatnya.
-   * @returns Objek pengguna beserta array 'history' yang terstruktur.
+   * BARU: Mengambil riwayat aktivitas pengguna, seperti sesi pembacaan yang telah dibuat.
+   * @param userId - ID pengguna yang riwayatnya akan diambil.
+   * @returns Daftar sesi pembacaan yang diurutkan berdasarkan tanggal terbaru.
    */
   public async getActivityHistory(userId: number) {
     // Tentukan batas waktu 7 hari yang lalu
@@ -176,76 +164,6 @@ export class UserService extends GenericBaseService<
       ...user
     } = userWithRelations;
     return { ...user, history: fullHistory };
-  }
-
-  public override async create(data: CreateUserBody): Promise<User> {
-    const { password, roleName, ...restOfData } = data;
-
-    const role = await prisma.role.findUnique({
-      where: { role_name: roleName },
-    });
-    restOfData.role_id = role.role_id;
-    if (!role) {
-      throw new Error404('Role not found.');
-    }
-
-    if (!password) {
-      throw new Error('Password is required but was not provided.');
-    }
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const args: Prisma.UserCreateArgs = {
-      data: {
-        ...restOfData,
-        password_hash: hashedPassword,
-      },
-      select: {
-        username: true,
-        role: true,
-        user_id: true,
-        photo_profile_url: true,
-        is_active: true,
-        created_at: true,
-      },
-    };
-
-    return this._create(args);
-  }
-
-  /**
-   * @override
-   * Implementasi 'update' dari kontrak abstrak base class.
-   */
-  public override async update(
-    userId: number,
-    data: UpdateUserBody
-  ): Promise<User> {
-    const { password, roleName, ...restOfData } = data;
-    const dataToUpdate = { ...restOfData };
-    if (roleName) {
-      const role_id = await prisma.role.findUnique({
-        where: { role_name: roleName },
-        select: { role_id: true },
-      });
-      dataToUpdate.role_id = role_id?.role_id;
-    }
-    if (password) {
-      dataToUpdate.password_hash = await bcrypt.hash(password, 10);
-    }
-
-    const args: Omit<Prisma.UserUpdateArgs, 'where'> = {
-      data: dataToUpdate,
-      select: {
-        username: true,
-        role: true,
-        user_id: true,
-        photo_profile_url: true,
-        is_active: true,
-        created_at: true,
-      },
-    };
-
-    return this._update(userId, args);
   }
 
   public async findByUsername(

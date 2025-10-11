@@ -1,0 +1,81 @@
+import type { Request, Response, NextFunction } from 'express';
+import { alertService } from '../services/alert.service.js';
+import { res200 } from '../utils/response.js';
+import { Error401 } from '../utils/customError.js';
+
+class AlertController {
+  public getAll = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const query = res.locals.validatedData.query;
+      const { data, meta } = await alertService.findAllWithQuery(query);
+      res200({
+        res,
+        data: { data, meta },
+        message: 'Alerts berhasil diambil.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public getUnreadCount = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { meterId } = res.locals.validatedData.query;
+      const count = await alertService.getUnreadCount(meterId);
+      res200({
+        res,
+        data: { count },
+        message: 'Jumlah alert berhasil diambil.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public acknowledge = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const user = (req as any).user;
+      if (!user?.id) throw new Error401('User tidak terautentikasi.');
+
+      const { alertId } = res.locals.validatedData.params;
+      const alert = await alertService.acknowledge(alertId, Number(user.id));
+      res200({
+        res,
+        data: alert,
+        message: 'Alert ditandai sebagai acknowledged.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public acknowledgeAll = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const user = (req as any).user;
+      if (!user?.id) throw new Error401('User tidak terautentikasi.');
+
+      const result = await alertService.acknowledgeAll(Number(user.id));
+      res200({
+        res,
+        data: { count: result.count },
+        message: `${result.count} alert berhasil ditandai sebagai acknowledged.`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+export const alertController = new AlertController();

@@ -264,15 +264,13 @@ export class AnalysisService {
    * @param energyType - (Opsional) Filter berdasarkan tipe energi.
    */
   public async getTodaySummary(energyType?: 'Electricity' | 'Water' | 'Fuel') {
-    // PERBAIKAN: Tentukan tanggal hari ini berdasarkan zona waktu Indonesia (Asia/Jakarta)
+    // Tentukan tanggal hari ini berdasarkan zona waktu Indonesia (Asia/Jakarta)
     // untuk memastikan tanggal yang benar digunakan, terlepas dari zona waktu server.
     const nowInJakarta = new Date(
       new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' })
     );
-    const year = nowInJakarta.getFullYear();
-    const month = nowInJakarta.getMonth();
-    const day = nowInJakarta.getDate();
-    const today = new Date(Date.UTC(year, month, day));
+    // Normalisasi ke awal hari (UTC) agar cocok dengan format penyimpanan di DB
+    const today = new Date(nowInJakarta.toISOString().split('T')[0]);
 
     const whereClause: Prisma.DailySummaryWhereInput = {
       summary_date: today,

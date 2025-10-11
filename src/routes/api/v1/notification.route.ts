@@ -7,7 +7,9 @@ import {
   authMiddleware,
 } from '../../../middleware/auth.middleware.js';
 import {
+  bulkDeleteNotificationsSchema,
   getNotificationsSchema,
+  emptySchema,
   markAsReadSchema,
 } from '../../../validations/notification.validation.js';
 
@@ -15,7 +17,6 @@ export default (router: Router) => {
   const prefix = '/notifications';
 
   // Menerapkan middleware otentikasi untuk semua rute notifikasi
-  router.use(prefix, authMiddleware);
 
   // GET /api/v1/notifications - Mengambil semua notifikasi untuk pengguna yang login
   router.get(
@@ -52,5 +53,21 @@ export default (router: Router) => {
     authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(markAsReadSchema),
     asyncHandler(notificationController.markAsRead)
+  );
+
+  // DELETE /api/v1/notifications - Menghapus semua notifikasi untuk pengguna yang login
+  router.delete(
+    prefix,
+    authorize('Admin', 'SuperAdmin', 'Technician'),
+    validate(emptySchema),
+    asyncHandler(notificationController.deleteAll)
+  );
+
+  // POST /api/v1/notifications/bulk-delete - Menghapus beberapa notifikasi yang dipilih
+  router.post(
+    `${prefix}/bulk-delete`,
+    authorize('Admin', 'SuperAdmin', 'Technician'),
+    validate(bulkDeleteNotificationsSchema),
+    asyncHandler(notificationController.bulkDelete)
   );
 };

@@ -22,7 +22,7 @@ export default (router: Router) => {
   // GET /api/v1/logbooks - Mengambil semua logbook dengan filter dan paginasi
   router.get(
     prefix,
-    authorize('Admin', 'SuperAdmin'),
+    authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(getLogbooksSchema),
     asyncHandler(dailyLogbookController.getAll)
   );
@@ -30,7 +30,7 @@ export default (router: Router) => {
   // GET /api/v1/logbooks/:logId - Mengambil satu logbook berdasarkan ID
   router.get(
     `${prefix}/:logId`,
-    authorize('Admin', 'SuperAdmin'),
+    authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(getLogbookByIdSchema),
     asyncHandler(dailyLogbookController.getById)
   );
@@ -38,7 +38,7 @@ export default (router: Router) => {
   // POST /api/v1/logbooks/generate - Membuat logbook harian secara otomatis
   router.post(
     `${prefix}/generate`,
-    authorize('Admin', 'SuperAdmin'),
+    authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(generateLogbookSchema),
     asyncHandler(dailyLogbookController.generate)
   );

@@ -115,6 +115,57 @@ export class NotificationService extends GenericBaseService<
       });
     });
   }
+
+  /**
+   * BARU: Menghapus semua notifikasi untuk pengguna tertentu.
+   * @param userId - ID pengguna yang notifikasinya akan dihapus.
+   * @returns Hasil dari operasi deleteMany.
+   */
+  public async deleteAll(userId: number): Promise<Prisma.BatchPayload> {
+    return this._handleCrudOperation(() =>
+      this._model.deleteMany({
+        where: { user_id: userId },
+      })
+    );
+  }
+
+  /**
+   * BARU: Menghapus beberapa notifikasi berdasarkan daftar ID.
+   * @param userId - ID pengguna yang terautentikasi.
+   * @param notificationIds - Array dari ID notifikasi yang akan dihapus.
+   * @returns Hasil dari operasi deleteMany.
+   */
+  public async deleteManyByIds(
+    userId: number,
+    notificationIds: number[]
+  ): Promise<Prisma.BatchPayload> {
+    return this._handleCrudOperation(() =>
+      this._model.deleteMany({
+        where: {
+          user_id: userId,
+          notification_id: { in: notificationIds },
+        },
+      })
+    );
+  }
+
+  /**
+   * BARU: Menghapus notifikasi lama yang sudah dibaca.
+   * @param olderThan - Hapus notifikasi yang dibuat sebelum tanggal ini.
+   * @returns Hasil dari operasi deleteMany.
+   */
+  public async deleteOldRead(olderThan: Date): Promise<Prisma.BatchPayload> {
+    return this._handleCrudOperation(() =>
+      this._model.deleteMany({
+        where: {
+          is_read: true,
+          created_at: {
+            lt: olderThan,
+          },
+        },
+      })
+    );
+  }
 }
 
 export const notificationService = new NotificationService();

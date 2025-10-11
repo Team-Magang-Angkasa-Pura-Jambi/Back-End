@@ -35,7 +35,7 @@ export default (router: Router) => {
   // Endpoint untuk data time-series bulanan (konsumsi, prediksi, target)
   router.get(
     prefix,
-    authorize('Admin', 'SuperAdmin'),
+    authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(analysisQuerySchema),
     asyncHandler(analysisController.getMonthlyAnalysis)
   );
@@ -44,7 +44,7 @@ export default (router: Router) => {
   // Endpoint BARU untuk ringkasan jumlah klasifikasi
   router.get(
     `${prefix}/classification-summary`,
-    authorize('Admin', 'SuperAdmin'),
+    authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(analysisQuerySchema),
     asyncHandler(analysisController.getClassificationSummary)
   );
