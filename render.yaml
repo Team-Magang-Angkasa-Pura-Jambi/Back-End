@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: be-sentinel-api # Anda bisa ganti nama ini
+    env: node
+    plan: free # atau 'starter' jika Anda menggunakan paket berbayar
+    buildCommand: 'npm install && npm run build'
+    startCommand: 'node dist/src/index.js'
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nama-database-render-anda # Ganti dengan nama database Anda di Render
+          property: connectionString
+      - key: JWT_SECRET
+        sync: false # Atur manual di dashboard Render untuk keamanan
+      - key: NODE_VERSION
+        value: 20.11.1 # Sesuaikan dengan versi Node.js yang Anda gunakan

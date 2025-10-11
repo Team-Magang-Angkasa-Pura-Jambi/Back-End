@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch --inspect src/index.ts",
     "migrate:dev": "prisma migrate dev",
@@ -12,7 +13,8 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
   },
   "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed.ts",
+    "schema": "prisma/schema.prisma"
   },
   "keywords": [],
   "author": "",
