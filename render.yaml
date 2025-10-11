@@ -6,12 +6,9 @@ services:
     buildCommand: 'npm install && npm run build'
     startCommand: 'node dist/index.js'
     envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: nama-database-render-anda # Ganti dengan nama database Anda di Render
-          property: connectionString
-      - key: JWT_SECRET
+      - key: DATABASE_URL # Atur manual di dashboard Render karena menggunakan Prisma Accelerate
+        sync: false
+      - key: JWT_SECRET # Atur manual di dashboard Render untuk keamanan
         sync: false # Atur manual di dashboard Render untuk keamanan
       - key: NODE_VERSION
-        value: 20.11.1 # Sesuaikan dengan versi Node.js yang Anda gunakan
         value: 20.11.1 # Sesuaikan dengan versi Node.js yang Anda gunakan
