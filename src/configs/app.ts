@@ -9,7 +9,7 @@ export const app = express();
 const corsOptions = {
   origin: [
     'http://localhost:3000',
-    "https://front-end-git-main-quls-projects.vercel.app"
+    'https://sentinel-angkasa-pura.vercel.app',
     // 'http://192.168.18.85:3000',
     // 'https://patentable-steve-unsuburbed.ngrok-free.dev',
   ],
