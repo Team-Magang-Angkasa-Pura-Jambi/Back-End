@@ -774,7 +774,9 @@ export class ReadingService extends GenericBaseService<
     >[] = [
       {
         metric_name: 'Pemakaian WBP',
-        energy_type_id: meter.energy_type_id,
+        energy_type: {
+          connect: { energy_type_id: meter.energy_type_id },
+        },
         current_reading:
           getDetailValue(currentSession, wbpType.reading_type_id) ??
           new Prisma.Decimal(0),
@@ -787,7 +789,9 @@ export class ReadingService extends GenericBaseService<
       },
       {
         metric_name: 'Pemakaian LWBP',
-        energy_type_id: meter.energy_type_id,
+        energy_type: {
+          connect: { energy_type_id: meter.energy_type_id },
+        },
         current_reading:
           getDetailValue(currentSession, lwbpType.reading_type_id) ??
           new Prisma.Decimal(0),
@@ -803,7 +807,9 @@ export class ReadingService extends GenericBaseService<
     // Tambahkan metrik "Total Pemakaian"
     summaryDetails.push({
       metric_name: 'Total Pemakaian',
-      energy_type_id: meter.energy_type_id,
+      energy_type: {
+        connect: { energy_type_id: meter.energy_type_id },
+      },
       current_reading: new Prisma.Decimal(0), // Tidak relevan untuk total
       previous_reading: new Prisma.Decimal(0), // Tidak relevan untuk total
       consumption_value: wbpConsumption.plus(lwbpConsumption), // Total konsumsi adalah jumlah WBP dan LWBP sebelum dikali faktor kali.

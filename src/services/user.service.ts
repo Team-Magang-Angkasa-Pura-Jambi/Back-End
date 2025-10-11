@@ -85,7 +85,7 @@ export class UserService extends GenericBaseService<
     const { password, roleName, ...restOfData } = data;
 
     const role = await prisma.role.findUnique({
-      where: { role_name: roleName },
+      where: { role_name: roleName as any }, // Perbaikan cepat, idealnya divalidasi dengan Zod enum
     });
     restOfData.role_id = role.role_id;
     if (!role) {
@@ -127,7 +127,7 @@ export class UserService extends GenericBaseService<
     const dataToUpdate = { ...restOfData };
     if (roleName) {
       const role_id = await prisma.role.findUnique({
-        where: { role_name: roleName },
+        where: { role_name: roleName as any }, // Perbaikan cepat
         select: { role_id: true },
       });
       dataToUpdate.role_id = role_id?.role_id;
