@@ -12,10 +12,10 @@
 
     // 1. Menonaktifkan semua aturan pengecekan tipe yang ketat.
     "strict": false,
-    
+
     // 2. KUNCI UTAMA: Memaksa TypeScript membuat output .js meskipun ada error.
-    "noEmitOnError": false, 
-    
+    "noEmitOnError": false,
+
     // 3. Mempercepat build dengan tidak memeriksa tipe dari library eksternal.
     "skipLibCheck": true,
 
