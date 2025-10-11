@@ -25,6 +25,7 @@ import { ConsumptionPredictionRoutes } from './ConsumptionPrediction.route.js';
 import notificationRoute from './notification.route.js';
 import TariffGroupRoute from './TariffGroup.route.js';
 import machineLearningRoute from './machineLearning.route.js';
+import dailyLogbookRoute from './dailyLogbook.route.js';
 
 export default (app: any) => {
   const router = Router();
@@ -59,4 +60,5 @@ export default (app: any) => {
   notificationRoute(router);
   TariffGroupRoute(router);
   machineLearningRoute(router);
+  dailyLogbookRoute(router);
 };

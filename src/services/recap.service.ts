@@ -57,8 +57,11 @@ export class RecapService extends BaseService {
       const [summaries, paxData, efficiencyTargets] = await Promise.all([
         this._prisma.dailySummary.findMany({
           where: whereClause,
-          include: {
-            // PERBAIKAN: Sertakan relasi untuk mengambil skema harga dan pajak
+          // PERBAIKAN: Gunakan 'select' untuk mengambil kolom skalar dan relasi
+          select: {
+            summary_date: true,
+            total_cost: true,
+            total_consumption: true, // Ambil total konsumsi langsung
             meter: {
               include: {
                 tariff_group: {
@@ -71,7 +74,7 @@ export class RecapService extends BaseService {
               },
             },
             details: true,
-            classification: true, // BARU: Sertakan data klasifikasi
+            classification: true,
           },
         }),
         this._prisma.paxData.findMany({
@@ -114,21 +117,25 @@ export class RecapService extends BaseService {
         currentData.costBeforeTax += costBeforeTax;
         currentData.costWithTax += costWithTax;
 
-        // PERBAIKAN: Logika agregasi konsumsi disesuaikan per jenis energi.
+        // PERBAIKAN TOTAL: Logika agregasi konsumsi yang benar.
         if (energyType === 'Electricity') {
-          // Untuk Listrik, jumlahkan WBP dan LWBP untuk menghindari duplikasi dari metrik 'Total Pemakaian'.
-          for (const detail of summary.details) {
-            currentData.wbp += detail.wbp_value?.toNumber() ?? 0;
-            currentData.lwbp += detail.lwbp_value?.toNumber() ?? 0;
-          }
-          // PERBAIKAN: Hitung consumption untuk listrik dari wbp + lwbp.
+          // Untuk Listrik, kita perlu menjumlahkan WBP dan LWBP dari detailnya.
+          const wbpDetail = summary.details.find(
+            (d) => d.metric_name === 'Pemakaian WBP'
+          );
+          const lwbpDetail = summary.details.find(
+            (d) => d.metric_name === 'Pemakaian LWBP'
+          );
+
+          currentData.wbp += wbpDetail?.consumption_value.toNumber() ?? 0;
+          currentData.lwbp += lwbpDetail?.consumption_value.toNumber() ?? 0;
+          // Konsumsi total untuk listrik adalah jumlah dari WBP dan LWBP.
           currentData.consumption = currentData.wbp + currentData.lwbp;
         } else {
-          // Untuk Air dan BBM, hanya ada satu detail, jadi jumlahkan consumption_value-nya.
-          for (const detail of summary.details) {
-            currentData.consumption += detail.consumption_value.toNumber() ?? 0;
-          }
+          // Untuk jenis energi lain, kita bisa langsung menggunakan total_consumption.
+          currentData.consumption += summary.total_consumption?.toNumber() ?? 0;
         }
+
         aggregatedSummaries.set(dateString, currentData);
       }
 

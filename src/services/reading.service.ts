@@ -310,6 +310,14 @@ export class ReadingService extends GenericBaseService<
           },
         });
 
+        // BARU: Hapus juga DailyLogbook yang terkait dengan meter dan tanggal yang sama.
+        await tx.dailyLogbook.deleteMany({
+          where: {
+            meter_id,
+            log_date: reading_date,
+          },
+        });
+
         // 3. Hapus ReadingSession (ini akan otomatis menghapus ReadingDetail karena onDelete: Cascade)
         const deletedSession = await tx.readingSession.delete({
           where: { session_id: sessionId },
@@ -359,12 +367,6 @@ export class ReadingService extends GenericBaseService<
       include: { details: true },
     });
 
-    // MODIFIKASI: Jika data H-1 tidak ada (untuk kasus input pertama), lewati pembuatan summary.
-    // Validasi ketat sudah dilakukan di `_validateReadingsAgainstPrevious`.
-    if (!previousSession) {
-      return;
-    }
-
     // LANGKAH 1: Hitung semua data detail yang akan dibuat
     const summaryDetailsToCreate = await this._calculateSummaryDetails(
       tx,
@@ -385,6 +387,17 @@ export class ReadingService extends GenericBaseService<
       new Prisma.Decimal(0)
     );
 
+    // PERBAIKAN: Hitung total konsumsi dari metrik utama.
+    // Untuk Listrik, ini adalah 'Total Pemakaian'. Untuk lainnya, ini adalah satu-satunya metrik yang ada.
+    const finalTotalConsumption = summaryDetailsToCreate.reduce(
+      (sum, detail) =>
+        !detail.metric_name.includes('WBP') &&
+        !detail.metric_name.includes('LWBP')
+          ? sum.plus(new Prisma.Decimal(detail.consumption_value ?? 0)) // Jumlahkan jika bukan komponen
+          : sum,
+      new Prisma.Decimal(0)
+    );
+
     // LANGKAH 3: Buat atau perbarui 'DailySummary' dengan total biaya yang benar
     const dailySummary = await tx.dailySummary.upsert({
       where: {
@@ -393,11 +406,15 @@ export class ReadingService extends GenericBaseService<
           meter_id: meter.meter_id,
         },
       },
-      update: { total_cost: finalTotalCost },
+      update: {
+        total_cost: finalTotalCost,
+        total_consumption: finalTotalConsumption,
+      },
       create: {
         summary_date: dateForDb,
         meter_id: meter.meter_id,
         total_cost: finalTotalCost,
+        total_consumption: finalTotalConsumption,
       },
     });
 
@@ -634,7 +651,9 @@ export class ReadingService extends GenericBaseService<
       const title = 'Peringatan: Target Efisiensi Terlampaui';
 
       for (const admin of admins) {
-        socketServer.sendNotification(String(admin.user_id), {
+        // PERBAIKAN: Gunakan notificationService untuk konsistensi
+        await notificationService.create({
+          user_id: admin.user_id,
           title,
           message,
         });

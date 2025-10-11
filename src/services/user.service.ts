@@ -27,7 +27,9 @@ export class UserService extends GenericBaseService<
     super(prisma, prisma.user, 'user_id');
   }
 
-  public async findAll(query: GetUsersQuery) {
+  public override async findAll(
+    query: GetUsersQuery
+  ): Promise<Prisma.UserGetPayload<{ include: { role: true } }>[]> {
     const { limit, page, isActive, roleName, search } = query;
     const where: Prisma.UserWhereInput = {};
 
@@ -51,7 +53,7 @@ export class UserService extends GenericBaseService<
       };
     }
 
-    return prisma.user.findMany({
+    const findArgs: Prisma.UserFindManyArgs = {
       where,
       // 4. Tambahkan fungsionalitas paginasi (limit & page)
       skip: (page - 1) * limit,
@@ -62,30 +64,125 @@ export class UserService extends GenericBaseService<
       orderBy: {
         user_id: 'asc',
       },
+    };
+
+    return this._model.findMany(findArgs);
+  }
+
+  public override async findById(
+    id: number,
+    args?: Omit<Prisma.UserFindUniqueArgs<DefaultArgs>, 'where'> | undefined,
+    customMessages?: CustomErrorMessages
+  ): Promise<User> {
+    const findArgs = {
+      ...args,
+      include: {
+        role: true,
+        // Relasi lain bisa ditambahkan di sini jika diperlukan untuk detail dasar
+      },
+    };
+    return this._model.findUniqueOrThrow({
+      where: { user_id: id },
+      ...findArgs,
     });
   }
 
-  public override async findById(id: number): Promise<User> {
-    return prisma.user.findUniqueOrThrow({
-      where: { user_id: id },
+  /**
+   * BARU: Mengambil dan menyatukan riwayat aktivitas pengguna dari berbagai sumber.
+   * @param userId - ID pengguna yang akan dicari riwayatnya.
+   * @returns Objek pengguna beserta array 'history' yang terstruktur.
+   */
+  public async getActivityHistory(userId: number) {
+    // Tentukan batas waktu 7 hari yang lalu
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    // 1. Ambil semua data pengguna beserta relasi aktivitasnya.
+    const userWithRelations = await this._model.findUniqueOrThrow({
+      where: { user_id: userId },
+      // Omit password_hash from the result for security
       include: {
-        role: true,
-        reading_sessions: true,
-        events_logbook: true,
-        alerts_acknowledged: true,
-        efficiency_targets_set: true,
-        insights_acknowledged: true,
-        notifications: true,
-        price_schemes_set: true,
+        // Aktivitas pencatatan meter
+        reading_sessions: {
+          where: {
+            created_at: { gte: sevenDaysAgo }, // Filter 7 hari terakhir
+          },
+          include: {
+            meter: { select: { meter_code: true, energy_type: true } },
+          },
+          orderBy: { created_at: 'desc' },
+        },
+        // Aktivitas pengaturan skema harga
+        price_schemes_set: {
+          where: {
+            effective_date: { gte: sevenDaysAgo }, // PERBAIKAN: Gunakan 'effective_date'
+          },
+          include: { tariff_group: { select: { group_name: true } } },
+          orderBy: { effective_date: 'desc' },
+        },
+        // Aktivitas pengaturan target efisiensi
+        efficiency_targets_set: {
+          where: {
+            period_start: { gte: sevenDaysAgo }, // PERBAIKAN: Gunakan 'period_start'
+          },
+          include: { meter: { select: { meter_code: true } } },
+          orderBy: { period_start: 'desc' },
+        },
       },
     });
+
+    // 2. Ubah setiap jenis aktivitas menjadi format yang seragam.
+    const readingHistory = userWithRelations.reading_sessions.map(
+      (session) => ({
+        type: 'Pencatatan Meter',
+        timestamp: session.created_at,
+        description: `Melakukan pencatatan untuk meter ${
+          session.meter.meter_code
+        } (${session.meter.energy_type.type_name}).`,
+        details: session,
+      })
+    );
+
+    const priceSchemeHistory = userWithRelations.price_schemes_set.map(
+      (scheme) => ({
+        type: 'Pengaturan Harga',
+        timestamp: scheme.effective_date,
+        description: `Mengatur skema harga baru "${scheme.scheme_name}" untuk golongan tarif ${scheme.tariff_group.group_name}.`,
+        details: scheme,
+      })
+    );
+
+    // BARU: Tambahkan pemetaan untuk target efisiensi
+    const efficiencyTargetHistory =
+      userWithRelations.efficiency_targets_set.map((target) => ({
+        type: 'Pengaturan Target',
+        timestamp: target.period_start, // PERBAIKAN: Gunakan 'period_start' sebagai timestamp
+        description: `Mengatur target "${target.kpi_name}" untuk meter ${target.meter.meter_code}.`,
+        details: target,
+      }));
+
+    // 3. Gabungkan semua riwayat dan urutkan dari yang terbaru.
+    const fullHistory = [
+      ...readingHistory,
+      ...priceSchemeHistory,
+      ...efficiencyTargetHistory, // Gabungkan riwayat target
+    ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+    // 4. Kembalikan data pengguna beserta riwayat yang sudah terstruktur.
+    const {
+      reading_sessions,
+      price_schemes_set,
+      efficiency_targets_set,
+      ...user
+    } = userWithRelations;
+    return { ...user, history: fullHistory };
   }
 
   public override async create(data: CreateUserBody): Promise<User> {
     const { password, roleName, ...restOfData } = data;
 
     const role = await prisma.role.findUnique({
-      where: { role_name: roleName as any }, // Perbaikan cepat, idealnya divalidasi dengan Zod enum
+      where: { role_name: roleName },
     });
     restOfData.role_id = role.role_id;
     if (!role) {
@@ -127,7 +224,7 @@ export class UserService extends GenericBaseService<
     const dataToUpdate = { ...restOfData };
     if (roleName) {
       const role_id = await prisma.role.findUnique({
-        where: { role_name: roleName as any }, // Perbaikan cepat
+        where: { role_name: roleName },
         select: { role_id: true },
       });
       dataToUpdate.role_id = role_id?.role_id;
@@ -150,12 +247,6 @@ export class UserService extends GenericBaseService<
 
     return this._update(userId, args);
   }
-
-  // public async findByUsername(username: string): Promise<User | null> {
-  //   return prisma.user.findUnique({
-  //     where: { username },
-  //   });
-  // }
 
   public async findByUsername(
     username: string

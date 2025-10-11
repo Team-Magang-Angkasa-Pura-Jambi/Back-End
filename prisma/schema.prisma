@@ -32,11 +32,11 @@ model User {
   role                  Role                 @relation(fields: [role_id], references: [role_id])
   notifications         Notification[]
   reading_sessions      ReadingSession[]
-  events_logbook        EventsLogbook[]
   price_schemes_set     PriceScheme[]
   efficiency_targets_set EfficiencyTarget[]
   alerts_acknowledged   Alert[]
   insights_acknowledged AnalyticsInsight[]
+  edited_logbooks       DailyLogbook[]
 
   @@map("users")
 }
@@ -81,6 +81,7 @@ model Meter {
   predictions      ConsumptionPrediction[]
   classifications  DailyUsageClassification[]
   efficiency_targets EfficiencyTarget[]
+  daily_logbooks   DailyLogbook[]
 
   @@map("meters")
 }
@@ -271,14 +272,34 @@ model PaxData {
   @@map("pax_data")
 }
 
-model EventsLogbook {
-  event_id            Int      @id @default(autoincrement())
-  event_timestamp     DateTime @default(now())
-  notes               String   @db.Text
-  reported_by_user_id Int
-  reported_by         User     @relation(fields: [reported_by_user_id], references: [user_id])
+model DailyLogbook {
+  log_id                  Int      @id @default(autoincrement())
+  log_date                DateTime @db.Date
+  meter_id                Int
+  meter                   Meter    @relation(fields: [meter_id], references: [meter_id])
 
-  @@map("events_logbook")
+  // PERBAIKAN: Kolom generik untuk perubahan konsumsi
+  consumption_change_percent Decimal? @db.Decimal(5, 2)
+
+  // BARU: Analisis penghematan/pemborosan vs target
+  savings_value           Decimal? @db.Decimal(12, 2) // Penghematan (kWh, m3)
+  savings_cost            Decimal? @db.Decimal(15, 2) // Penghematan (Rp)
+  overage_value           Decimal? @db.Decimal(12, 2) // Pemborosan (kWh, m3)
+  overage_cost            Decimal? @db.Decimal(15, 2) // Pemborosan (Rp)
+
+  // Catatan ringkasan yang digenerate oleh sistem
+  summary_notes           String   @db.Text
+  
+  // (Opsional) Jika ada pengguna yang menambahkan catatan manual
+  manual_notes            String?  @db.Text
+  edited_by_user_id       Int?
+  edited_by               User?    @relation(fields: [edited_by_user_id], references: [user_id])
+
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
+
+  @@unique([log_date, meter_id]) // PERBAIKAN: Constraint baru
+  @@map("daily_logbooks")
 }
 
 
@@ -290,6 +311,7 @@ model EventsLogbook {
 model DailySummary {
   summary_id   Int       @id @default(autoincrement())
   summary_date DateTime  @db.Date
+  total_consumption Decimal? @db.Decimal(12, 2) // BARU: Tambahkan kolom ini
   total_cost   Decimal?  @db.Decimal(15, 2)
   meter_id     Int
   meter        Meter     @relation(fields: [meter_id], references: [meter_id])

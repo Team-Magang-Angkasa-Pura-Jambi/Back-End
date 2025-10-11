@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { res200 } from '../utils/response.js';
+import { res200, res201 } from '../utils/response.js';
 import type { User } from '../generated/prisma/index.js';
 import { BaseController } from '../utils/baseController.js';
 import type {
@@ -20,6 +20,21 @@ export class UserController extends BaseController<
     super(new UserService(), 'userId');
   }
 
+  /**
+   * BARU: Controller untuk mengambil riwayat aktivitas pengguna.
+   */
+  public getActivityHistory = async (req: Request, res: Response) => {
+    const { userId } = res.locals.validatedData.params;
+
+    const result = await this.service.getActivityHistory(userId);
+
+    res200({
+      res,
+      message: 'Riwayat aktivitas pengguna berhasil diambil.',
+      data: result,
+    });
+  };
+
   // public override delete = async (req: Request, res: Response) => {
   //   const { userId } = res.locals.validatedData.params;
   //   if (!this.service.softDelete) {
@@ -35,3 +50,5 @@ export class UserController extends BaseController<
   //   });
   // };
 }
+
+export const userController = new UserController();

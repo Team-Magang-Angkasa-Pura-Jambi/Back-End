@@ -3,6 +3,7 @@ import apiV1 from '../routes/api/v1/index.js';
 import morgan from 'morgan';
 import * as ErrorHandler from '../middleware/errorHandler.js';
 import cors from 'cors';
+import { initializeCronJobs } from '../scheduler.js';
 import { socketServer } from '../socket-instance.js';
 export const app = express();
 
@@ -20,8 +21,10 @@ const corsOptions = {
 app.get('/test-notification', (req, res) => {
   try {
     const payload = {
-      title: '🔔 Tes Notifikasi',
-      message: 'Jika Anda melihat ini, koneksi Socket.IO Anda berhasil!',
+      title: '🔔 Sebuah Pemikiran Absurd',
+      // --- JOKE DIMASUKKAN DI SINI ---
+      message:
+        'Bunglon itu katanya hebat bisa nyamar. Menurut saya kurang canggih. Kenapa dia nggak sekalian berubah jadi tukang fotokopi? Kan lebih berguna. Nempel di ijazah, "krek", temennya nempel, "krek". Lebih membantu ekosistem pertemanan.',
       link: '#',
     };
     socketServer.io.emit('new_notification', payload);
@@ -41,3 +44,6 @@ apiV1(app);
 
 app.use(ErrorHandler.handleNotFound);
 app.use(ErrorHandler.errorHandler);
+
+// Memulai semua cron job yang terdaftar
+initializeCronJobs();
