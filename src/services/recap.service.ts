@@ -9,6 +9,7 @@ import type {
   RecapDataRow,
   RecapSummary,
 } from '../types/recap.types.js';
+import { notificationService } from './notification.service.js';
 import { BaseService } from '../utils/baseService.js';
 // differenceInDays dan getDaysInMonth tidak lagi digunakan, bisa dihapus jika tidak ada pemakaian lain.
 
@@ -329,6 +330,24 @@ export class RecapService extends BaseService {
         errorMessage
       );
       notifyUser('recalculation:error', { message: errorMessage });
+
+      // BARU: Kirim notifikasi permanen ke semua SuperAdmin jika terjadi error.
+      const superAdmins = await this._prisma.user.findMany({
+        where: {
+          role: { role_name: 'SuperAdmin' },
+          is_active: true,
+        },
+        select: { user_id: true },
+      });
+
+      for (const admin of superAdmins) {
+        await notificationService.create({
+          user_id: admin.user_id,
+          title: 'Error: Kalkulasi Ulang Gagal',
+          message: `Proses kalkulasi ulang data gagal. Error: ${errorMessage}`,
+        });
+      }
+
       // Di sini Anda bisa menambahkan logging ke file atau sistem monitoring lain.
     }
   }

@@ -14,6 +14,7 @@ import {
   InsightSeverity,
 } from '../generated/prisma/index.js';
 import type {
+  AlertStatus,
   CreateReadingSessionBody,
   GetQueryLastReading,
   GetReadingSessionsQuery,
@@ -21,6 +22,7 @@ import type {
 } from '../types/reading.types.js';
 import { Error400, Error404, Error409 } from '../utils/customError.js';
 
+import { dailyLogbookService } from './dailyLogbook.service.js';
 // =============================================
 // KONSTANTA & FALLBACK
 // =============================================
@@ -212,33 +214,8 @@ export class ReadingService extends GenericBaseService<
     // Panggil logika summary terpusat SETELAH transaksi create session berhasil
     await this.processAndSummarizeReading(meter_id, dateForDb);
 
-    // Setelah transaksi berhasil, kirim notifikasi ke semua admin
-    const admins = await prisma.user.findMany({
-      where: {
-        role: {
-          role_name: {
-            in: [RoleName.Admin, RoleName.SuperAdmin],
-          },
-        },
-        is_active: true,
-      },
-      select: {
-        user_id: true,
-      },
-    });
-
-    for (const admin of admins) {
-      // PERBAIKAN: Gunakan NotificationService untuk membuat dan mengirim notifikasi
-      await notificationService.create({
-        user_id: admin.user_id,
-        title: 'Data Reading Baru',
-        message: `Data baru untuk meteran ${
-          newSession.meter.meter_code
-        } pada tanggal ${dateForDb.toLocaleDateString()} telah diinput oleh ${
-          newSession.user.username
-        }.`,
-      });
-    }
+    // BARU: Panggil logika untuk memeriksa dan menyelesaikan alert data yang hilang
+    await this._checkAndResolveMissingDataAlert(meter_id, dateForDb);
 
     return newSession;
   }
@@ -277,6 +254,13 @@ export class ReadingService extends GenericBaseService<
       await this._prisma.$transaction(async (tx) => {
         await this._updateDailySummary(tx, meter, dateForDb);
       });
+
+      // BARU: Panggil pembuatan logbook setelah summary berhasil dibuat/diperbarui.
+      // Ini akan memastikan logbook selalu up-to-date dengan data terbaru.
+      console.log(
+        `[ReadingService] Memicu pembuatan/pembaruan logbook untuk tanggal ${dateForDb.toISOString()}`
+      );
+      await dailyLogbookService.generateDailyLog(dateForDb);
     });
   }
 
@@ -536,14 +520,30 @@ export class ReadingService extends GenericBaseService<
     } catch (error) {
       console.error('[Classifier] Gagal memanggil ML API:', error);
       // BARU: Kirim notifikasi ke SuperAdmin jika server ML error
+      // PERUBAHAN: Buat Alert Sistem (meter_id: null) sebagai gantinya.
+      // Ini lebih cocok untuk melacak masalah sistemik.
+      const title = 'Error Sistem: Server Machine Learning';
+      const description = `Sistem gagal terhubung ke server machine learning saat mencoba melakukan klasifikasi untuk meter ${
+        meter.meter_code
+      } pada tanggal ${summary.summary_date.toISOString().split('T')[0]}. Error: ${
+        error.message
+      }`;
+      await tx.alert.create({ data: { title, description } });
+
+      // BARU: Kirim juga notifikasi ke semua SuperAdmin agar mereka waspada.
       const superAdmins = await tx.user.findMany({
-        where: { role: { role_name: RoleName.SuperAdmin }, is_active: true },
+        where: {
+          role: { role_name: 'SuperAdmin' },
+          is_active: true,
+        },
+        select: { user_id: true },
       });
+
       for (const admin of superAdmins) {
         await notificationService.create({
           user_id: admin.user_id,
           title: 'Error Sistem: Server Machine Learning',
-          message: `Sistem gagal terhubung ke server machine learning saat mencoba melakukan klasifikasi. Error: ${error.message}`,
+          message: `Sistem gagal terhubung ke server machine learning. Mohon periksa status server.`,
         });
       }
       return; // Hentikan proses klasifikasi
@@ -1333,6 +1333,91 @@ export class ReadingService extends GenericBaseService<
     }
 
     return orderBy;
+  }
+
+  /**
+   * BARU: Memeriksa dan menyelesaikan alert "Data Harian Belum Lengkap" untuk meter spesifik
+   * setelah data baru diinput.
+   * @param meterId - ID dari meter yang datanya baru diinput.
+   * @param dateForDb - Tanggal pembacaan.
+   */
+  private async _checkAndResolveMissingDataAlert(
+    meterId: number,
+    dateForDb: Date
+  ): Promise<void> {
+    const alertTitle = 'Peringatan: Data Harian Belum Lengkap';
+    const dateString = dateForDb.toISOString().split('T')[0];
+
+    // 1. Cari alert 'NEW' yang relevan untuk meter dan tanggal ini
+    const alert = await this._prisma.alert.findFirst({
+      where: {
+        meter_id: meterId,
+        title: alertTitle,
+        description: {
+          contains: dateString,
+        },
+        status: 'NEW',
+      },
+    });
+
+    if (!alert) {
+      // Tidak ada alert yang perlu diselesaikan, keluar.
+      return;
+    }
+
+    console.log(
+      `[ReadingService] Alert data hilang ditemukan untuk meter ${meterId} pada ${dateString}. Memeriksa ulang kelengkapan...`
+    );
+
+    // 2. Periksa kembali kelengkapan data HANYA untuk meter ini.
+    const [meter, session, wbpType, lwbpType] = await Promise.all([
+      this._prisma.meter.findUnique({
+        where: { meter_id: meterId },
+        include: { category: true },
+      }),
+      this._prisma.readingSession.findUnique({
+        where: {
+          unique_meter_reading_per_day: {
+            meter_id: meterId,
+            reading_date: dateForDb,
+          },
+        },
+        include: { details: { select: { reading_type_id: true } } },
+      }),
+      this._prisma.readingType.findUnique({ where: { type_name: 'WBP' } }),
+      this._prisma.readingType.findUnique({ where: { type_name: 'LWBP' } }),
+    ]);
+
+    if (!meter || !session || !wbpType || !lwbpType) {
+      // Data penting tidak ada, tidak bisa melanjutkan.
+      return;
+    }
+
+    let isDataComplete = true;
+    if (meter.category.name.includes('Terminal')) {
+      const detailTypeIds = new Set(
+        session.details.map((det) => det.reading_type_id)
+      );
+      if (
+        !detailTypeIds.has(wbpType.reading_type_id) ||
+        !detailTypeIds.has(lwbpType.reading_type_id)
+      ) {
+        isDataComplete = false;
+      }
+    } else if (session.details.length === 0) {
+      isDataComplete = false;
+    }
+
+    // 3. Jika data sekarang sudah lengkap, ubah status alert menjadi HANDLED.
+    if (isDataComplete) {
+      await this._prisma.alert.update({
+        where: { alert_id: alert.alert_id },
+        data: { status: 'HANDLED' },
+      });
+      console.log(
+        `[ReadingService] Data untuk meter ${meterId} pada ${dateString} telah lengkap. Alert ${alert.alert_id} diubah menjadi HANDLED.`
+      );
+    }
   }
 }
 

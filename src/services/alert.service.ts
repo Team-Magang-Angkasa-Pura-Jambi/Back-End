@@ -151,6 +151,40 @@ export class AlertService extends GenericBaseService<
   }
 
   /**
+   * BARU: Memperbarui status sebuah alert.
+   * @param alertId - ID dari alert yang akan diubah.
+   * @param status - Status baru ('READ' atau 'HANDLED').
+   * @param userId - ID pengguna yang melakukan aksi (opsional, untuk acknowledge).
+   * @returns Alert yang telah diperbarui.
+   */
+  public async updateStatus(
+    alertId: number,
+    status: AlertStatus,
+    userId: number
+  ): Promise<Alert> {
+    return this._handleCrudOperation(async () => {
+      const data: Prisma.AlertUpdateInput = { status };
+
+      // Jika status diubah menjadi READ dan belum ada yg acknowledge, catat user ID
+      // Ini mirip dengan fungsi acknowledge, tapi lebih generik.
+      if (status === AlertStatus.READ) {
+        const currentAlert = await this._model.findUnique({
+          where: { alert_id: alertId },
+        });
+        if (currentAlert && !currentAlert.acknowledged_by_user_id) {
+          data.acknowledged_by_user_id = userId;
+        }
+      }
+
+      const updatedAlert = await this._model.update({
+        where: { [this._idField]: alertId },
+        data,
+      });
+      return updatedAlert as Alert;
+    });
+  }
+
+  /**
    * BARU: Mengambil beberapa alert terbaru.
    * @param scope - Filter untuk 'system' atau 'meters'.
    * @param limit - Jumlah alert yang akan diambil.
@@ -158,15 +192,26 @@ export class AlertService extends GenericBaseService<
    */
   public async getLatest(
     scope?: 'system' | 'meters',
-    limit = 5
+    limit = 5,
+    status?: AlertStatus // BARU: Tambahkan parameter status
   ): Promise<Alert[]> {
     return this._handleCrudOperation(async () => {
       const where: Prisma.AlertWhereInput = {};
 
+      // Filter berdasarkan scope (system/meters)
       if (scope === 'system') {
         where.meter_id = null;
       } else if (scope === 'meters') {
         where.meter_id = { not: null };
+      }
+
+      // PERBAIKAN: Logika filter status yang lebih baik.
+      if (status) {
+        // Jika status spesifik diminta (misal: 'NEW'), gunakan itu.
+        where.status = status;
+      } else {
+        // Jika tidak ada status yang diminta, secara default tampilkan semua yang BELUM ditangani.
+        where.status = { not: AlertStatus.HANDLED };
       }
 
       const alerts = await this._model.findMany({
@@ -186,6 +231,25 @@ export class AlertService extends GenericBaseService<
       });
       return alerts as Alert[];
     });
+  }
+
+  /**
+   * BARU: Menghapus beberapa alert berdasarkan ID.
+   * @param alertIds - Array dari ID alert yang akan dihapus.
+   * @returns Hasil operasi deleteMany dari Prisma.
+   */
+  public async deleteManyByIds(
+    alertIds: number[]
+  ): Promise<Prisma.BatchPayload> {
+    return this._handleCrudOperation(() =>
+      this._model.deleteMany({
+        where: {
+          alert_id: {
+            in: alertIds,
+          },
+        },
+      })
+    );
   }
 }
 

@@ -51,7 +51,7 @@ class AnalysisController {
       const result = await this.analysisService.getTodaySummary(energyType);
       res200({
         res,
-        data: result,
+        data:     result, // PERBAIKAN: Gunakan spread operator untuk memisahkan 'meta' dan 'data'
         message: 'Ringkasan konsumsi hari ini berhasil diambil.',
       });
     } catch (error) {

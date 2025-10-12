@@ -21,7 +21,7 @@ export default (router: Router) => {
 
   router.post(
     prefix + '/recalculate',
-    authorize('Admin', 'SuperAdmin'), // PERBAIKAN: Amankan endpoint
+    authorize('Admin', 'SuperAdmin', 'Technician'), // PERBAIKAN: Amankan endpoint
     validate(recalculateRecapSchema),
     recapController.recalculateRecap
   );

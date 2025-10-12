@@ -60,8 +60,8 @@ class AlertController {
     next: NextFunction
   ) => {
     try {
-      const { scope } = res.locals.validatedData.query;
-      const result = await alertService.getLatest(scope);
+      const { scope, status } = res.locals.validatedData.query;
+      const result = await alertService.getLatest(scope, 5, status);
       res200({
         res,
         data: result,
@@ -124,6 +124,54 @@ class AlertController {
         res,
         data: { count: result.count },
         message: `${result.count} alert berhasil ditandai sebagai acknowledged.`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public bulkDelete = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { alertIds } = res.locals.validatedData.body;
+      const result = await alertService.deleteManyByIds(alertIds);
+      res200({
+        res,
+        message: `Berhasil menghapus ${result.count} alert.`,
+        data: {
+          count: result.count,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public updateStatus = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const user = (req as any).user;
+      if (!user?.id) throw new Error401('User tidak terautentikasi.');
+
+      const { alertId } = res.locals.validatedData.params;
+      const { status } = res.locals.validatedData.body;
+
+      const updatedAlert = await alertService.updateStatus(
+        alertId,
+        status,
+        Number(user.id)
+      );
+
+      res200({
+        res,
+        data: updatedAlert,
+        message: `Status alert berhasil diubah menjadi ${status}.`,
       });
     } catch (error) {
       next(error);

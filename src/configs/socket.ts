@@ -18,7 +18,8 @@ export class SocketServer {
           'http://localhost:3000',
           'https://sentinel-angkasa-pura.vercel.app',
         ],
-        methods: ['GET', 'POST'],
+        methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+        allowedHeaders: ['Content-Type', 'Authorization'],
       },
     });
 

@@ -84,23 +84,50 @@ export function startDataCheckCron() {
         return;
       }
 
-      // LANGKAH 4: Buat satu Alert sistem yang merangkum semua data yang hilang
-      const missingMetersMessage = missingMeters
-        .map((meter) => meter.meter_code)
-        .join(', ');
+      // LANGKAH 4 & 5: Iterasi setiap meter yang hilang dan buat alert individual
       const title = 'Peringatan: Data Harian Belum Lengkap';
-      const description = `Data untuk meteran berikut belum diinput atau tidak lengkap untuk tanggal ${
-        today.toISOString().split('T')[0]
-      }: ${missingMetersMessage}.`;
+      const startOfDay = today;
+      const endOfDay = new Date(today);
+      endOfDay.setUTCHours(23, 59, 59, 999);
 
-      // Buat Alert sistem (tanpa meter_id spesifik)
-      await alertService.create({
-        title,
-        description,
-      });
-      console.log(
-        `CRON: Alert dibuat untuk data yang hilang pada ${missingMeters.length} meter.`
-      );
+      let createdAlertsCount = 0;
+
+      for (const meter of missingMeters) {
+        // Cek apakah alert untuk meter ini pada hari ini sudah ada
+        const existingAlert = await prisma.alert.findFirst({
+          where: {
+            meter_id: meter.meter_id,
+            title,
+            alert_timestamp: {
+              gte: startOfDay,
+              lte: endOfDay,
+            },
+          },
+        });
+
+        if (existingAlert) {
+          console.log(
+            `CRON: Alert untuk meter ${meter.meter_code} hari ini sudah ada. Dilewati.`
+          );
+          continue;
+        }
+
+        // Buat alert individual jika belum ada
+        const description = `Data untuk meteran ${
+          meter.meter_code
+        } belum diinput atau tidak lengkap untuk tanggal ${
+          today.toISOString().split('T')[0]
+        }.`;
+
+        await alertService.create({
+          title,
+          description,
+          meter_id: meter.meter_id,
+        });
+        createdAlertsCount++;
+      }
+
+      console.log(`CRON: Selesai. ${createdAlertsCount} alert baru dibuat.`);
     } catch (error) {
       console.error('CRON: Terjadi error saat pengecekan data:', error);
     }

@@ -20,22 +20,42 @@ type MeterAnalysisData = {
   meterName: string;
   data: DailyAnalysisRecord[];
 };
+
+// BARU: Tipe data untuk respons getTodaySummary
+type TodaySummaryResponse = {
+  meta: {
+    date: Date;
+    pax: number | null;
+  };
+  data: Prisma.DailySummaryGetPayload<{
+    include: {
+      meter: {
+        select: {
+          meter_code: true;
+          energy_type: {
+            select: { type_name: true; unit_of_measurement: true };
+          };
+        };
+      };
+      classification: { select: { classification: true } };
+    };
+  }>[];
+};
 export class AnalysisService {
   public async getMonthlyAnalysis(
     query: GetAnalysisQuery
   ): Promise<MeterAnalysisData[]> {
-    const { energyType, month, meterId } = query;
+    const { energyType, month: monthString, meterId } = query;
 
-    // Tentukan rentang tanggal (satu bulan)
-    const targetDate = month
-      ? new Date(`${month}-01T00:00:00.000Z`)
-      : new Date();
-    const year = targetDate.getUTCFullYear();
-    const monthIndex = targetDate.getUTCMonth();
+    // PERBAIKAN: Logika penentuan rentang tanggal yang lebih andal.
+    const [year, month] = monthString.split('-').map(Number);
+    const monthIndex = month - 1; // Konversi bulan (1-12) ke index (0-11)
 
+    // Tanggal mulai adalah hari pertama bulan yang diminta, pada UTC.
     const startDate = new Date(Date.UTC(year, monthIndex, 1));
+    // Tanggal akhir adalah hari terakhir bulan yang diminta, pada UTC.
     const endDate = new Date(
-      Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999)
+      Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999) // Hari ke-0 bulan berikutnya adalah hari terakhir bulan ini.
     );
 
     // Cari ID untuk energyType yang diminta
@@ -112,10 +132,8 @@ export class AnalysisService {
         dataByMeter.set(meterId, { meterName, dailyData: new Map() });
       }
 
-      const totalConsumption = summary.details.reduce(
-        (acc, detail) => acc + parseFloat(detail.consumption_value.toString()),
-        0
-      );
+      // PERBAIKAN: Gunakan `total_consumption` dari DailySummary yang sudah akurat.
+      const totalConsumption = summary.total_consumption?.toNumber() ?? null;
 
       const dayData = dataByMeter.get(meterId)!.dailyData.get(dateString) || {};
       dayData.actual_consumption = totalConsumption;
@@ -263,14 +281,30 @@ export class AnalysisService {
    * BARU: Mengambil ringkasan konsumsi untuk hari ini.
    * @param energyType - (Opsional) Filter berdasarkan tipe energi.
    */
-  public async getTodaySummary(energyType?: 'Electricity' | 'Water' | 'Fuel') {
-    // Tentukan tanggal hari ini berdasarkan zona waktu Indonesia (Asia/Jakarta)
-    // untuk memastikan tanggal yang benar digunakan, terlepas dari zona waktu server.
-    const nowInJakarta = new Date(
-      new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' })
-    );
-    // Normalisasi ke awal hari (UTC) agar cocok dengan format penyimpanan di DB
-    const today = new Date(nowInJakarta.toISOString().split('T')[0]);
+  public async getTodaySummary(
+    energyType?: 'Electricity' | 'Water' | 'Fuel'
+  ): Promise<TodaySummaryResponse> {
+    // PERBAIKAN: Logika penentuan tanggal "hari ini" yang lebih andal dan anti-bug timezone.
+    // 1. Buat string tanggal (YYYY-MM-DD) langsung dari zona waktu yang diinginkan.
+    const todayInJakarta = new Date();
+    const year = todayInJakarta.toLocaleString('en-CA', {
+      year: 'numeric',
+      timeZone: 'Asia/Jakarta',
+    });
+    const month = todayInJakarta.toLocaleString('en-CA', {
+      month: '2-digit',
+      timeZone: 'Asia/Jakarta',
+    });
+    const day = todayInJakarta.toLocaleString('en-CA', {
+      day: '2-digit',
+      timeZone: 'Asia/Jakarta',
+    });
+    const dateString = `${year}-${month}-${day}`;
+
+    // 2. Buat objek Date baru dari string tersebut. Ini akan menghasilkan tanggal
+    // pada tengah malam UTC, yang konsisten dengan cara data disimpan di database.
+    // Contoh: '2025-10-12' -> 2025-10-12T00:00:00.000Z
+    const today = new Date(dateString);
 
     const whereClause: Prisma.DailySummaryWhereInput = {
       summary_date: today,
@@ -284,22 +318,35 @@ export class AnalysisService {
       };
     }
 
-    const todaySummaries = await prisma.dailySummary.findMany({
-      where: whereClause,
-      include: {
-        meter: {
-          select: {
-            meter_code: true,
-            energy_type: {
-              select: { type_name: true, unit_of_measurement: true },
+    // PERBAIKAN: Ambil data summary dan data pax secara paralel.
+    const [todaySummaries, paxData] = await Promise.all([
+      prisma.dailySummary.findMany({
+        where: whereClause,
+        include: {
+          meter: {
+            select: {
+              meter_code: true,
+              energy_type: {
+                select: { type_name: true, unit_of_measurement: true },
+              },
             },
           },
+          classification: { select: { classification: true } },
         },
-        classification: { select: { classification: true } },
-      },
-      orderBy: { meter: { energy_type: { type_name: 'asc' } } },
-    });
+        orderBy: { meter: { energy_type: { type_name: 'asc' } } },
+      }),
+      prisma.paxData.findUnique({
+        where: { data_date: today },
+      }),
+    ]);
 
-    return todaySummaries;
+    // PERBAIKAN: Kembalikan data dengan struktur baru { meta, data }.
+    return {
+      meta: {
+        date: today,
+        pax: paxData?.total_pax ?? null,
+      },
+      data: todaySummaries,
+    };
   }
 }
