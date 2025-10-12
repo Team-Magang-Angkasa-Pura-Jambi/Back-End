@@ -5,7 +5,7 @@ import type {
   CreateUserBody,
   UpdateUserBody,
   User,
-} from '../types/user.types.js';
+} from '../types/user.type.js';
 import { Error409 } from '../utils/customError.js';
 import { GenericBaseService } from '../utils/GenericBaseService.js';
 import { notificationService } from './notification.service.js';

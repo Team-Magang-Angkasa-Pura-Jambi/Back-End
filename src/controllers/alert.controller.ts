@@ -6,11 +6,13 @@ import { Error401 } from '../utils/customError.js';
 class AlertController {
   public getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      // PERBAIKAN: Panggil service yang sudah memiliki logika paginasi yang benar.
       const query = res.locals.validatedData.query;
       const { data, meta } = await alertService.findAllWithQuery(query);
       res200({
         res,
-        data: { data, meta },
+        data, // Kembalikan data langsung
+        meta, // Kembalikan meta untuk info paginasi
         message: 'Alerts berhasil diambil.',
       });
     } catch (error) {

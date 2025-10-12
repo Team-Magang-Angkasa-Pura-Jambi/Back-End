@@ -254,12 +254,13 @@ export class DailyLogbookService extends GenericBaseService<
         }),
         this._prisma.dailySummary.findMany({
           where: { summary_date: previousDate },
+          // PERBAIKAN: Sertakan relasi yang sama seperti di atas untuk konsistensi tipe
           select: {
-            // PERBAIKAN: Sertakan relasi yang sama seperti di atas untuk konsistensi tipe
             summary_id: true,
             total_consumption: true,
             total_cost: true,
             meter: { select: { meter_id: true } },
+            classification: { select: { classification: true } },
           },
         }),
         this._prisma.efficiencyTarget.findMany({
