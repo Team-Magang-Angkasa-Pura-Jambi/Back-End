@@ -14,7 +14,10 @@ export class SocketServer {
     this.io = new Server(httpServer, {
       cors: {
         // Ganti "http://localhost:3000" dengan alamat frontend Anda
-        origin: 'http://localhost:3000',
+        origin: [
+          'http://localhost:3000',
+          'https://sentinel-angkasa-pura.vercel.app',
+        ],
         methods: ['GET', 'POST'],
       },
     });
