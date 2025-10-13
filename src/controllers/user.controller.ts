@@ -35,6 +35,20 @@ export class UserController extends BaseController<
     });
   };
 
+  /**
+   * BARU: Controller untuk menghapus pengguna secara permanen.
+   */
+  public forceDelete = async (req: Request, res: Response) => {
+    const { userId } = res.locals.validatedData.params;
+
+    const result = await this.service.forceDelete(userId);
+
+    res200({
+      res,
+      message: 'Pengguna berhasil dihapus secara permanen.',
+      data: result,
+    });
+  };
   // public override delete = async (req: Request, res: Response) => {
   //   const { userId } = res.locals.validatedData.params;
   //   if (!this.service.softDelete) {

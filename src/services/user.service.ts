@@ -6,7 +6,7 @@ import type {
   UpdateUserBody,
   User,
 } from '../types/user.type.js';
-import { Error409 } from '../utils/customError.js';
+import { Error404, Error409 } from '../utils/customError.js';
 import { GenericBaseService } from '../utils/GenericBaseService.js';
 import { notificationService } from './notification.service.js';
 
@@ -27,22 +27,40 @@ export class UserService extends GenericBaseService<
 
   public override async create(data: CreateUserBody): Promise<User> {
     return this._handleCrudOperation(async () => {
-      const existingUser = await this._model.findUnique({
+      const existingUser = await this._model.findFirst({
         where: { username: data.username },
       });
 
       if (existingUser) {
-        throw new Error409('Username sudah digunakan.');
+        if (existingUser.is_active) {
+          throw new Error409('Username sudah digunakan oleh pengguna aktif.');
+        }
+
+        console.log(
+          `[UserService] Pengguna tidak aktif '${data.username}' ditemukan. Mengaktifkan kembali dengan data baru.`
+        );
+        const hashedPassword = await bcrypt.hash(data.password, 10);
+        const { password, ...restData } = data; // Pisahkan password
+        const restoredUser = await this._model.update({
+          where: { user_id: existingUser.user_id },
+          data: {
+            // ...restData,
+            is_active: true, // Aktifkan kembali
+            role: { connect: { role_id: data.role_id } },
+            password_hash: hashedPassword,
+          },
+          include: { role: true },
+        });
+        return restoredUser as User;
       }
 
+      // Jika pengguna sama sekali tidak ada, buat baru.
       const hashedPassword = await bcrypt.hash(data.password, 10);
-
+      const { password, ...restData } = data; // Pisahkan password
       const newUser = await this._model.create({
         data: {
-          username: data.username,
+          ...restData,
           password_hash: hashedPassword,
-          role_id: data.role_id,
-          is_active: data.is_active,
         },
         include: {
           role: true,
@@ -166,6 +184,27 @@ export class UserService extends GenericBaseService<
     return { ...user, history: fullHistory };
   }
 
+  /**
+   * BARU: Mengambil semua pengguna dengan filter `is_active: true` secara default.
+   * Ini akan menimpa metode `findAll` dari GenericBaseService.
+   * @param args - Argumen query dari Prisma, seperti `where`, `orderBy`, dll.
+   * @returns Daftar pengguna yang aktif.
+   */
+  public override async findAll(
+    args?: Prisma.UserFindManyArgs
+  ): Promise<User[]> {
+    // Gabungkan argumen yang ada dengan filter is_active: true
+    const findArgs: Prisma.UserFindManyArgs = {
+      ...args,
+      where: {
+        ...args?.where,
+        is_active: true,
+      },
+      include: { role: true },
+    };
+    return super.findAll(findArgs);
+  }
+
   public async findByUsername(
     username: string
   ): Promise<(User & { role: any }) | null> {
@@ -175,6 +214,91 @@ export class UserService extends GenericBaseService<
         include: { role: true },
       })
     );
+  }
+
+  public override async update(
+    id: number,
+    data: UpdateUserBody
+  ): Promise<User> {
+    return this._handleCrudOperation(async () => {
+      // Pisahkan data yang memerlukan penanganan khusus
+      const { role_id, password, ...restData } = data;
+      const updateData: Prisma.UserUpdateInput = { ...restData };
+
+      if (password) {
+        updateData.password_hash = await bcrypt.hash(password, 10);
+      }
+
+      if (role_id) {
+        updateData.role = {
+          connect: { role_id: role_id },
+        };
+      }
+
+      const updatedUser = await this._model.update({
+        where: { user_id: id },
+        data: updateData,
+        include: { role: true },
+      });
+
+      return updatedUser as User;
+    });
+  }
+
+  /**
+   * Melakukan soft delete dengan mengubah status is_active menjadi false.
+   * Ini memastikan integritas data historis tetap terjaga.
+   * @param id - ID pengguna yang akan di-nonaktifkan.
+   */
+  public override async delete(id: number): Promise<User> {
+    return this._handleCrudOperation(() =>
+      this._model.update({
+        where: { user_id: id },
+        data: { is_active: false },
+      })
+    );
+  }
+
+  /**
+   * BARU: Menghapus pengguna secara permanen (hard delete).
+   * Operasi ini akan menghapus semua data terkait pengguna di dalam satu transaksi.
+   * Gunakan dengan hati-hati karena data tidak dapat dipulihkan.
+   * @param id - ID pengguna yang akan dihapus paksa.
+   */
+  public async forceDelete(id: number): Promise<User> {
+    return this._handleCrudOperation(async () => {
+      const user = await this._model.findUnique({ where: { user_id: id } });
+      if (!user) {
+        throw new Error404(`Pengguna dengan ID ${id} tidak ditemukan.`);
+      }
+
+      const [deletedUser] = await this._prisma.$transaction([
+        this._prisma.notification.deleteMany({ where: { user_id: id } }),
+        this._prisma.readingSession.deleteMany({ where: { user_id: id } }),
+
+        this._prisma.alert.updateMany({
+          where: { acknowledged_by_user_id: id },
+          data: { acknowledged_by_user_id: null },
+        }),
+        this._prisma.analyticsInsight.updateMany({
+          where: { acknowledged_by_user_id: id },
+          data: { acknowledged_by_user_id: null },
+        }),
+        this._prisma.dailyLogbook.updateMany({
+          where: { edited_by_user_id: id },
+          data: { edited_by_user_id: null },
+        }),
+
+        this._prisma.priceScheme.deleteMany({ where: { set_by_user_id: id } }),
+        this._prisma.efficiencyTarget.deleteMany({
+          where: { set_by_user_id: id },
+        }),
+
+        this._model.delete({ where: { user_id: id } }),
+      ]);
+
+      return user as User;
+    });
   }
 }
 

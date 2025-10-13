@@ -8,8 +8,7 @@ import { RoleName } from '../generated/prisma/index.js';
 const userBodySchema = z.object({
   username: requiredString('Username').min(3),
   password: requiredString('Password').min(6),
-  role_id: positiveInt('role id').optional(),
-  roleName: requiredString('role id').default(RoleName.Technician),
+  role_id: positiveInt('Role ID'),
   photo_profile_url: optionalString('photo profile url'),
   is_active: z.boolean().default(true),
 });

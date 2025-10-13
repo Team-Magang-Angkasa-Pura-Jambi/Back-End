@@ -45,5 +45,13 @@ export default (router: Router) => {
     asyncHandler(userController.getActivityHistory)
   );
 
+  // BARU: Endpoint kustom untuk force delete (hard delete)
+  router.delete(
+    prefix + '/:userId/force',
+    validate(userSchemas.byId),
+    authorize('SuperAdmin'), // Hanya SuperAdmin yang boleh
+    asyncHandler(userController.forceDelete)
+  );
+
   router.use(userRouter);
 };
