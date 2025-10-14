@@ -44,7 +44,7 @@ export class UserService extends GenericBaseService<
         const restoredUser = await this._model.update({
           where: { user_id: existingUser.user_id },
           data: {
-            // ...restData,
+            // ...restData,npm
             is_active: true, // Aktifkan kembali
             role: { connect: { role_id: data.role_id } },
             password_hash: hashedPassword,

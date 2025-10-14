@@ -28,8 +28,30 @@ export class RecapService extends BaseService {
   }
 
   public async getRecap(query: GetRecapQuery): Promise<RecapApiResponse> {
-    const { energyType, startDate, endDate, sortBy, sortOrder, meterId } =
-      query;
+    const { energyType, sortBy, sortOrder, meterId } = query;
+    let { startDate, endDate } = query;
+
+    // PERBAIKAN: Pastikan rekap tidak menyertakan data "hari ini" yang belum lengkap.
+    // Jika endDate adalah hari ini atau di masa depan, mundurkan satu hari.
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0); // Normalisasi "hari ini" ke awal hari UTC
+
+    if (endDate >= today) {
+      // Mundurkan endDate ke akhir hari kemarin.
+      const yesterday = new Date(today);
+      yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+      endDate = new Date(
+        Date.UTC(
+          yesterday.getUTCFullYear(),
+          yesterday.getUTCMonth(),
+          yesterday.getUTCDate(),
+          23,
+          59,
+          59,
+          999
+        )
+      );
+    }
 
     return this._handleCrudOperation(async () => {
       // LANGKAH 1: Buat klausa 'where' yang dinamis dan ambil data relevan secara paralel
@@ -223,24 +245,25 @@ export class RecapService extends BaseService {
     let totalLwbp = 0;
     let totalConsumption = 0;
     let totalPax = 0;
-    let totalTarget = 0;
 
     for (const row of data) {
       const summary = aggregatedData.get(row.date.toISOString().split('T')[0]);
       totalCost += summary?.costWithTax ?? 0;
       totalCostBeforeTax += summary?.costBeforeTax ?? 0;
-      totalWbp += row.wbp ?? 0;
-      totalLwbp += row.lwbp ?? 0;
+      // PERBAIKAN: Hanya jumlahkan WBP/LWBP jika tipe energi adalah Listrik.
+      if (energyType === 'Electricity') {
+        totalWbp += row.wbp ?? 0;
+        totalLwbp += row.lwbp ?? 0;
+      }
       // PERBAIKAN: Sederhanakan kalkulasi. `row.consumption` sekarang selalu benar.
       totalConsumption += row.consumption ?? 0;
       totalPax += row.pax ?? 0;
-      totalTarget += row.target ?? 0;
     }
 
     return {
       totalCost,
       totalCostBeforeTax,
-      totalTarget, // DIUBAH: Sekarang dihitung dari data
+      totalTarget: data.reduce((sum, row) => sum + (row.target ?? 0), 0),
       totalConsumption,
       totalWbp,
       totalLwbp,

@@ -28,7 +28,7 @@ export const readingTypeRoutes = (router: Router) => {
       getById: ['Admin', 'SuperAdmin'],
       create: ['SuperAdmin'],
       update: ['Admin', 'SuperAdmin'],
-      delete: ['SuperAdmin'],
+      delete: ['SuperAdmin', 'Admin'],
     },
   });
 

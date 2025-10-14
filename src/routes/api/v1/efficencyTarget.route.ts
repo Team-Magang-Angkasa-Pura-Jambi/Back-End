@@ -23,9 +23,9 @@ export default (router: Router) => {
     authorizations: {
       getAll: ['Admin', 'SuperAdmin'],
       getById: ['Admin', 'SuperAdmin'],
-      create: ['SuperAdmin'],
+      create: ['SuperAdmin', 'Admin'],
       update: ['Admin', 'SuperAdmin'],
-      delete: ['SuperAdmin'],
+      delete: ['SuperAdmin', 'Admin'],
     },
   });
 

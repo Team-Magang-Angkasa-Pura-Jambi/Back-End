@@ -7,6 +7,7 @@ import {
 import { validate } from '../../../utils/validate.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { analysisController } from '../../../controllers/analysis.controller.js';
+import { bulkPredictionSchema } from '../../../validations/analysis.validation.js';
 
 // Skema validasi untuk query analisis
 const analysisQuerySchema = z.object({
@@ -56,5 +57,13 @@ export default (router: Router) => {
     authorize('Technician', 'Admin', 'SuperAdmin'), // Bisa diakses semua role
     validate(todaySummaryQuerySchema),
     asyncHandler(analysisController.getTodaySummary)
+  );
+
+  // Endpoint untuk menjalankan prediksi secara massal
+  router.post(
+    `${prefix}/run-bulk-predictions`,
+    authorize('SuperAdmin'), // Hanya SuperAdmin yang bisa memicu ini
+    validate(bulkPredictionSchema),
+    asyncHandler(analysisController.runBulkPredictions)
   );
 };

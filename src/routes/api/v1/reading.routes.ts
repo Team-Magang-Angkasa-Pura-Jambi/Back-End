@@ -32,7 +32,7 @@ export const readingRoutes = (router: Router) => {
       getAll: ['Admin', 'SuperAdmin'],
       getById: ['Admin', 'SuperAdmin'],
       create: ['Technician', 'Admin', 'SuperAdmin'],
-      update: ['SuperAdmin'],
+      update: ['Technician', 'Admin', 'SuperAdmin'], // PERBAIKAN: Izinkan Teknisi & Admin untuk update
       delete: ['Admin', 'SuperAdmin'],
     },
   });
@@ -51,4 +51,3 @@ export const readingRoutes = (router: Router) => {
 
   router.use(userRouter);
 };
-  

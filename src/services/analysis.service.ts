@@ -1,6 +1,8 @@
 import prisma from '../configs/db.js';
 import { Prisma, UsageCategory } from '../generated/prisma/index.js';
+import { machineLearningService } from './machineLearning.service.js';
 import type {
+  BulkPredictionBody,
   GetAnalysisQuery,
   DailyAnalysisRecord,
 } from '../types/analysis.types.js';
@@ -348,5 +350,191 @@ export class AnalysisService {
       },
       data: todaySummaries,
     };
+  }
+
+  /**
+   * BARU: Menjalankan prediksi secara massal untuk rentang tanggal tertentu.
+   * Ini berjalan sebagai background job dan memberikan notifikasi via socket.
+   * @param body - Berisi startDate, endDate, dan userId untuk notifikasi.
+   */
+  public async runBulkPredictions(body: BulkPredictionBody): Promise<void> {
+    const { startDate, endDate, userId } = body;
+    const jobDescription = `bulk-predict-${userId}-${Date.now()}`;
+
+    console.log(
+      `[BACKGROUND JOB - ${jobDescription}] Memulai prediksi massal dari ${startDate.toISOString()} hingga ${endDate.toISOString()}`
+    );
+
+    // Fungsi helper untuk mengirim notifikasi ke pengguna yang meminta
+    const notifyUser = (event: string, data: unknown) => {
+      if (userId) {
+        prisma.user.findUnique({ where: { user_id: userId } }).then((user) => {
+          if (user) {
+            // Implementasi socket.io Anda akan digunakan di sini
+            // socketServer.io.to(String(userId)).emit(event, data);
+            console.log(`NOTIFY ${userId}: ${event}`, data);
+          }
+        });
+      }
+    };
+
+    try {
+      const datesToProcess = [];
+      for (
+        let d = new Date(startDate);
+        d <= endDate;
+        d.setUTCDate(d.getUTCDate() + 1)
+      ) {
+        datesToProcess.push(new Date(d));
+      }
+
+      if (datesToProcess.length === 0) {
+        notifyUser('prediction:success', {
+          message: 'Tidak ada tanggal untuk diproses.',
+        });
+        return;
+      }
+
+      const totalDays = datesToProcess.length;
+      let processedCount = 0;
+
+      for (const currentDate of datesToProcess) {
+        const predictionDate = new Date(currentDate);
+        predictionDate.setUTCDate(currentDate.getUTCDate() + 1);
+
+        // Panggil logika prediksi yang ada di predictionRunner
+        // (Logika ini perlu diekstrak ke fungsi yang bisa digunakan bersama)
+        // Untuk saat ini, kita replikasi logikanya di sini.
+        await this.runPredictionForDate(currentDate);
+
+        processedCount++;
+        notifyUser('prediction:progress', {
+          processed: processedCount,
+          total: totalDays,
+        });
+      }
+
+      notifyUser('prediction:success', {
+        message: `Prediksi massal selesai. ${processedCount} hari diproses.`,
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      console.error(
+        `[BACKGROUND JOB - ${jobDescription}] Error:`,
+        errorMessage
+      );
+      notifyUser('prediction:error', { message: errorMessage });
+    }
+  }
+
+  /**
+   * BARU: Logika terpusat untuk menjalankan prediksi untuk H+1 berdasarkan data di `baseDate`.
+   * Bisa dipanggil dari cron, bulk process, atau trigger lain.
+   * @param baseDate - Tanggal yang datanya akan digunakan sebagai dasar prediksi.
+   */
+  public async runPredictionForDate(baseDate: Date): Promise<void> {
+    const METER_ID_LISTRIK_TERMINAL = 9;
+    const METER_ID_AIR = 10;
+    const modelVersion = 'terminal-v1.1'; // Contoh versi model
+
+    const predictionDate = new Date(baseDate);
+    predictionDate.setUTCDate(baseDate.getUTCDate() + 1);
+    const predictionDateStr = predictionDate.toISOString().split('T')[0];
+
+    try {
+      // 1. Cek kelengkapan data pada `baseDate`
+      const [pax, listrik, air] = await Promise.all([
+        prisma.paxData.findUnique({ where: { data_date: baseDate } }),
+        prisma.readingSession.findUnique({
+          where: {
+            unique_meter_reading_per_day: {
+              meter_id: METER_ID_LISTRIK_TERMINAL,
+              reading_date: baseDate,
+            },
+          },
+        }),
+        prisma.readingSession.findUnique({
+          where: {
+            unique_meter_reading_per_day: {
+              meter_id: METER_ID_AIR,
+              reading_date: baseDate,
+            },
+          },
+        }),
+      ]);
+
+      // 2. Jika semua data lengkap, jalankan prediksi
+      if (pax && listrik && air) {
+        console.log(
+          `[Prediction] Data untuk ${baseDate.toISOString().split('T')[0]} lengkap. Menjalankan prediksi untuk ${predictionDateStr}...`
+        );
+
+        const predictionResult =
+          await machineLearningService.getDailyPrediction(predictionDateStr);
+
+        if (predictionResult) {
+          // 3. Simpan atau perbarui hasil prediksi menggunakan upsert
+          await Promise.all([
+            prisma.consumptionPrediction.upsert({
+              where: {
+                prediction_date_meter_id_model_version: {
+                  prediction_date: predictionDate,
+                  meter_id: METER_ID_LISTRIK_TERMINAL,
+                  model_version: modelVersion,
+                },
+              },
+              update: {
+                predicted_value: predictionResult.prediksi_listrik_kwh,
+              },
+              create: {
+                prediction_date: predictionDate,
+                predicted_value: predictionResult.prediksi_listrik_kwh,
+                meter_id: METER_ID_LISTRIK_TERMINAL,
+                model_version: modelVersion,
+              },
+            }),
+            prisma.consumptionPrediction.upsert({
+              where: {
+                prediction_date_meter_id_model_version: {
+                  prediction_date: predictionDate,
+                  meter_id: METER_ID_AIR,
+                  model_version: modelVersion,
+                },
+              },
+              update: { predicted_value: predictionResult.prediksi_air_m3 },
+              create: {
+                prediction_date: predictionDate,
+                predicted_value: predictionResult.prediksi_air_m3,
+                meter_id: METER_ID_AIR,
+                model_version: modelVersion,
+              },
+            }),
+          ]);
+          console.log(
+            `[Prediction] Hasil prediksi untuk ${predictionDateStr} berhasil disimpan/diperbarui.`
+          );
+        }
+      } else {
+        // PERBAIKAN: Berikan log yang lebih detail tentang data apa yang hilang.
+        const missingData = [];
+        if (!pax) missingData.push('Data Pax');
+        if (!listrik) missingData.push('Data Listrik (Meter ID 9)');
+        if (!air) missingData.push('Data Air (Meter ID 10)');
+
+        console.log(
+          `[Prediction] Data untuk ${
+            baseDate.toISOString().split('T')[0]
+          } belum lengkap. Prediksi tidak dijalankan. Data yang hilang: [${missingData.join(
+            ', '
+          )}]`
+        );
+      }
+    } catch (error) {
+      console.error(
+        `[Prediction] Gagal menjalankan prediksi untuk ${predictionDateStr}:`,
+        error
+      );
+    }
   }
 }

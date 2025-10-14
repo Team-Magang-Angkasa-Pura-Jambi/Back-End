@@ -25,7 +25,7 @@ export const meterRoutes = (router: Router) => {
       getById: ['Admin', 'SuperAdmin', 'Technician'],
       create: ['SuperAdmin', 'Admin'],
       update: ['Admin', 'SuperAdmin'],
-      delete: ['SuperAdmin'],
+      delete: ['SuperAdmin', 'Admin'],
     },
   });
 
