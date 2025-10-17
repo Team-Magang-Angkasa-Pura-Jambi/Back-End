@@ -112,7 +112,13 @@ export class AnnualBudgetService extends GenericBaseService<
               allocations: { createMany: { data: allocations } },
             }),
           },
-          include: { allocations: true },
+          // PERBAIKAN: Sertakan relasi lengkap untuk respons yang konsisten.
+          include: {
+            allocations: true,
+            child_budgets: true,
+            parent_budget: true,
+            energy_type: true,
+          },
         });
 
         return updatedBudget;
@@ -338,7 +344,7 @@ export class AnnualBudgetService extends GenericBaseService<
         ...args,
         where: {
           ...args.where, // Gabungkan dengan filter dari query (misal: tanggal)
-          parent_budget_id: { not: null }, // Ambil hanya anggaran anak
+          parent_budget_id: { not: null },
         },
         include: {
           energy_type: true,
