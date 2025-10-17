@@ -9,9 +9,23 @@ import type {
 import type { CustomErrorMessages } from '../utils/baseService.js';
 
 import { GenericBaseService } from '../utils/GenericBaseService.js';
+import { weatherService } from './weather.service.js';
 
-type DailySummaryQuery = Prisma.DailySummaryFindManyArgs & GetSummaryQuery;
-type MonthlySummaryReport = {
+// PERBAIKAN: Definisi tipe yang lebih jelas dan konsisten untuk laporan perbandingan.
+type ComparisonValue = {
+  currentValue: number;
+  previousValue: number;
+  percentageChange: number | null;
+};
+
+type EnergySummary = {
+  energyType: string;
+  unit: string;
+  totalConsumption: ComparisonValue;
+  totalCost: ComparisonValue;
+};
+
+type MonthlyComparisonReport = {
   reportPeriod: {
     year: number;
     month: number;
@@ -19,15 +33,34 @@ type MonthlySummaryReport = {
     startDate: string;
     endDate: string;
   };
+  totalPax: ComparisonValue;
+  summary: EnergySummary[];
+  averageTemperature: ComparisonValue;
+  averageMaxTemperature: ComparisonValue;
+  /**
+   * Contains specific temperature data for the current day,
+   * only populated if the report period includes today.
+   */
+  todayTemperature: {
+    avg_temp: number | null;
+    max_temp: number | null;
+  } | null;
+};
+
+type MonthlyData = {
   totalPax: number;
-  // PERBAIKAN: Tambahkan '[]' untuk menandakan bahwa ini adalah array
+  avgTemp: number;
+  avgMaxTemp: number;
+  todayTemp: { avg_temp: number | null; max_temp: number | null } | null;
   summary: {
     energyType: string;
-    totalConsumption: number;
     unit: string;
+    totalConsumption: number;
     totalCost: number;
   }[];
 };
+
+type DailySummaryQuery = Prisma.DailySummaryFindManyArgs & GetSummaryQuery;
 export class DailySummaryService extends GenericBaseService<
   typeof prisma.dailySummary,
   DailySummary,
@@ -122,48 +155,50 @@ export class DailySummaryService extends GenericBaseService<
         this._getMonthlyData(prevStartDate, prevEndDate),
       ]);
 
-      // Jika tidak ada data di bulan ini, kembalikan laporan kosong
-      if (currentData.summary.length === 0 && currentData.totalPax === 0) {
-        return this.buildEmptyReport(
-          year,
-          month,
-          currentStartDate,
-          currentEndDate
-        );
-      }
-
       // LANGKAH 4: BANDINGKAN DATA
-      // Buat Map dari data bulan lalu untuk pencarian cepat
+      // PERBAIKAN: Logika diubah untuk memastikan perbandingan tetap ada meskipun data bulan ini kosong.
+      // 1. Buat Map dari data bulan ini dan bulan lalu untuk pencarian cepat.
+      const currentSummaryMap = new Map(
+        currentData.summary.map((s) => [s.energyType, s])
+      );
       const previousSummaryMap = new Map(
         previousData.summary.map((s) => [s.energyType, s])
       );
 
-      const summary: EnergySummary[] = currentData.summary.map(
-        (currentSummary) => {
-          const previousSummary = previousSummaryMap.get(
-            currentSummary.energyType
-          );
+      // 2. Dapatkan semua tipe energi unik dari kedua periode.
+      const allEnergyTypes = new Set([
+        ...currentSummaryMap.keys(),
+        ...previousSummaryMap.keys(),
+      ]);
 
-          const prevConsumption = previousSummary?.totalConsumption ?? 0;
-          const prevCost = previousSummary?.totalCost ?? 0;
+      // 3. Iterasi melalui semua tipe energi untuk membangun ringkasan perbandingan.
+      const summary: EnergySummary[] = Array.from(allEnergyTypes).map(
+        (energyType) => {
+          const currentSummary = currentSummaryMap.get(energyType);
+          const previousSummary = previousSummaryMap.get(energyType);
+
+          const currentValue = currentSummary?.totalConsumption ?? 0;
+          const previousValue = previousSummary?.totalConsumption ?? 0;
+          const currentCost = currentSummary?.totalCost ?? 0;
+          const previousCost = previousSummary?.totalCost ?? 0;
 
           return {
-            energyType: currentSummary.energyType,
-            unit: currentSummary.unit,
+            energyType: energyType,
+            unit: currentSummary?.unit || previousSummary?.unit || '',
             totalConsumption: {
-              currentValue: currentSummary.totalConsumption,
-              previousValue: prevConsumption,
+              currentValue: currentValue,
+              previousValue: previousValue,
               percentageChange: this._calculatePercentageChange(
-                currentSummary.totalConsumption,
-                prevConsumption
+                currentValue,
+                previousValue
               ),
             },
             totalCost: {
-              currentValue: currentSummary.totalCost,
-              previousValue: prevCost,
+              currentValue: currentCost,
+              previousValue: previousCost,
               percentageChange: this._calculatePercentageChange(
-                currentSummary.totalCost,
-                prevCost
+                currentCost,
+                previousCost
               ),
             },
           };
@@ -189,6 +224,26 @@ export class DailySummaryService extends GenericBaseService<
             previousData.totalPax
           ),
         },
+        // BARU: Tambahkan data perbandingan suhu rata-rata
+        averageTemperature: {
+          currentValue: currentData.avgTemp,
+          previousValue: previousData.avgTemp,
+          percentageChange: this._calculatePercentageChange(
+            currentData.avgTemp,
+            previousData.avgTemp
+          ),
+        },
+        // BARU: Tambahkan data perbandingan suhu maksimal rata-rata
+        averageMaxTemperature: {
+          currentValue: currentData.avgMaxTemp,
+          previousValue: previousData.avgMaxTemp,
+          percentageChange: this._calculatePercentageChange(
+            currentData.avgMaxTemp,
+            previousData.avgMaxTemp
+          ),
+        },
+        // Tambahkan data suhu hari ini ke laporan akhir
+        todayTemperature: currentData.todayTemp,
         summary,
       };
 
@@ -198,48 +253,110 @@ export class DailySummaryService extends GenericBaseService<
     return this._handleCrudOperation(buildReport);
   }
 
-  private async _getMonthlyData(startDate: Date, endDate: Date) {
-    const [detailAggregates, paxAggregate] = await Promise.all([
-      prisma.summaryDetail.groupBy({
-        by: ['energy_type_id'],
+  private async _getMonthlyData(
+    startDate: Date,
+    endDate: Date
+  ): Promise<MonthlyData> {
+    let todayWeather: { suhu_rata: number; suhu_max: number } | null = null; // Tipe disesuaikan dengan return WeatherService
+    const today = new Date();
+
+    // Jika periode laporan mencakup hari ini, ambil data cuaca spesifik hari ini.
+    // Ini memastikan laporan untuk bulan berjalan selalu menggunakan data suhu terbaru.
+    const todayUTC = new Date(
+      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+    );
+    if (endDate >= todayUTC && startDate <= todayUTC) {
+      todayWeather = await weatherService.getForecast(today); // getForecast akan mengisi cache jika perlu
+    }
+
+    // PERBAIKAN TOTAL: Logika diubah untuk melakukan agregasi langsung pada DailySummary.
+    // Ini menghindari penghitungan ganda (WBP + LWBP + Total) yang terjadi saat
+    // melakukan agregasi pada SummaryDetail.
+    const [aggregates, paxAggregate, weatherAggregate] = await Promise.all([
+      prisma.dailySummary.groupBy({
+        by: ['meter_id'],
         where: {
-          summary: {
-            summary_date: { gte: startDate, lte: endDate },
-          },
+          summary_date: { gte: startDate, lte: endDate },
         },
-        _sum: { consumption_value: true, consumption_cost: true },
+        _sum: {
+          total_consumption: true,
+          total_cost: true,
+        },
       }),
       prisma.paxData.aggregate({
         where: { data_date: { gte: startDate, lte: endDate } },
         _sum: { total_pax: true },
       }),
+      // BARU: Ambil data suhu rata-rata untuk periode yang sama
+      prisma.weatherHistory.aggregate({
+        where: { data_date: { gte: startDate, lte: endDate } },
+        _avg: { avg_temp: true, max_temp: true }, // BARU: Ambil juga rata-rata suhu maksimal
+      }),
     ]);
 
-    if (detailAggregates.length === 0) {
-      return { totalPax: paxAggregate._sum.total_pax ?? 0, summary: [] };
+    if (aggregates.length === 0) {
+      // PERBAIKAN: Pastikan semua properti dari tipe MonthlyData dikembalikan
+      return {
+        totalPax: paxAggregate._sum.total_pax ?? 0,
+        summary: [],
+        avgTemp: weatherAggregate._avg.avg_temp?.toNumber() ?? 0,
+        avgMaxTemp: weatherAggregate._avg.max_temp?.toNumber() ?? 0,
+        todayTemp: todayWeather // Gunakan hasil langsung
+          ? {
+              avg_temp: todayWeather.suhu_rata,
+              max_temp: todayWeather.suhu_max,
+            }
+          : null,
+      };
     }
 
-    const energyTypeIds = detailAggregates.map((agg) => agg.energy_type_id);
-    const energyTypes = await prisma.energyType.findMany({
-      where: { energy_type_id: { in: energyTypeIds } },
+    // Ambil detail meter untuk mendapatkan tipe energi
+    const meterIds = aggregates.map((agg) => agg.meter_id);
+    const meters = await prisma.meter.findMany({
+      where: { meter_id: { in: meterIds } },
+      include: { energy_type: true },
     });
-    const energyTypeMap = new Map(
-      energyTypes.map((et) => [et.energy_type_id, et])
-    );
+    const meterMap = new Map(meters.map((m) => [m.meter_id, m]));
 
-    const summary = detailAggregates.map((agg) => {
-      const energyType = energyTypeMap.get(agg.energy_type_id);
+    // Gabungkan hasil agregasi berdasarkan tipe energi
+    const summaryMap = new Map<string, any>();
+    for (const agg of aggregates) {
+      const meter = meterMap.get(agg.meter_id);
+      if (!meter) continue;
+
+      const energyTypeName = meter.energy_type.type_name;
+      const current = summaryMap.get(energyTypeName) || {
+        totalConsumption: 0,
+        totalCost: 0,
+      };
+
+      current.totalConsumption += agg._sum.total_consumption?.toNumber() ?? 0;
+      current.totalCost += agg._sum.total_cost?.toNumber() ?? 0;
+      summaryMap.set(energyTypeName, {
+        ...current,
+        energyType: energyTypeName,
+        unit: meter.energy_type.unit_of_measurement,
+      });
+    }
+
+    const summary = Array.from(summaryMap.values()).map((s) => {
       return {
-        energyType: energyType?.type_name || 'Unknown',
-        unit: energyType?.unit_of_measurement || '',
-        totalConsumption: agg._sum.consumption_value?.toNumber() ?? 0,
-        totalCost: agg._sum.consumption_cost?.toNumber() ?? 0,
+        energyType: s.energyType,
+        unit: s.unit,
+        totalConsumption: s.totalConsumption,
+        totalCost: s.totalCost,
       };
     });
 
     return {
       totalPax: paxAggregate._sum.total_pax ?? 0,
       summary,
+      // PERBAIKAN: Tambahkan avgTemp ke objek yang dikembalikan
+      avgTemp: weatherAggregate._avg.avg_temp?.toNumber() ?? 0,
+      avgMaxTemp: weatherAggregate._avg.max_temp?.toNumber() ?? 0,
+      todayTemp: todayWeather // Gunakan hasil langsung
+        ? { avg_temp: todayWeather.suhu_rata, max_temp: todayWeather.suhu_max }
+        : null,
     };
   }
 

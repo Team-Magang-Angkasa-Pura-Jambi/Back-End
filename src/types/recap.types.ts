@@ -15,6 +15,12 @@ export interface RecapDataRow {
   classification: UsageCategory | null;
   pax: number | null;
   cost: number | null;
+  // BARU: Tambahkan properti untuk data suhu dan hari kerja
+  avg_temp?: number | null;
+  max_temp?: number | null;
+  is_workday?: boolean;
+  // BARU: Tambahkan properti untuk sisa stok BBM
+  remaining_stock?: number | null;
 }
 
 export interface RecapSummary {

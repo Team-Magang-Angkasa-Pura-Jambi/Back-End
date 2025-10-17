@@ -17,7 +17,7 @@ const Schema = z.object({
     .array(
       z.object({
         reading_type_id: positiveInt('Reading Type ID'),
-        value: positiveNumber('Rate Value'),
+        value: z.number(),
       })
     )
     .min(1, 'At least one rate must be provided.')
@@ -46,4 +46,3 @@ export const queryPriceSchema = priceSchema.getList(
     tariffGroupId: positiveInt('tariff group id').optional(),
   })
 );
-  

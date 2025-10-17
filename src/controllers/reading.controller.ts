@@ -1,3 +1,5 @@
+//controler
+
 import type { Request, Response } from 'express';
 import type {
   CreateReadingSessionBody,
@@ -7,7 +9,7 @@ import type {
 import { res200, res201 } from '../utils/response.js';
 import { Error401 } from '../utils/customError.js';
 import { BaseController } from '../utils/baseController.js';
-import { readingService, ReadingService } from '../services/reading.service.js';
+import { ReadingService } from '../services/reading.service.js';
 import type { ReadingSession } from '../generated/prisma/index.js';
 
 /**
@@ -17,6 +19,9 @@ import type { ReadingSession } from '../generated/prisma/index.js';
 type CreateReadingSessionInternal = CreateReadingSessionBody & {
   user_id: number;
 };
+// const readingService = new ReadingService();
+// const reading = new ReadingService();
+
 export class ReadingController extends BaseController<
   ReadingSession,
   CreateReadingSessionBody,

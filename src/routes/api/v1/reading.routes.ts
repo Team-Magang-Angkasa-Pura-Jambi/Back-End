@@ -1,9 +1,6 @@
 import type { Router } from 'express';
 import { ReadingService } from '../../../services/reading.service.js';
-import {
-  readingController,
-  ReadingController,
-} from '../../../controllers/reading.controller.js';
+
 import { validate } from '../../../utils/validate.js';
 import {
   getHistoryQuerySchema,
@@ -13,9 +10,10 @@ import {
 } from '../../../validations/reading.validation.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
-import { authorize } from '../../../middleware/auth.middleware.js';
+import { readingController, ReadingController } from '../../../controllers/reading.controller.js';
 
-export const readingRoutes = (router: Router) => {
+export default (router: Router) => {
+  // const readingController = new ReadingController();
   const userRouter = createCrudRouter('/readings', {
     ServiceClass: ReadingService,
     ControllerClass: ReadingController,

@@ -24,6 +24,44 @@ class AnalysisController {
     }
   };
 
+  public getMonthlyFuelStockAnalysis = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const query = res.locals.validatedData.query;
+      const result =
+        await this.analysisService.getMonthlyFuelStockAnalysis(query);
+      res200({
+        res,
+        data: result,
+        message: 'Analisis sisa stok BBM bulanan berhasil diambil.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public getBudgetAllocation = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { year } = res.locals.validatedData.query;
+      const result = await this.analysisService.getBudgetAllocation(
+        Number(year)
+      );
+      res200({
+        res,
+        data: result,
+        message: `Alokasi anggaran untuk tahun ${year} berhasil diambil.`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
   public getClassificationSummary = async (
     req: Request,
     res: Response,
@@ -42,6 +80,62 @@ class AnalysisController {
     }
   };
 
+  public getBudgetPreview = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      // Ambil data anggaran sementara dari body request
+      const budgetData = res.locals.validatedData.body;
+      const result =
+        await this.analysisService.getBudgetAllocationPreview(budgetData);
+      res200({
+        res,
+        data: result,
+        message: `Pratinjau alokasi anggaran berhasil dihitung.`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public getBudgetSummary = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const result = await this.analysisService.getBudgetSummary();
+      res200({
+        res,
+        data: result,
+        message: `Ringkasan anggaran per jenis energi berhasil diambil.`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public prepareNextPeriodBudget = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { parentBudgetId } = res.locals.validatedData.params;
+      const result = await this.analysisService.prepareNextPeriodBudget(
+        parentBudgetId
+      );
+      res200({
+        res,
+        data: result,
+        message: `Data persiapan untuk anggaran periode berikutnya berhasil diambil.`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
   public getTodaySummary = async (
     req: Request,
     res: Response,

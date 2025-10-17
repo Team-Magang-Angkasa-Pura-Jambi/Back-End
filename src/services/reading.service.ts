@@ -23,24 +23,13 @@ import type {
 } from '../types/reading.types.js';
 import { Error400, Error404, Error409 } from '../utils/customError.js';
 
+import { differenceInDays } from 'date-fns';
 import { dailyLogbookService } from './dailyLogbook.service.js';
-import { AnalysisService } from './analysis.service.js';
-// =============================================
-// KONSTANTA & FALLBACK
-// =============================================
-
-// BARU: Konstanta untuk kalkulasi BBM.
-// Nanti bisa dipindahkan ke properti setiap meter di database.
-const TANK_HEIGHT_CM = new Prisma.Decimal(200); // Contoh: Tinggi total tangki 200 cm
-const TANK_VOLUME_LITERS = new Prisma.Decimal(5000); // Contoh: Volume total tangki 5000 liter
-const LITERS_PER_CM = TANK_VOLUME_LITERS.div(TANK_HEIGHT_CM); // Liter per cm ketinggian
-
-// =============================================
-// TIPE DATA LOKAL
-// =============================================
+import { alertService } from './alert.service.js';
 type CreateReadingSessionInternal = CreateReadingSessionBody & {
   user_id: number;
   reading_date: Date;
+  skipValidation?: boolean; // BARU: Tambahkan flag untuk melewati validasi
 };
 
 type MeterWithRelations = Prisma.MeterGetPayload<{
@@ -76,7 +65,7 @@ export class ReadingService extends GenericBaseService<
 > {
   constructor() {
     super(prisma, prisma.readingSession, 'session_id');
-    // PERBAIKAN: Bind 'this' context untuk metode privat yang digunakan sebagai callback atau di dalam transaksi.
+    // Bind 'this' context untuk metode privat yang digunakan sebagai callback atau di dalam transaksi.
     this._updateDailySummary = this._updateDailySummary.bind(this);
     this._classifyDailyUsage = this._classifyDailyUsage.bind(this);
     this._mapClassificationToEnum = this._mapClassificationToEnum.bind(this);
@@ -86,11 +75,23 @@ export class ReadingService extends GenericBaseService<
     dateForDb: Date,
     details: CreateReadingSessionInternal['details']
   ) {
-    // Langsung lewati validasi jika tipe energi adalah BBM (Fuel)
+    // Validasi untuk BBM (Fuel) memiliki logika yang berbeda.
     if (meter.energy_type.type_name === 'Fuel') {
+      // Pastikan ketinggian yang diinput tidak melebihi kapasitas maksimal tangki.
+      if (meter.tank_height_cm) {
+        const tankHeight = new Prisma.Decimal(meter.tank_height_cm);
+        for (const detail of details) {
+          const currentValue = new Prisma.Decimal(detail.value);
+          if (currentValue.greaterThan(tankHeight)) {
+            throw new Error400(
+              `Ketinggian BBM yang diinput (${currentValue} cm) tidak boleh melebihi kapasitas maksimal tangki (${tankHeight} cm).`
+            );
+          }
+        }
+      }
+      // Validasi nilai kumulatif (harus lebih besar dari sebelumnya) tidak berlaku untuk BBM.
       return;
     }
-    // MODIFIKASI: Cari data spesifik dari H-1.
     const previousDate = new Date(dateForDb);
     previousDate.setUTCDate(previousDate.getUTCDate() - 1);
 
@@ -104,14 +105,12 @@ export class ReadingService extends GenericBaseService<
       include: { details: true },
     });
 
-    // Jika sesi H-1 tidak ditemukan
     if (!previousSession) {
-      // Cek apakah ada data lain sebelum tanggal input. Jika ada, berarti H-1 memang kosong.
+      // Jika sesi H-1 tidak ada, cek apakah ada data lain sebelumnya.
       const anyPreviousEntry = await prisma.readingSession.findFirst({
         where: { meter_id: meter.meter_id, reading_date: { lt: dateForDb } },
       });
 
-      // Jika ada data sebelumnya tapi bukan di H-1, maka proses gagal.
       if (anyPreviousEntry) {
         throw new Error400(
           `Data untuk tanggal ${
@@ -119,11 +118,10 @@ export class ReadingService extends GenericBaseService<
           } belum diinput. Silakan input data hari sebelumnya terlebih dahulu.`
         );
       }
-      // Jika tidak ada data sama sekali, ini adalah input pertama, jadi validasi dilewati.
+      // Jika tidak ada data sama sekali, ini adalah input pertama, maka validasi dilewati.
       return;
     }
 
-    // Jika sesi H-1 ditemukan, lanjutkan validasi nilai.
     for (const detail of details) {
       const prevDetail = previousSession.details.find(
         (d) => d.reading_type_id === detail.reading_type_id
@@ -133,22 +131,23 @@ export class ReadingService extends GenericBaseService<
       const previousValue = new Prisma.Decimal(prevDetail.value);
       const currentValue = new Prisma.Decimal(detail.value);
 
-      if (currentValue.lessThan(previousValue)) {
-        const readingType = await prisma.readingType.findUnique({
-          where: { reading_type_id: detail.reading_type_id },
-        });
-        throw new Error400(
-          `Nilai untuk '${readingType?.type_name}' (${currentValue}) tidak boleh lebih kecil dari pembacaan di tanggal ${
-            previousDate.toISOString().split('T')[0]
-          } (${previousValue}).`
-        );
+      // Validasi `currentValue < previousValue` dihapus dari sini.
+      // Logika ini ditangani di dalam fungsi kalkulasi `_calculateSafeConsumption`
+      // untuk mengakomodasi kasus meter reset (rollover).
+
+      // BARU: Validasi bahwa nilai input tidak melebihi rollover_limit jika ada.
+      if (meter.rollover_limit) {
+        const rolloverLimit = new Prisma.Decimal(meter.rollover_limit);
+        if (currentValue.greaterThan(rolloverLimit)) {
+          throw new Error400(
+            `Nilai input (${currentValue}) tidak boleh lebih besar dari batas reset meter (${rolloverLimit}).`
+          );
+        }
       }
     }
   }
 
   private async _validateDuplicateSession(meter_id: number, dateForDb: Date) {
-    // PERBAIKAN: Validasi disederhanakan untuk hanya memeriksa ReadingSession.
-    // Ini lebih efisien dan mencegah error saat membuat detail baru dalam satu sesi.
     const existingSession = await prisma.readingSession.findUnique({
       where: {
         unique_meter_reading_per_day: { meter_id, reading_date: dateForDb },
@@ -167,14 +166,18 @@ export class ReadingService extends GenericBaseService<
   public override async create(
     data: CreateReadingSessionInternal
   ): Promise<ReadingSession> {
-    const { meter_id, reading_date, details, user_id } = data;
+    const { meter_id, reading_date, details, user_id, skipValidation } = data;
 
     const meter = await this._validateMeter(meter_id);
     const dateForDb = this._normalizeDate(reading_date);
-    // PERBAIKAN: Panggil validasi duplikat sesi yang sudah diperbaiki.
     await this._validateDuplicateSession(meter_id, dateForDb);
-    await this._validateReadingsAgainstPrevious(meter, dateForDb, details);
+    if (!skipValidation) {
+      await this._validateReadingsAgainstPrevious(meter, dateForDb, details);
+    }
 
+    // Seluruh proses, termasuk kalkulasi summary, dimasukkan ke dalam satu transaksi.
+    // Ini memastikan jika kalkulasi gagal (misal: karena rollover tidak valid),
+    // pembuatan ReadingSession juga akan dibatalkan (rollback).
     const newSession = await this._handleCrudOperation(() =>
       this._prisma.$transaction(async (tx) => {
         const { sessionId } = await this._findOrCreateSession(
@@ -184,6 +187,8 @@ export class ReadingService extends GenericBaseService<
           user_id
         );
         await this._createReadingDetails(tx, sessionId, details);
+
+        await this._updateDailySummary(tx, meter, dateForDb);
 
         return tx.readingSession.findUniqueOrThrow({
           where: { session_id: sessionId },
@@ -196,25 +201,18 @@ export class ReadingService extends GenericBaseService<
       })
     );
 
-    // Panggil logika summary terpusat SETELAH transaksi create session berhasil
-    await this.processAndSummarizeReading(meter_id, dateForDb);
-
-    // BARU: Panggil logika untuk memeriksa dan menyelesaikan alert data yang hilang
+    // Panggil proses sekunder (yang tidak kritikal) setelah transaksi utama berhasil.
     await this._checkAndResolveMissingDataAlert(meter_id, dateForDb);
-
-    // BARU: Pemicu ketiga untuk prediksi.
-    // Setelah data reading dibuat, cek apakah data hari ini sudah lengkap untuk menjalankan prediksi besok.
-    console.log(
-      `[ReadingService] Data baru untuk ${dateForDb.toISOString().split('T')[0]}. Memicu pengecekan prediksi...`
-    );
+    // PERBAIKAN: Impor dan panggil AnalysisService secara dinamis untuk memutus dependensi sirkular.
+    const { AnalysisService } = await import('./analysis.service.js');
     const analysisService = new AnalysisService();
-    analysisService.runPredictionForDate(dateForDb); // Jalankan di latar belakang (tanpa await)
+    analysisService.runPredictionForDate(dateForDb); // Jalankan di latar belakang
 
     return newSession;
   }
 
   /**
-   * BARU: Memperbarui data pembacaan meter yang sudah ada.
+   * Memperbarui data pembacaan meter yang sudah ada.
    * Metode ini akan memvalidasi data baru, memperbarui detail dalam transaksi,
    * dan memicu kalkulasi ulang untuk tanggal yang bersangkutan dan hari berikutnya.
    * @param sessionId - ID dari ReadingSession yang akan diperbarui.
@@ -227,13 +225,11 @@ export class ReadingService extends GenericBaseService<
     const { details } = data;
 
     return this._handleCrudOperation(async () => {
-      // 1. Ambil sesi saat ini untuk mendapatkan info meter dan tanggal
       const currentSession = await this._model.findUniqueOrThrow({
         where: { session_id: sessionId },
       });
       const { meter_id, reading_date } = currentSession;
 
-      // BARU: Validasi bahwa sesi ini adalah data terakhir untuk meter ini.
       const latestSession = await this._prisma.readingSession.findFirst({
         where: { meter_id },
         orderBy: { reading_date: 'desc' },
@@ -245,21 +241,16 @@ export class ReadingService extends GenericBaseService<
         );
       }
 
-      // 2. Validasi meter dan data baru (validasi terhadap data berikutnya tidak lagi diperlukan)
       const meter = await this._validateMeter(meter_id);
       await this._validateReadingsAgainstPrevious(meter, reading_date, details);
 
-      // 3. Lakukan pembaruan dalam transaksi
       const updatedSession = await this._prisma.$transaction(async (tx) => {
-        // Hapus detail lama
         await tx.readingDetail.deleteMany({
           where: { session_id: sessionId },
         });
 
-        // Buat detail baru
         await this._createReadingDetails(tx, sessionId, details);
 
-        // Ambil kembali sesi yang sudah diperbarui dengan detail baru
         return tx.readingSession.findUniqueOrThrow({
           where: { session_id: sessionId },
           include: {
@@ -270,7 +261,6 @@ export class ReadingService extends GenericBaseService<
         });
       });
 
-      // 4. Memicu kalkulasi ulang HANYA untuk hari ini (karena ini adalah data terakhir)
       console.log(
         `[ReadingService] Data sesi ${sessionId} diperbarui. Memicu kalkulasi ulang untuk ${
           reading_date.toISOString().split('T')[0]
@@ -283,18 +273,20 @@ export class ReadingService extends GenericBaseService<
   }
 
   /**
-   * BARU: Metode publik untuk memproses dan membuat ringkasan untuk satu meter pada tanggal tertentu.
+   * Metode publik untuk memproses dan membuat ringkasan untuk satu meter pada tanggal tertentu.
    * Ini adalah inti logika yang diekstrak dari `create` dan `recalculate` untuk reusability.
    * @param meterId - ID meter yang akan diproses.
    * @param date - Tanggal pembacaan yang akan diproses.
+   * @param tx - Konteks transaksi Prisma yang sedang berjalan.
    */
   public async processAndSummarizeReading(
     meterId: number,
-    date: Date
+    date: Date,
+    tx: Prisma.TransactionClient
   ): Promise<void> {
-    // PERBAIKAN: Mengembalikan logika kalkulasi summary yang hilang.
     return this._handleCrudOperation(async () => {
-      const meter = await this._prisma.meter.findUniqueOrThrow({
+      // Gunakan 'tx' untuk query agar tetap dalam transaksi yang sama
+      const meter = await tx.meter.findUniqueOrThrow({
         where: { meter_id: meterId },
         include: {
           energy_type: true,
@@ -303,7 +295,7 @@ export class ReadingService extends GenericBaseService<
             include: {
               price_schemes: {
                 include: {
-                  rates: { include: { reading_type: true } }, // Optimasi
+                  rates: { include: { reading_type: true } },
                   taxes: { include: { tax: true } },
                 },
               },
@@ -314,39 +306,49 @@ export class ReadingService extends GenericBaseService<
 
       const dateForDb = this._normalizeDate(date);
 
-      const summary = await this._prisma.$transaction(async (tx) => {
-        return this._updateDailySummary(tx, meter, dateForDb);
-      });
+      // PERBAIKAN: _updateDailySummary sekarang menjadi pusat kalkulasi dan penyimpanan.
+      const summaries = await this._updateDailySummary(tx, meter, dateForDb);
 
-      if (summary) {
-        await this._classifyDailyUsage(summary, meter);
-        await this._checkUsageAgainstTargetAndNotify(summary, meter);
+      if (summaries) {
+        for (const summary of summaries) {
+          // Panggil proses sekunder setelah summary utama selesai.
+          await this._classifyDailyUsage(summary, meter);
+          await this._checkUsageAgainstTargetAndNotify(summary, meter);
+        }
       }
 
       console.log(
         `[ReadingService] Memicu pembuatan/pembaruan logbook untuk tanggal ${dateForDb.toISOString()}`
       );
+      // PERBAIKAN: Panggil generateDailyLog di luar transaksi utama
+      // untuk menghindari error jika transaksi sudah selesai.
       await dailyLogbookService.generateDailyLog(dateForDb);
     });
   }
   public override async delete(sessionId: number): Promise<ReadingSession> {
     return this._handleCrudOperation(() =>
       this._prisma.$transaction(async (tx) => {
-        // 1. Ambil data sesi yang akan dihapus untuk mendapatkan meter_id dan reading_date
-        const sessionToDelete = await tx.readingSession.findUnique({
+        const sessionToDelete = await tx.readingSession.findUniqueOrThrow({
           where: { session_id: sessionId },
           select: { meter_id: true, reading_date: true },
         });
 
-        if (!sessionToDelete) {
-          throw new Error404(
-            `Sesi pembacaan dengan ID ${sessionId} tidak ditemukan.`
+        // BARU: Validasi bahwa hanya data terakhir yang bisa dihapus.
+        const latestSession = await tx.readingSession.findFirst({
+          where: { meter_id: sessionToDelete.meter_id },
+          orderBy: { reading_date: 'desc' },
+        });
+
+        // Jika ada sesi terakhir dan ID-nya tidak sama dengan sesi yang akan dihapus,
+        // berarti pengguna mencoba menghapus data di tengah.
+        if (latestSession && latestSession.session_id !== sessionId) {
+          throw new Error400(
+            'Hanya data pembacaan terakhir yang dapat dihapus. Untuk memperbaiki data lama, hapus entri hingga tanggal tersebut dan input ulang.'
           );
         }
 
         const { meter_id, reading_date } = sessionToDelete;
 
-        // 2. Hapus DailySummary yang terkait (ini akan otomatis menghapus SummaryDetail karena onDelete: Cascade)
         await tx.dailySummary.deleteMany({
           where: {
             meter_id,
@@ -354,7 +356,6 @@ export class ReadingService extends GenericBaseService<
           },
         });
 
-        // BARU: Hapus juga DailyLogbook yang terkait dengan meter dan tanggal yang sama.
         await tx.dailyLogbook.deleteMany({
           where: {
             meter_id,
@@ -362,7 +363,6 @@ export class ReadingService extends GenericBaseService<
           },
         });
 
-        // 3. Hapus ReadingSession (ini akan otomatis menghapus ReadingDetail karena onDelete: Cascade)
         const deletedSession = await tx.readingSession.delete({
           where: { session_id: sessionId },
         });
@@ -372,19 +372,15 @@ export class ReadingService extends GenericBaseService<
     );
   }
 
-  // =============================================
-  // LOGIKA INTI: PEMBUATAN SUMMARY
-  // =============================================
-
   /**
    * Orkestrator untuk memperbarui DailySummary.
    * Mengambil data, memanggil kalkulator, dan menulis hasilnya ke DB.
    */
-  private async _updateDailySummary(
+  private async _updateDailySummary( // PERBAIKAN: Fungsi ini sekarang menjadi pusat kalkulasi
     tx: Prisma.TransactionClient,
     meter: MeterWithRelations,
     dateForDb: Date
-  ): Promise<Prisma.DailySummaryGetPayload<{}> | null> {
+  ): Promise<Prisma.DailySummaryGetPayload<{}>[] | null> {
     const currentSession = await tx.readingSession.findUnique({
       where: {
         unique_meter_reading_per_day: {
@@ -397,12 +393,10 @@ export class ReadingService extends GenericBaseService<
 
     if (!currentSession) return null;
 
-    // PERBAIKAN: Logika pengambilan data sebelumnya dibedakan.
-    // Untuk Listrik/Air, cari H-1. Untuk BBM, cari data terakhir yang ada.
+    // Logika pengambilan data sebelumnya dibedakan per jenis energi.
     let previousSession: SessionWithDetails | null;
     if (meter.energy_type.type_name === 'Fuel') {
-      // Untuk BBM, cari data terakhir sebelum tanggal saat ini.
-      previousSession = await tx.readingSession.findFirst({
+      const previousFuelSession = await tx.readingSession.findFirst({
         where: {
           meter_id: meter.meter_id,
           reading_date: { lt: dateForDb },
@@ -410,8 +404,16 @@ export class ReadingService extends GenericBaseService<
         orderBy: { reading_date: 'desc' },
         include: { details: true },
       });
+
+      // PERBAIKAN: Panggil kalkulator BBM yang sudah diperbaiki
+      return this._calculateAndDistributeFuelSummary(
+        tx,
+        meter,
+        currentSession,
+        previousFuelSession
+      );
     } else {
-      // Untuk Listrik dan Air, tetap gunakan logika H-1 yang ketat.
+      // Untuk Listrik dan Air, gunakan logika H-1 yang ketat.
       const previousDate = new Date(dateForDb);
       previousDate.setUTCDate(previousDate.getUTCDate() - 1);
 
@@ -426,7 +428,6 @@ export class ReadingService extends GenericBaseService<
       });
     }
 
-    // LANGKAH 1: Hitung semua data detail yang akan dibuat
     const summaryDetailsToCreate = await this._calculateSummaryDetails(
       tx,
       meter,
@@ -435,9 +436,7 @@ export class ReadingService extends GenericBaseService<
     );
     if (summaryDetailsToCreate.length === 0) return null;
 
-    // LANGKAH 2: Jumlahkan 'consumption_cost' dari semua detail untuk mendapatkan 'total_cost'
-    // PERBAIKAN: Hanya jumlahkan biaya dari metrik dasar, bukan dari metrik "Total Pemakaian"
-    // untuk menghindari penghitungan ganda.
+    // Jumlahkan biaya dari metrik dasar (bukan dari metrik "Total Pemakaian") untuk menghindari penghitungan ganda.
     const finalTotalCost = summaryDetailsToCreate.reduce(
       (sum, detail) =>
         detail.metric_name !== 'Total Pemakaian'
@@ -446,8 +445,7 @@ export class ReadingService extends GenericBaseService<
       new Prisma.Decimal(0)
     );
 
-    // PERBAIKAN: Hitung total konsumsi dari metrik utama.
-    // Untuk Listrik, ini adalah 'Total Pemakaian'. Untuk lainnya, ini adalah satu-satunya metrik yang ada.
+    // Hitung total konsumsi dari metrik utama (bukan komponen seperti WBP/LWBP).
     const finalTotalConsumption = summaryDetailsToCreate.reduce(
       (sum, detail) =>
         !detail.metric_name.includes('WBP') &&
@@ -457,7 +455,6 @@ export class ReadingService extends GenericBaseService<
       new Prisma.Decimal(0)
     );
 
-    // LANGKAH 3: Buat atau perbarui 'DailySummary' dengan total biaya yang benar
     const dailySummary = await tx.dailySummary.upsert({
       where: {
         summary_date_meter_id: {
@@ -477,7 +474,6 @@ export class ReadingService extends GenericBaseService<
       },
     });
 
-    // LANGKAH 4: Hapus detail lama dan buat detail baru yang sudah dihitung
     await tx.summaryDetail.deleteMany({
       where: { summary_id: dailySummary.summary_id },
     });
@@ -488,20 +484,23 @@ export class ReadingService extends GenericBaseService<
       })),
     });
 
-    // Kembalikan summary yang baru dibuat/diperbarui untuk diproses lebih lanjut di luar transaksi
-    return dailySummary;
+    return [dailySummary];
   }
 
   private _normalizeDate(date: Date | string): Date {
-    const localDate = new Date(date);
-    const year = localDate.getFullYear();
-    const month = localDate.getMonth();
-    const day = localDate.getDate();
-    return new Date(Date.UTC(year, month, day));
+    // PERBAIKAN: Logika normalisasi tanggal yang lebih andal dan anti-bug timezone.
+    // 1. Buat string tanggal (YYYY-MM-DD) dari input, pastikan tidak terpengaruh timezone server.
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const dateString = `${year}-${month}-${day}`;
+    // 2. Buat objek Date baru dari string tersebut. Ini akan menghasilkan tanggal pada tengah malam UTC.
+    return new Date(dateString);
   }
 
   /**
-   * BARU: Memetakan hasil string dari model ML ke tipe enum UsageCategory.
+   * Memetakan hasil string dari model ML ke tipe enum UsageCategory.
    */
   private _mapClassificationToEnum(classification: string): UsageCategory {
     const upperCaseClassification = classification.toUpperCase();
@@ -514,7 +513,6 @@ export class ReadingService extends GenericBaseService<
     ) {
       return UsageCategory.BOROS;
     }
-    // Default ke NORMAL jika tidak cocok
     return UsageCategory.NORMAL;
   }
 
@@ -524,100 +522,80 @@ export class ReadingService extends GenericBaseService<
    */
 
   private async _classifyDailyUsage(
-    // PERBAIKAN: Hapus parameter tx yang tidak perlu
     summary: Prisma.DailySummaryGetPayload<{}>,
     meter: MeterWithRelations
   ) {
-    // PERBAIKAN: Ganti logika dummy dengan pemanggilan API ML.
-
-    // 1. Kumpulkan data yang dibutuhkan oleh model klasifikasi.
-    // Hanya berjalan jika tipe energi adalah Listrik.
     if (meter.energy_type.type_name !== 'Electricity') {
-      return;
-    }
-
-    const todayDetails = await this._prisma.summaryDetail.findMany({
-      where: { summary_id: summary.summary_id },
-    });
-
-    const previousDate = new Date(summary.summary_date);
-    previousDate.setUTCDate(previousDate.getUTCDate() - 1);
-
-    const previousSummary = await this._prisma.dailySummary.findFirst({
-      where: { meter_id: meter.meter_id, summary_date: previousDate },
-      include: { details: true },
-    });
-
-    const paxToday = await this._prisma.paxData.findUnique({
-      where: { data_date: summary.summary_date },
-    });
-    const paxYesterday = await this._prisma.paxData.findUnique({
-      where: { data_date: previousDate },
-    });
-
-    // Jika data hari sebelumnya tidak lengkap, kita tidak bisa melakukan klasifikasi.
-    if (!previousSummary || !paxToday || !paxYesterday) {
       console.log(
-        `[Classifier] Data tidak lengkap untuk klasifikasi tanggal ${
-          summary.summary_date.toISOString().split('T')[0]
-        }`
+        `[Classifier] Klasifikasi dilewati untuk tipe energi: ${meter.energy_type.type_name}`
       );
       return;
     }
 
-    const getKwhConsumption = (details: typeof todayDetails) => {
-      const wbp =
-        details.find((d) => d.metric_name === 'Pemakaian WBP')
-          ?.consumption_value ?? new Prisma.Decimal(0);
-      const lwbp =
-        details.find((d) => d.metric_name === 'Pemakaian LWBP')
-          ?.consumption_value ?? new Prisma.Decimal(0);
-      // PERBAIKAN: Sesuai permintaan, gunakan total konsumsi sebelum dikali faktor_kali.
-      return wbp.plus(lwbp).toNumber();
-    };
+    // PERBAIKAN TOTAL: Logika klasifikasi sekarang mengambil data gabungan untuk Kantor & Terminal.
+    const classificationDate = summary.summary_date;
 
-    const kwhToday = getKwhConsumption(todayDetails);
-    const kwhYesterday = getKwhConsumption(previousSummary.details);
+    // 1. Ambil semua data yang dibutuhkan untuk tanggal klasifikasi
+    const [paxData, weatherData, kantorSummary, terminalSummary] =
+      await Promise.all([
+        this._prisma.paxData.findUnique({
+          where: { data_date: classificationDate },
+        }),
+        this._prisma.weatherHistory.findUnique({
+          where: { data_date: classificationDate },
+        }),
+        this._prisma.dailySummary.findFirst({
+          where: {
+            summary_date: classificationDate,
+            meter: { meter_code: 'ELEC-KANTOR-01' },
+          },
+        }),
+        this._prisma.dailySummary.findFirst({
+          where: {
+            summary_date: classificationDate,
+            meter: { meter_code: 'ELEC-TERM-01' },
+          },
+        }),
+      ]);
 
-    // 2. Panggil API ML
+    // 2. Validasi kelengkapan data
+    if (!paxData || !weatherData || !kantorSummary || !terminalSummary) {
+      const missing = [];
+      if (!paxData) missing.push('Data Pax');
+      if (!weatherData) missing.push('Data Cuaca');
+      if (!kantorSummary) missing.push('Summary Kantor');
+      if (!terminalSummary) missing.push('Summary Terminal');
+      console.log(
+        `[Classifier] Data tidak lengkap untuk klasifikasi tanggal ${
+          classificationDate.toISOString().split('T')[0]
+        }. Data yang hilang: ${missing.join(', ')}`
+      );
+      return;
+    }
+
     let classificationResult;
     try {
-      classificationResult = await machineLearningService.classifyDailyUsage({
-        kwh_today: kwhToday,
-        kwh_yesterday: kwhYesterday,
-        pax_today: paxToday.total_pax,
-        pax_yesterday: paxYesterday.total_pax,
+      // 3. Panggil API ML dengan payload yang baru
+      // PERBAIKAN: Tambahkan is_hari_kerja
+      const dayOfWeek = classificationDate.getUTCDay();
+      const isWorkday = dayOfWeek >= 1 && dayOfWeek <= 5 ? 1 : 0;
+
+      classificationResult = await machineLearningService.evaluateDailyUsage({
+        pax: paxData.total_pax,
+        suhu_rata: weatherData.avg_temp.toNumber(),
+        suhu_max: weatherData.max_temp.toNumber(),
+        is_hari_kerja: isWorkday,
+        aktual_kwh_terminal: terminalSummary.total_consumption?.toNumber() ?? 0,
+        aktual_kwh_kantor: kantorSummary.total_consumption?.toNumber() ?? 0,
       });
     } catch (error) {
       console.error('[Classifier] Gagal memanggil ML API:', error);
-      // BARU: Kirim notifikasi ke SuperAdmin jika server ML error
-      // PERUBAHAN: Buat Alert Sistem (meter_id: null) sebagai gantinya.
-      // Ini lebih cocok untuk melacak masalah sistemik.
       const title = 'Error Sistem: Server Machine Learning';
       const description = `Sistem gagal terhubung ke server machine learning saat mencoba melakukan klasifikasi untuk meter ${
-        meter.meter_code
-      } pada tanggal ${summary.summary_date.toISOString().split('T')[0]}. Error: ${
-        error.message
-      }`;
+        classificationDate.toISOString().split('T')[0]
+      }. Error: ${error.message}`;
       await this._prisma.alert.create({ data: { title, description } });
-
-      // BARU: Kirim juga notifikasi ke semua SuperAdmin agar mereka waspada.
-      const superAdmins = await this._prisma.user.findMany({
-        where: {
-          role: { role_name: 'SuperAdmin' },
-          is_active: true,
-        },
-        select: { user_id: true },
-      });
-
-      for (const admin of superAdmins) {
-        await notificationService.create({
-          user_id: admin.user_id,
-          title: 'Error Sistem: Server Machine Learning',
-          message: `Sistem gagal terhubung ke server machine learning. Mohon periksa status server.`,
-        });
-      }
-      return; // Hentikan proses klasifikasi
+      return;
     }
 
     if (!classificationResult) {
@@ -627,61 +605,88 @@ export class ReadingService extends GenericBaseService<
       return;
     }
 
-    const { klasifikasi, input_data } = classificationResult;
+    // 4. Simpan hasil klasifikasi untuk kedua meter
+    const {
+      kinerja_terminal,
+      deviasi_persen_terminal,
+      kinerja_kantor,
+      deviasi_persen_kantor,
+    } = classificationResult;
+    const modelVersion = 'v1.3'; // Sesuaikan dengan versi kontrak API baru
 
-    const usageCategory = this._mapClassificationToEnum(klasifikasi as string);
+    await Promise.all([
+      // Simpan klasifikasi untuk Terminal
+      this._prisma.dailyUsageClassification.upsert({
+        where: { summary_id: terminalSummary.summary_id },
+        update: {
+          classification: this._mapClassificationToEnum(kinerja_terminal),
+          confidence_score: deviasi_persen_terminal,
+          model_version: modelVersion,
+          reasoning: `Deviasi ${deviasi_persen_terminal.toFixed(2)}% dari prediksi normal.`,
+        },
+        create: {
+          summary_id: terminalSummary.summary_id,
+          meter_id: terminalSummary.meter_id,
+          classification_date: classificationDate,
+          classification: this._mapClassificationToEnum(kinerja_terminal),
+          confidence_score: deviasi_persen_terminal,
+          model_version: modelVersion,
+          reasoning: `Deviasi ${deviasi_persen_terminal.toFixed(2)}% dari prediksi normal.`,
+        },
+      }),
+      // Simpan klasifikasi untuk Kantor
+      this._prisma.dailyUsageClassification.upsert({
+        where: { summary_id: kantorSummary.summary_id },
+        update: {
+          classification: this._mapClassificationToEnum(kinerja_kantor),
+          confidence_score: deviasi_persen_kantor,
+          model_version: modelVersion,
+          reasoning: `Deviasi ${deviasi_persen_kantor.toFixed(2)}% dari prediksi normal.`,
+        },
+        create: {
+          summary_id: kantorSummary.summary_id,
+          meter_id: kantorSummary.meter_id,
+          classification_date: classificationDate,
+          classification: this._mapClassificationToEnum(kinerja_kantor),
+          confidence_score: deviasi_persen_kantor,
+          model_version: modelVersion,
+          reasoning: `Deviasi ${deviasi_persen_kantor.toFixed(2)}% dari prediksi normal.`,
+        },
+      }),
+    ]);
 
-    // Buat atau perbarui data klasifikasi
-    await this._prisma.dailyUsageClassification.upsert({
-      where: { summary_id: summary.summary_id },
-      update: {
-        classification: usageCategory,
-        model_version: '1.1.0-prod', // Ganti dengan versi model Anda
-        confidence_score: 0.95, // Ganti dengan skor dari model jika ada
-        reasoning: `Klasifikasi berdasarkan perubahan kWh: ${input_data.perubahan_listrik_kwh} dan Pax: ${input_data.perubahan_pax}`,
-      },
-      create: {
-        summary_id: summary.summary_id,
-        meter_id: meter.meter_id,
-        classification_date: summary.summary_date,
-        classification: usageCategory,
-        model_version: '1.1.0-prod',
-        confidence_score: 0.95,
-        reasoning: `Klasifikasi berdasarkan perubahan kWh: ${input_data.perubahan_listrik_kwh} dan Pax: ${input_data.perubahan_pax}`,
-      },
-    });
+    console.log(
+      `[Classifier] Klasifikasi untuk ${classificationDate.toISOString().split('T')[0]} berhasil disimpan.`
+    );
 
-    // 3. Jika hasilnya "BOROS", buat alert dan kirim notifikasi.
-    // PERUBAHAN: Membuat AnalyticsInsight (Alert) bukan Notification.
-    if (usageCategory === UsageCategory.BOROS) {
+    // 5. Buat insight jika ada pemborosan
+    if (
+      this._mapClassificationToEnum(kinerja_terminal) === UsageCategory.BOROS
+    ) {
       const title = 'Peringatan: Terdeteksi Pemakaian Boros';
-      const message = `Pemakaian listrik untuk meteran ${
-        meter.meter_code
-      } pada tanggal ${summary.summary_date.toLocaleDateString()} diklasifikasikan sebagai BOROS.`;
+      const message = `Pemakaian listrik untuk meteran ${'ELEC-TERM-01'} pada tanggal ${classificationDate.toLocaleDateString()} diklasifikasikan sebagai BOROS.`;
 
-      // Buat 'AnalyticsInsight'
       await this._prisma.analyticsInsight.create({
         data: {
           title,
-          description: message, // PERBAIKAN: Menggunakan message yang sudah dibuat
+          description: message,
           severity: InsightSeverity.HIGH,
-          insight_date: summary.summary_date,
-          meter_id: meter.meter_id,
-          source_data_ref: { summaryId: summary.summary_id },
+          insight_date: classificationDate,
+          meter_id: terminalSummary.meter_id,
+          source_data_ref: { summaryId: terminalSummary.summary_id },
         },
       });
     }
   }
 
   /**
-   * BARU: Memeriksa penggunaan harian terhadap target efisiensi.
+   * Memeriksa penggunaan harian terhadap target efisiensi.
    * Jika penggunaan melebihi target, kirim notifikasi ke admin.
    */
   private async _checkUsageAgainstTargetAndNotify(
     summary: Prisma.DailySummaryGetPayload<{}>,
     meter: MeterWithRelations
   ) {
-    // 1. Ambil target efisiensi untuk meter dan tanggal ini
     const target = await this._prisma.efficiencyTarget.findFirst({
       where: {
         meter_id: meter.meter_id,
@@ -690,12 +695,10 @@ export class ReadingService extends GenericBaseService<
       },
     });
 
-    // Jika tidak ada target untuk hari ini, hentikan proses.
     if (!target || target.target_value.isZero()) {
       return;
     }
 
-    // 2. Ambil detail summary yang baru saja dibuat untuk mendapatkan total konsumsi
     const summaryDetails = await this._prisma.summaryDetail.findMany({
       where: { summary_id: summary.summary_id },
     });
@@ -704,7 +707,6 @@ export class ReadingService extends GenericBaseService<
       return;
     }
 
-    // 3. Hitung total konsumsi
     let totalConsumption: Prisma.Decimal;
     if (meter.energy_type.type_name === 'Electricity') {
       const wbp =
@@ -718,14 +720,10 @@ export class ReadingService extends GenericBaseService<
       totalConsumption = summaryDetails[0].consumption_value;
     }
 
-    // 4. Bandingkan konsumsi dengan target
-    // PERUBAHAN: Membuat AnalyticsInsight (Alert) jika target terlampaui.
     if (totalConsumption.greaterThan(target.target_value)) {
-      // 5. Hitung persentase kelebihan
       const excess = totalConsumption.minus(target.target_value);
       const percentage = excess.div(target.target_value).times(100).toFixed(2);
 
-      // 6. Kirim notifikasi ke semua admin & superadmin
       const admins = await this._prisma.user.findMany({
         where: {
           role: { role_name: { in: [RoleName.Admin, RoleName.SuperAdmin] } },
@@ -739,7 +737,7 @@ export class ReadingService extends GenericBaseService<
       await this._prisma.analyticsInsight.create({
         data: {
           title,
-          description: message, // PERBAIKAN: Menggunakan message yang sudah dibuat
+          description: message,
           severity: InsightSeverity.MEDIUM,
           insight_date: summary.summary_date,
           meter_id: meter.meter_id,
@@ -764,17 +762,14 @@ export class ReadingService extends GenericBaseService<
     Omit<Prisma.SummaryDetailCreateInput, 'summary' | 'summary_id'>[]
   > {
     const activePriceScheme = await this._getLatestPriceScheme(
-      // PERBAIKAN: Nama variabel lebih jelas
       tx,
-      meter.tariff_group, // PERBAIKAN: Kirim seluruh objek tariff_group yang sudah di-load
+      meter.tariff_group,
       currentSession.reading_date
     );
     const summaryDetails: Omit<
       Prisma.SummaryDetailCreateInput,
       'summary' | 'summary_id'
     >[] = [];
-
-    // --- LOGIKA UTAMA: Pisahkan berdasarkan jenis energi ---
 
     if (meter.energy_type.type_name === 'Electricity') {
       return this._calculateElectricitySummary(
@@ -796,22 +791,87 @@ export class ReadingService extends GenericBaseService<
       );
     }
 
-    if (meter.energy_type.type_name === 'Fuel') {
-      return this._calculateFuelSummary(
-        tx,
-        meter,
-        currentSession,
-        previousSession,
-        activePriceScheme
-      );
-    }
-
     return summaryDetails;
   }
 
-  // =============================================
-  // KALKULATOR SPESIFIK PER JENIS ENERGI
-  // =============================================
+  /**
+   * Logika kalkulasi khusus untuk BBM yang diinput secara periodik (misal: bulanan).
+   * Fungsi ini akan mendistribusikan total konsumsi ke dalam ringkasan harian.
+   */
+  private async _calculateAndDistributeFuelSummary(
+    tx: Prisma.TransactionClient,
+    meter: MeterWithRelations,
+    currentSession: SessionWithDetails,
+    previousSession: SessionWithDetails | null
+  ): Promise<Prisma.DailySummaryGetPayload<{}>[]> {
+    const priceScheme = await this._getLatestPriceScheme(
+      tx,
+      meter.tariff_group_id,
+      currentSession.reading_date
+    );
+
+    if (!previousSession) {
+      console.log(
+        `[ReadingService] First fuel entry for meter ${meter.meter_code}. Creating initial summary with 0 consumption.`
+      );
+      const initialSummaryDetails = await this._calculateFuelSummary(
+        tx,
+        meter,
+        currentSession,
+        null,
+        priceScheme
+      );
+      // PERBAIKAN: Gunakan _createOrUpdateDistributedSummary yang sudah diperbaiki
+      const summary = await this._createOrUpdateDistributedSummary(
+        tx,
+        meter,
+        currentSession.reading_date,
+        initialSummaryDetails
+      );
+      return [summary];
+    }
+
+    // Hitung total konsumsi untuk periode ini
+    const summaryDetails = await this._calculateFuelSummary(
+      tx,
+      meter,
+      currentSession,
+      previousSession,
+      priceScheme
+    );
+
+    if (summaryDetails.length === 0) {
+      return [];
+    }
+
+    // PERBAIKAN: Buat SATU DailySummary pada tanggal pembacaan saat ini
+    // yang berisi TOTAL konsumsi selama periode tersebut.
+    const summary = await this._createSingleSummaryFromDetails(
+      tx,
+      meter.meter_id,
+      currentSession.reading_date,
+      summaryDetails
+    );
+
+    // PERBAIKAN: Simpan detail kalkulasi (termasuk remaining_stock) ke SummaryDetail.
+    // Ini adalah langkah yang hilang sebelumnya.
+    if (summary) {
+      await tx.summaryDetail.deleteMany({
+        where: { summary_id: summary.summary_id },
+      });
+      await tx.summaryDetail.createMany({
+        data: summaryDetails.map((detail) => ({
+          ...detail,
+          summary_id: summary.summary_id,
+        })),
+      });
+    }
+
+    console.log(
+      `[ReadingService] Created a single fuel summary for meter ${meter.meter_code} on ${currentSession.reading_date.toISOString().split('T')[0]}.`
+    );
+    return summary ? [summary] : [];
+  }
 
   private async _calculateElectricitySummary(
     tx: Prisma.TransactionClient,
@@ -819,11 +879,9 @@ export class ReadingService extends GenericBaseService<
     currentSession: SessionWithDetails,
     previousSession: SessionWithDetails | null,
     priceScheme: Prisma.PriceSchemeGetPayload<{
-      // PERBAIKAN: Sesuaikan tipe dengan data yang di-include
       include: { rates: { include: { reading_type: true } } };
     }> | null
   ) {
-    // PERBAIKAN: Validasi bahwa skema harga ada. Jika tidak, hentikan operasi.
     if (!priceScheme) {
       throw new Error404(
         `Konfigurasi harga untuk golongan tarif '${
@@ -834,17 +892,18 @@ export class ReadingService extends GenericBaseService<
       );
     }
 
-    // PERBAIKAN: Ambil tipe bacaan WBP dan LWBP dari priceScheme yang sudah di-load, bukan query ulang.
-    const wbpType = priceScheme.rates.find(
-      (r) => r.reading_type.type_name === 'WBP'
-    )?.reading_type;
-    const lwbpType = priceScheme.rates.find(
-      (r) => r.reading_type.type_name === 'LWBP'
-    )?.reading_type;
+    // PERBAIKAN: Ambil tipe bacaan WBP dan LWBP langsung dari DB untuk keandalan.
+    const wbpType = await tx.readingType.findUnique({
+      where: { type_name: 'WBP' },
+    });
+    const lwbpType = await tx.readingType.findUnique({
+      where: { type_name: 'LWBP' },
+    });
 
     if (!wbpType || !lwbpType) {
-      throw new Error404(
-        `Tipe bacaan WBP atau LWBP tidak ditemukan dalam konfigurasi tarif untuk skema '${priceScheme.scheme_name}'.`
+      // Error ini sekarang mengindikasikan masalah pada data master, bukan skema harga.
+      throw new Error500(
+        'Konfigurasi sistem error: Tipe bacaan WBP atau LWBP tidak ditemukan di database.'
       );
     }
 
@@ -862,7 +921,6 @@ export class ReadingService extends GenericBaseService<
       (r) => r.reading_type_id === lwbpType.reading_type_id
     );
 
-    // PERBAIKAN: Validasi bahwa tarif WBP dan LWBP ada dalam skema harga.
     if (!rateWbp || !rateLwbp) {
       throw new Error404(
         `Tarif WBP atau LWBP tidak terdefinisi dalam skema harga '${priceScheme.scheme_name}'.`
@@ -873,14 +931,17 @@ export class ReadingService extends GenericBaseService<
     const HARGA_LWBP = new Prisma.Decimal(rateLwbp.value);
 
     const wbpConsumption = this._calculateSafeConsumption(
+      // PERBAIKAN: Gunakan _calculateSafeConsumption
       getDetailValue(currentSession, wbpType.reading_type_id),
-      getDetailValue(previousSession, wbpType.reading_type_id)
+      getDetailValue(previousSession, wbpType.reading_type_id),
+      meter.rollover_limit
     );
     const lwbpConsumption = this._calculateSafeConsumption(
+      // PERBAIKAN: Gunakan _calculateSafeConsumption
       getDetailValue(currentSession, lwbpType.reading_type_id),
-      getDetailValue(previousSession, lwbpType.reading_type_id)
+      getDetailValue(previousSession, lwbpType.reading_type_id),
+      meter.rollover_limit
     );
-
     const wbpCost = wbpConsumption.times(faktorKali).times(HARGA_WBP);
     const lwbpCost = lwbpConsumption.times(faktorKali).times(HARGA_LWBP);
 
@@ -916,12 +977,11 @@ export class ReadingService extends GenericBaseService<
       },
     ];
 
-    // Tambahkan metrik "Total Pemakaian"
     summaryDetails.push({
       metric_name: 'Total Pemakaian',
       energy_type_id: meter.energy_type_id,
-      current_reading: new Prisma.Decimal(0), // Tidak relevan untuk total
-      previous_reading: new Prisma.Decimal(0), // Tidak relevan untuk total
+      current_reading: new Prisma.Decimal(0),
+      previous_reading: new Prisma.Decimal(0),
       consumption_value: wbpConsumption.plus(lwbpConsumption), // Total konsumsi adalah jumlah WBP dan LWBP sebelum dikali faktor kali.
       consumption_cost: wbpCost.plus(lwbpCost), // Total biaya dari WBP dan LWBP
     });
@@ -938,7 +998,6 @@ export class ReadingService extends GenericBaseService<
       include: { rates: true };
     }> | null
   ) {
-    // PERBAIKAN: Validasi bahwa skema harga ada. Jika tidak, hentikan operasi.
     if (!priceScheme) {
       throw new Error404(
         `Konfigurasi harga untuk golongan tarif '${
@@ -963,7 +1022,6 @@ export class ReadingService extends GenericBaseService<
       (r) => r.reading_type_id === mainType.reading_type_id
     );
 
-    // PERBAIKAN: Validasi bahwa tarif ada dalam skema harga.
     if (!rate) {
       throw new Error404(
         `Tarif untuk '${mainType.type_name}' tidak terdefinisi dalam skema harga '${priceScheme.scheme_name}'.`
@@ -972,7 +1030,8 @@ export class ReadingService extends GenericBaseService<
     const HARGA_SATUAN = new Prisma.Decimal(rate.value);
     const consumption = this._calculateSafeConsumption(
       getDetailValue(currentSession, mainType.reading_type_id),
-      getDetailValue(previousSession, mainType.reading_type_id)
+      getDetailValue(previousSession, mainType.reading_type_id),
+      meter.rollover_limit
     );
 
     return [
@@ -1000,7 +1059,6 @@ export class ReadingService extends GenericBaseService<
       include: { rates: true };
     }> | null
   ) {
-    // PERBAIKAN: Validasi bahwa skema harga ada. Jika tidak, hentikan operasi.
     if (!priceScheme) {
       throw new Error404(
         `Konfigurasi harga untuk golongan tarif '${
@@ -1011,7 +1069,18 @@ export class ReadingService extends GenericBaseService<
       );
     }
 
-    // Asumsi untuk BBM, tipe bacaannya adalah 'Ketinggian'
+    if (
+      !meter.tank_height_cm ||
+      !meter.tank_volume_liters ||
+      meter.tank_height_cm.isZero()
+    ) {
+      throw new Error400(
+        `Konfigurasi tangki (tinggi & volume) untuk meter '${meter.meter_code}' belum diatur atau tidak valid.`
+      );
+    }
+
+    const litersPerCm = meter.tank_volume_liters.div(meter.tank_height_cm);
+
     const mainType = await tx.readingType.findFirst({
       where: { energy_type_id: meter.energy_type_id },
     });
@@ -1026,7 +1095,6 @@ export class ReadingService extends GenericBaseService<
       (r) => r.reading_type_id === mainType.reading_type_id
     );
 
-    // PERBAIKAN: Validasi bahwa tarif ada dalam skema harga.
     if (!rate) {
       throw new Error404(
         `Tarif untuk '${mainType.type_name}' tidak terdefinisi dalam skema harga '${priceScheme.scheme_name}'.`
@@ -1041,29 +1109,213 @@ export class ReadingService extends GenericBaseService<
       getDetailValue(previousSession, mainType.reading_type_id) ??
       new Prisma.Decimal(0);
 
-    // Jika ada penambahan BBM, ketinggian akan naik. Jika pemakaian, ketinggian turun.
-    // Kita asumsikan pembacaan adalah setelah pemakaian, jadi current < previous.
-    // Jika current > previous, berarti ada pengisian, dan konsumsi untuk hari itu 0.
     const heightDifference = previousHeight.minus(currentHeight);
-    const consumptionInLiters = heightDifference.isNegative()
-      ? new Prisma.Decimal(0) // Ada pengisian, konsumsi = 0
-      : heightDifference.times(LITERS_PER_CM);
+    let consumptionInLiters: Prisma.Decimal;
+
+    if (heightDifference.isNegative()) {
+      // Jika ketinggian naik, berarti ada pengisian. Konsumsi dianggap 0.
+      consumptionInLiters = new Prisma.Decimal(0);
+
+      // Selesaikan (resolve) alert "Stok BBM Menipis" yang ada untuk meter ini.
+      const lowFuelAlertTitle = `Peringatan: Stok BBM Menipis`;
+      const alertsToResolve = await tx.alert.findMany({
+        where: {
+          meter_id: meter.meter_id,
+          title: lowFuelAlertTitle,
+          status: 'NEW',
+        },
+      });
+
+      if (alertsToResolve.length > 0) {
+        const alertIds = alertsToResolve.map((a) => a.alert_id);
+        await tx.alert.updateMany({
+          where: {
+            alert_id: { in: alertIds },
+          },
+          data: {
+            status: 'HANDLED',
+            acknowledged_by_user_id: currentSession.user_id,
+          },
+        });
+        console.log(
+          `[ReadingService] Resolved ${alertsToResolve.length} low fuel alerts for meter ${meter.meter_code} due to refill.`
+        );
+      }
+
+      // Kirim notifikasi jika tangki diisi penuh (currentHeight sama dengan tinggi maksimal tangki).
+      if (meter.tank_height_cm && currentHeight.equals(meter.tank_height_cm)) {
+        const admins = await tx.user.findMany({
+          where: {
+            role: { role_name: { in: [RoleName.Admin, RoleName.SuperAdmin] } },
+            is_active: true,
+          },
+          select: { user_id: true },
+        });
+
+        const title = `Info: Pengisian Penuh BBM Terdeteksi`;
+        const message = `Telah terjadi pengisian penuh BBM untuk meter '${
+          meter.meter_code
+        }'. Ketinggian mencapai kapasitas maksimal: ${currentHeight.toFixed(
+          2
+        )} cm.`;
+
+        for (const admin of admins) {
+          await notificationService.create({
+            user_id: admin.user_id,
+            title,
+            message,
+          });
+        }
+        console.log(
+          `[ReadingService] Full fuel refill detected for meter ${meter.meter_code}. Notification sent.`
+        );
+      }
+    } else {
+      consumptionInLiters = heightDifference.times(litersPerCm);
+
+      // Cek apakah level BBM menipis dan kirim notifikasi/alert.
+      // PERBAIKAN: Pindahkan threshold ke variabel yang jelas
+      const LOW_FUEL_THRESHOLD_CM = new Prisma.Decimal(20);
+
+      if (
+        currentHeight.lessThan(LOW_FUEL_THRESHOLD_CM) && // Ketinggian saat ini di bawah batas
+        previousHeight.greaterThanOrEqualTo(LOW_FUEL_THRESHOLD_CM)
+      ) {
+        const title = `Peringatan: Stok BBM Menipis`;
+        const message = `Stok BBM untuk meter '${
+          meter.meter_code
+        }' telah mencapai level rendah (${currentHeight.toFixed(
+          2
+        )} cm). Mohon segera lakukan pengisian ulang.`;
+
+        await alertService.create({
+          title,
+          description: message,
+          meter_id: meter.meter_id,
+        });
+
+        const admins = await tx.user.findMany({
+          where: {
+            role: { role_name: { in: [RoleName.Admin, RoleName.SuperAdmin] } },
+            is_active: true,
+          },
+          select: { user_id: true },
+        });
+
+        for (const admin of admins) {
+          await notificationService.create({
+            user_id: admin.user_id,
+            title,
+            message,
+          });
+        }
+        console.log(
+          `[ReadingService] Low fuel level detected for meter ${meter.meter_code}. Alert sent.`
+        );
+      }
+    }
+
+    // BARU: Hitung sisa stok dalam liter berdasarkan ketinggian saat ini.
+    const remainingStockLiters = currentHeight.times(litersPerCm);
 
     return [
       {
         metric_name: `Pemakaian Harian (${meter.energy_type.unit_of_measurement})`,
         energy_type_id: meter.energy_type_id,
-        current_reading: currentHeight, // Catat ketinggian
-        previous_reading: previousHeight, // Catat ketinggian sebelumnya
+        current_reading: currentHeight,
+        previous_reading: previousHeight,
         consumption_value: consumptionInLiters, // Catat konsumsi dalam liter
         consumption_cost: consumptionInLiters.times(HARGA_SATUAN),
+        // BARU: Sertakan sisa stok dalam hasil kalkulasi
+        remaining_stock: remainingStockLiters,
       },
     ];
   }
 
-  // =============================================
-  // METODE HELPER & CRUD LAINNYA
-  // =============================================
+  /**
+   * Helper untuk membuat atau memperbarui DailySummary dengan data BBM yang didistribusikan.
+   */
+  private async _createOrUpdateDistributedSummary(
+    tx: Prisma.TransactionClient,
+    meter: MeterWithRelations,
+    date: Date, // Tanggal ringkasan
+    summaryDetails: Omit<
+      Prisma.SummaryDetailCreateInput,
+      'summary' | 'summary_id'
+    >[]
+  ): Promise<Prisma.DailySummaryGetPayload<{}>> {
+    const totalConsumption =
+      summaryDetails[0]?.consumption_value ?? new Prisma.Decimal(0);
+    const totalCost =
+      summaryDetails[0]?.consumption_cost ?? new Prisma.Decimal(0);
+
+    const summary = await tx.dailySummary.upsert({
+      where: {
+        summary_date_meter_id: {
+          summary_date: date,
+          meter_id: meter.meter_id,
+        },
+      },
+      update: { total_consumption: totalConsumption, total_cost: totalCost },
+      create: {
+        summary_date: date,
+        meter_id: meter.meter_id,
+        total_consumption: totalConsumption,
+        total_cost: totalCost,
+      },
+    });
+
+    await tx.summaryDetail.deleteMany({
+      where: { summary_id: summary.summary_id },
+    });
+    // PERBAIKAN: Simpan semua detail yang sudah dihitung, termasuk `remaining_stock`.
+    await tx.summaryDetail.createMany({
+      data: summaryDetails.map((detail) => ({
+        ...detail,
+        summary_id: summary.summary_id,
+      })),
+    });
+
+    return summary;
+  }
+
+  /**
+   * Helper untuk membuat satu DailySummary dari array detail kalkulasi.
+   */
+  private async _createSingleSummaryFromDetails(
+    tx: Prisma.TransactionClient,
+    meterId: number,
+    date: Date,
+    details: Omit<Prisma.SummaryDetailCreateInput, 'summary' | 'summary_id'>[]
+  ): Promise<Prisma.DailySummaryGetPayload<{}> | null> {
+    if (details.length === 0) return null;
+
+    const totalCost = details[0].consumption_cost ?? new Prisma.Decimal(0);
+    const totalConsumption =
+      details[0].consumption_value ?? new Prisma.Decimal(0);
+
+    // PERBAIKAN: Gunakan 'upsert' bukan 'create' untuk menghindari error duplikasi
+    // saat kalkulasi ulang dijalankan lebih dari sekali.
+    const summary = await tx.dailySummary.upsert({
+      where: {
+        summary_date_meter_id: {
+          summary_date: date,
+          meter_id: meterId,
+        },
+      },
+      update: {
+        total_cost: totalCost,
+        total_consumption: totalConsumption,
+      },
+      create: {
+        summary_date: date,
+        meter_id: meterId,
+        total_cost: totalCost,
+        total_consumption: totalConsumption,
+      },
+    });
+    return summary;
+  }
 
   private async _getLatestPriceScheme(
     tx: Prisma.TransactionClient,
@@ -1074,14 +1326,10 @@ export class ReadingService extends GenericBaseService<
         }>,
     date: Date
   ) {
-    // PERBAIKAN: Buat fungsi ini lebih fleksibel.
-    // Jika sudah diberi objek tariff_group dengan price_schemes, gunakan itu.
-    // Jika hanya diberi ID, lakukan query seperti biasa.
     if (
       typeof tariffGroupOrId === 'object' &&
       'price_schemes' in tariffGroupOrId
     ) {
-      // Jika objek lengkap diberikan (dari alur recalculate), cari dari data yang ada.
       return (
         tariffGroupOrId.price_schemes
           .filter((ps) => ps.effective_date <= date && ps.is_active)
@@ -1090,7 +1338,6 @@ export class ReadingService extends GenericBaseService<
           )[0] || null
       );
     } else {
-      // Jika hanya ID yang diberikan (dari alur create normal), lakukan query.
       return tx.priceScheme.findFirst({
         where: {
           tariff_group_id: tariffGroupOrId as number,
@@ -1098,7 +1345,6 @@ export class ReadingService extends GenericBaseService<
           is_active: true,
         },
         orderBy: { effective_date: 'desc' },
-        // PERBAIKAN: Include reading_type untuk optimasi di _calculateElectricitySummary
         include: {
           rates: { include: { reading_type: true } },
           taxes: { include: { tax: true } },
@@ -1109,12 +1355,32 @@ export class ReadingService extends GenericBaseService<
 
   private _calculateSafeConsumption(
     currentValue?: Prisma.Decimal,
-    previousValue?: Prisma.Decimal
+    previousValue?: Prisma.Decimal,
+    rolloverLimit?: Prisma.Decimal | null
   ): Prisma.Decimal {
     const current = currentValue ?? new Prisma.Decimal(0);
     const previous = previousValue ?? new Prisma.Decimal(0);
+
     if (current.lessThan(previous)) {
-      return new Prisma.Decimal(0); // Meter direset, anggap konsumsi 0
+      // Jika nilai saat ini lebih kecil, kemungkinan terjadi reset meter (rollover).
+      // Tambahkan kondisi cerdas: rollover hanya valid jika nilai sebelumnya > 90% dari limit
+      // dan nilai saat ini < 10% dari limit.
+      if (
+        rolloverLimit &&
+        !rolloverLimit.isZero() &&
+        previous.greaterThan(rolloverLimit.times(0.9)) &&
+        current.lessThan(rolloverLimit.times(0.1))
+      ) {
+        // Rumus konsumsi saat rollover: (batas_limit - nilai_sebelumnya) + nilai_sekarang
+        const consumptionBeforeReset = rolloverLimit.minus(previous);
+        const consumptionAfterReset = current;
+        return consumptionBeforeReset.plus(consumptionAfterReset);
+      } else {
+        // Jika tidak memenuhi kriteria rollover, ini adalah input yang salah.
+        throw new Error400(
+          `Nilai baru (${current}) tidak boleh lebih kecil dari nilai sebelumnya (${previous}) untuk meteran yang tidak memiliki batas reset (rollover).`
+        );
+      }
     }
     return current.minus(previous);
   }
@@ -1138,8 +1404,6 @@ export class ReadingService extends GenericBaseService<
       throw new Error400(`Meteran dengan ID ${meter_id} sudah dihapus.`);
     return meter;
   }
-
-  // Menghapus validasi < nilai sebelumnya, karena sudah ditangani di kalkulasi
 
   private async _findOrCreateSession(
     tx: Prisma.TransactionClient,
@@ -1282,7 +1546,6 @@ export class ReadingService extends GenericBaseService<
       prisma.readingDetail.findFirst({
         where: {
           reading_type_id: readingTypeId,
-          // MODIFIKASI: Cari data pada tanggal H-1 yang spesifik
           session: { meter_id: meterId, reading_date: previousDate },
         },
         select: {
@@ -1302,30 +1565,25 @@ export class ReadingService extends GenericBaseService<
     query: GetReadingSessionsQuery
   ): Promise<ReadingSessionApiResponse> {
     const { energyTypeName, startDate, endDate, meterId, sortBy, sortOrder } =
-      query; // Tambahkan 'date' di sini
+      query;
 
     return this._handleCrudOperation(async () => {
-      // LANGKAH 1: Membangun klausa 'where' secara dinamis
       const whereClause = this._buildWhereClause(
-        query.date, // Kirim 'date' ke buildWhereClause
+        query.date,
         energyTypeName,
         startDate,
         endDate,
         meterId
       );
 
-      // LANGKAH 2: Membangun klausa 'orderBy' secara dinamis
       const orderByClause = this._buildOrderByClause(sortBy, sortOrder);
 
-      // LANGKAH 3: Melakukan kueri ke basis data dengan klausa yang sudah dibangun
       const readingSessions = await this._prisma.readingSession.findMany({
         where: whereClause,
         include: {
-          // PERBAIKAN: Ambil daily_logbook melalui relasi meter
           meter: {
             include: {
               energy_type: true,
-              // Ambil logbook yang relevan untuk setiap meter
               daily_logbooks: {
                 where: {
                   log_date: whereClause.reading_date, // Filter logbook berdasarkan rentang tanggal yang sama
@@ -1347,7 +1605,7 @@ export class ReadingService extends GenericBaseService<
               },
             },
             orderBy: {
-              reading_type_id: 'asc', // Memastikan detail (WBP/LWBP) selalu dalam urutan yang sama
+              reading_type_id: 'asc',
             },
           },
         },
@@ -1397,13 +1655,12 @@ export class ReadingService extends GenericBaseService<
   }
 
   /**
-   * Metode private untuk membangun objek 'orderBy' Prisma secara dinamis.
+   * Membangun objek 'orderBy' Prisma secara dinamis.
    */
   private _buildOrderByClause(
     sortBy: 'reading_date' | 'created_at' = 'reading_date',
     sortOrder: 'asc' | 'desc' = 'desc'
   ): Prisma.ReadingSessionOrderByWithRelationInput {
-    // Prisma mengharapkan objek di dalam array untuk orderBy
     const orderBy: Prisma.ReadingSessionOrderByWithRelationInput = {};
 
     if (sortBy === 'reading_date') {
@@ -1416,7 +1673,7 @@ export class ReadingService extends GenericBaseService<
   }
 
   /**
-   * BARU: Memeriksa dan menyelesaikan alert "Data Harian Belum Lengkap" untuk meter spesifik
+   * Memeriksa dan menyelesaikan alert "Data Harian Belum Lengkap" untuk meter spesifik
    * setelah data baru diinput.
    * @param meterId - ID dari meter yang datanya baru diinput.
    * @param dateForDb - Tanggal pembacaan.
@@ -1428,7 +1685,6 @@ export class ReadingService extends GenericBaseService<
     const alertTitle = 'Peringatan: Data Harian Belum Lengkap';
     const dateString = dateForDb.toISOString().split('T')[0];
 
-    // 1. Cari alert 'NEW' yang relevan untuk meter dan tanggal ini
     const alert = await this._prisma.alert.findFirst({
       where: {
         meter_id: meterId,
@@ -1441,7 +1697,6 @@ export class ReadingService extends GenericBaseService<
     });
 
     if (!alert) {
-      // Tidak ada alert yang perlu diselesaikan, keluar.
       return;
     }
 
@@ -1449,7 +1704,6 @@ export class ReadingService extends GenericBaseService<
       `[ReadingService] Alert data hilang ditemukan untuk meter ${meterId} pada ${dateString}. Memeriksa ulang kelengkapan...`
     );
 
-    // 2. Periksa kembali kelengkapan data HANYA untuk meter ini.
     const [meter, session, wbpType, lwbpType] = await Promise.all([
       this._prisma.meter.findUnique({
         where: { meter_id: meterId },
@@ -1469,7 +1723,6 @@ export class ReadingService extends GenericBaseService<
     ]);
 
     if (!meter || !session || !wbpType || !lwbpType) {
-      // Data penting tidak ada, tidak bisa melanjutkan.
       return;
     }
 
@@ -1488,7 +1741,6 @@ export class ReadingService extends GenericBaseService<
       isDataComplete = false;
     }
 
-    // 3. Jika data sekarang sudah lengkap, ubah status alert menjadi HANDLED.
     if (isDataComplete) {
       await this._prisma.alert.update({
         where: { alert_id: alert.alert_id },
@@ -1501,4 +1753,4 @@ export class ReadingService extends GenericBaseService<
   }
 }
 
-export const readingService = new ReadingService();
+// export const readingService = new ReadingService();

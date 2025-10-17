@@ -1,5 +1,10 @@
 import { MeterStatus } from '../generated/prisma/index.js';
-import { optionalString, positiveInt, requiredString } from './schmeHelper.js';
+import {
+  optionalString,
+  positiveInt,
+  positiveNumber,
+  requiredString,
+} from './schmeHelper.js';
 import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
 import z from 'zod';
 
@@ -13,6 +18,9 @@ const meterBodySchema = z.object({
   category_id: positiveInt('category Id'),
   status: z.enum(MeterStatus).default(MeterStatus.Active),
   tariff_group_id: positiveInt('tariff group Id'),
+  tank_height_cm: positiveNumber('Tinggi Tangki').optional().nullable(),
+  tank_volume_liters: positiveNumber('Volume Tangki').optional().nullable(),
+  rollover_limit: positiveNumber('Batas Rollover').optional().nullable(),
 });
 
 export const meterSchema = new CrudSchemaBuilder({

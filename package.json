@@ -11,7 +11,8 @@
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
     "test": "jest",
-    "postinstall": "npx prisma generate"
+    "postinstall": "npx prisma generate",
+    "import:csv": "tsx prisma/import.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts",
@@ -29,6 +30,7 @@
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
+    "csv-parser": "^3.2.0",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",

@@ -2,278 +2,24 @@ import {
   PrismaClient,
   Prisma,
   RoleName,
-  UsageCategory,
 } from '../src/generated/prisma/index.js';
 import bcrypt from 'bcrypt';
+import { runImport } from './import.js';
+import { differenceInDays } from 'date-fns';
 
 const prisma = new PrismaClient();
-
-// =============================================
-// KONFIGURASI SEEDER
-// =============================================
-const DAYS_TO_GENERATE = 30; // Jumlah hari ke belakang untuk generate data
-const STARTING_WBP = 50000; // Nilai awal untuk WBP
-const STARTING_LWBP = 80000; // Nilai awal untuk LWBP
-const STARTING_WATER = 15000; // Nilai awal untuk Air
-const STARTING_FUEL_HEIGHT = 180; // Ketinggian awal BBM (cm)
 
 // =============================================
 // REPLIKASI KONSTANTA & LOGIKA DARI READING.SERVICE
 // =============================================
 
 const DEFAULT_PRICES = {
-  ELECTRICITY_WBP: new Prisma.Decimal(1700),
-  ELECTRICITY_LWBP: new Prisma.Decimal(1450),
+  ELECTRICITY_WBP: new Prisma.Decimal(1553.67),
+  ELECTRICITY_LWBP: new Prisma.Decimal(1035.78),
   ELECTRICITY_GENERAL: new Prisma.Decimal(1650),
-  WATER: new Prisma.Decimal(15000),
-  FUEL: new Prisma.Decimal(16500),
+  WATER: new Prisma.Decimal(0),
+  FUEL: new Prisma.Decimal(6800),
 };
-
-const TANK_HEIGHT_CM = new Prisma.Decimal(200);
-const TANK_VOLUME_LITERS = new Prisma.Decimal(5000);
-const LITERS_PER_CM = TANK_VOLUME_LITERS.div(TANK_HEIGHT_CM);
-
-// Helper untuk mendapatkan nilai acak
-const getRandomIncrement = (min: number, max: number) =>
-  Math.random() * (max - min) + min;
-
-/**
- * Normalisasi tanggal ke UTC tengah malam untuk konsistensi DB.
- */
-function normalizeDate(date: Date): Date {
-  const localDate = new Date(date);
-  const year = localDate.getFullYear();
-  const month = localDate.getMonth();
-  const day = localDate.getDate();
-  return new Date(Date.UTC(year, month, day));
-}
-
-/**
- * Menghitung konsumsi dengan aman, menangani reset meter.
- */
-function calculateSafeConsumption(
-  currentValue?: Prisma.Decimal | number | null,
-  previousValue?: Prisma.Decimal | number | null
-): Prisma.Decimal {
-  const current = new Prisma.Decimal(currentValue ?? 0);
-  const previous = new Prisma.Decimal(previousValue ?? 0);
-  if (current.lessThan(previous)) {
-    return new Prisma.Decimal(0);
-  }
-  return current.minus(previous);
-}
-
-/**
- * Mencari skema harga yang aktif pada tanggal tertentu.
- */
-async function getLatestPriceScheme(
-  tx: Prisma.TransactionClient,
-  tariffGroupId: number,
-  date: Date
-) {
-  return tx.priceScheme.findFirst({
-    where: {
-      tariff_group_id: tariffGroupId,
-      effective_date: { lte: date },
-      is_active: true,
-    },
-    orderBy: { effective_date: 'desc' },
-    include: { rates: true },
-  });
-}
-
-/**
- * Replikasi logika kalkulasi dan pembuatan DailySummary & SummaryDetail.
- */
-async function createOrUpdateDailySummary(
-  tx: Prisma.TransactionClient,
-  meterId: number,
-  dateForDb: Date
-) {
-  const meter = await tx.meter.findUniqueOrThrow({
-    where: { meter_id: meterId },
-    include: { energy_type: true, category: true, tariff_group: true },
-  });
-
-  const currentSession = await tx.readingSession.findUnique({
-    where: {
-      unique_meter_reading_per_day: {
-        reading_date: dateForDb,
-        meter_id: meterId,
-      },
-    },
-    include: { details: { include: { reading_type: true } } },
-  });
-
-  if (!currentSession) return;
-
-  const previousSession = await tx.readingSession.findFirst({
-    where: { meter_id: meterId, reading_date: { lt: dateForDb } },
-    orderBy: { reading_date: 'desc' },
-    include: { details: { include: { reading_type: true } } },
-  });
-
-  const priceScheme = await getLatestPriceScheme(
-    tx,
-    meter.tariff_group_id,
-    dateForDb
-  );
-
-  let summaryDetailsToCreate: Omit<
-    Prisma.SummaryDetailCreateManyInput,
-    'summary_id'
-  >[] = [];
-  const getDetailValue = (
-    session: typeof currentSession | typeof previousSession,
-    typeName: string
-  ) =>
-    session?.details.find((d) => d.reading_type.type_name === typeName)?.value;
-
-  if (meter.energy_type.type_name === 'Electricity') {
-    const wbpConsumption = calculateSafeConsumption(
-      getDetailValue(currentSession, 'WBP'),
-      getDetailValue(previousSession, 'WBP')
-    );
-    const lwbpConsumption = calculateSafeConsumption(
-      getDetailValue(currentSession, 'LWBP'),
-      getDetailValue(previousSession, 'LWBP')
-    );
-    const wbpType = currentSession.details.find(
-      (d) => d.reading_type.type_name === 'WBP'
-    )?.reading_type;
-    const lwbpType = currentSession.details.find(
-      (d) => d.reading_type.type_name === 'LWBP'
-    )?.reading_type;
-    const HARGA_WBP = new Prisma.Decimal(
-      priceScheme?.rates.find(
-        (r) => r.reading_type_id === wbpType?.reading_type_id
-      )?.value ?? DEFAULT_PRICES.ELECTRICITY_WBP
-    );
-    const HARGA_LWBP = new Prisma.Decimal(
-      priceScheme?.rates.find(
-        (r) => r.reading_type_id === lwbpType?.reading_type_id
-      )?.value ?? DEFAULT_PRICES.ELECTRICITY_LWBP
-    );
-
-    summaryDetailsToCreate.push(
-      {
-        metric_name: 'Pemakaian WBP',
-        energy_type_id: meter.energy_type_id,
-        current_reading: getDetailValue(currentSession, 'WBP') ?? 0,
-        previous_reading: getDetailValue(previousSession, 'WBP') ?? 0,
-        consumption_value: wbpConsumption,
-        consumption_cost: wbpConsumption.times(HARGA_WBP),
-        wbp_value: wbpConsumption,
-      },
-      {
-        metric_name: 'Pemakaian LWBP',
-        energy_type_id: meter.energy_type_id,
-        current_reading: getDetailValue(currentSession, 'LWBP') ?? 0,
-        previous_reading: getDetailValue(previousSession, 'LWBP') ?? 0,
-        consumption_value: lwbpConsumption,
-        consumption_cost: lwbpConsumption.times(HARGA_LWBP),
-        lwbp_value: lwbpConsumption,
-      }
-    );
-  } else if (meter.energy_type.type_name === 'Water') {
-    const consumption = calculateSafeConsumption(
-      getDetailValue(currentSession, 'Flow'),
-      getDetailValue(previousSession, 'Flow')
-    );
-    const flowType = currentSession.details.find(
-      (d) => d.reading_type.type_name === 'Flow'
-    )?.reading_type;
-    const HARGA_AIR = new Prisma.Decimal(
-      priceScheme?.rates.find(
-        (r) => r.reading_type_id === flowType?.reading_type_id
-      )?.value ?? DEFAULT_PRICES.WATER
-    );
-    summaryDetailsToCreate.push({
-      metric_name: `Pemakaian Harian (m³)`,
-      energy_type_id: meter.energy_type_id,
-      current_reading: getDetailValue(currentSession, 'Flow') ?? 0,
-      previous_reading: getDetailValue(previousSession, 'Flow') ?? 0,
-      consumption_value: consumption,
-      consumption_cost: consumption.times(HARGA_AIR),
-    });
-  } else if (meter.energy_type.type_name === 'Fuel') {
-    const currentHeight = new Prisma.Decimal(
-      getDetailValue(currentSession, 'Fuel Level') ?? 0
-    );
-    const previousHeight = new Prisma.Decimal(
-      getDetailValue(previousSession, 'Fuel Level') ?? 0
-    );
-    const heightDifference = previousHeight.minus(currentHeight);
-    const consumptionInLiters = heightDifference.isNegative()
-      ? new Prisma.Decimal(0)
-      : heightDifference.times(LITERS_PER_CM);
-    const fuelType = currentSession.details.find(
-      (d) => d.reading_type.type_name === 'Fuel Level'
-    )?.reading_type;
-    const HARGA_BBM = new Prisma.Decimal(
-      priceScheme?.rates.find(
-        (r) => r.reading_type_id === fuelType?.reading_type_id
-      )?.value ?? DEFAULT_PRICES.FUEL
-    );
-    summaryDetailsToCreate.push({
-      metric_name: `Pemakaian Harian (Liter)`,
-      energy_type_id: meter.energy_type_id,
-      current_reading: currentHeight,
-      previous_reading: previousHeight,
-      consumption_value: consumptionInLiters,
-      consumption_cost: consumptionInLiters.times(HARGA_BBM),
-    });
-  }
-
-  const totalCost = summaryDetailsToCreate.reduce(
-    (sum, detail) => sum.plus(detail.consumption_cost),
-    new Prisma.Decimal(0)
-  );
-
-  const dailySummary = await tx.dailySummary.upsert({
-    where: {
-      summary_date_meter_id: { summary_date: dateForDb, meter_id: meterId },
-    },
-    update: { total_cost: totalCost },
-    create: {
-      summary_date: dateForDb,
-      meter_id: meterId,
-      total_cost: totalCost,
-    },
-  });
-
-  await tx.summaryDetail.deleteMany({
-    where: { summary_id: dailySummary.summary_id },
-  });
-  await tx.summaryDetail.createMany({
-    data: summaryDetailsToCreate.map((detail) => ({
-      ...detail,
-      summary_id: dailySummary.summary_id,
-    })),
-  });
-
-  const classifications = [
-    UsageCategory.HEMAT,
-    UsageCategory.NORMAL,
-    UsageCategory.BOROS,
-  ];
-  const randomClassification =
-    classifications[Math.floor(Math.random() * classifications.length)];
-  await tx.dailyUsageClassification.upsert({
-    where: { summary_id: dailySummary.summary_id },
-    update: { classification: randomClassification },
-    create: {
-      summary_id: dailySummary.summary_id,
-      meter_id: meter.meter_id,
-      classification_date: dailySummary.summary_date,
-      classification: randomClassification,
-      model_version: '1.1.0-dummy',
-      confidence_score: getRandomIncrement(0.85, 0.98),
-      reasoning:
-        'Klasifikasi berdasarkan aturan dummy untuk seeding data historis.',
-    },
-  });
-}
 
 /**
  * FUNGSI UTAMA SEEDER
@@ -286,7 +32,10 @@ async function main() {
   await prisma.$transaction([
     prisma.dailyUsageClassification.deleteMany({}),
     prisma.summaryDetail.deleteMany({}),
+    prisma.efficiencyTarget.deleteMany({}),
     prisma.dailySummary.deleteMany({}),
+    // PERBAIKAN: Hapus DailyLogbook sebelum Meter
+    prisma.dailyLogbook.deleteMany({}),
     prisma.readingDetail.deleteMany({}),
     prisma.readingSession.deleteMany({}),
     // Hapus juga data master yang akan dibuat ulang untuk memastikan kebersihan
@@ -299,8 +48,10 @@ async function main() {
     prisma.readingType.deleteMany({}),
     prisma.role.deleteMany({}),
     prisma.energyType.deleteMany({}),
+    prisma.paxData.deleteMany({}), // Hapus juga data Pax
     prisma.tax.deleteMany({}),
     prisma.tariffGroup.deleteMany({}),
+    prisma.annualBudget.deleteMany({}), // PERBAIKAN: Hapus data anggaran lama
   ]);
   console.log('✅ Previous data cleaned.');
 
@@ -373,13 +124,17 @@ async function main() {
     data: [
       { name: 'Listrik Terminal' },
       { name: 'Listrik Perkantoran' },
-      { name: 'Air Utama' },
-      { name: 'Fuel Genset' },
+      { name: 'Air Kantor' },
+      { name: 'Air Terminal' },
+      // PERBAIKAN: Kategori BBM yang lebih spesifik
+      { name: 'BBM Ground Tank' },
+      { name: 'BBM Daily Tank' },
     ],
   });
   const catTerminal = categories.find((c) => c.name === 'Listrik Terminal')!;
-  const catWater = categories.find((c) => c.name === 'Air Utama')!;
-  const catFuel = categories.find((c) => c.name === 'Fuel Genset')!;
+  const catWaterKantor = categories.find((c) => c.name === 'Air Kantor')!;
+  const catWaterTerminal = categories.find((c) => c.name === 'Air Terminal')!;
+  const catGroundTank = categories.find((c) => c.name === 'BBM Ground Tank')!;
 
   // LANGKAH 3: BUAT HASH PASSWORD
   const password = await bcrypt.hash('password123', 10);
@@ -416,20 +171,51 @@ async function main() {
       tariff_group_id: tariffB3.tariff_group_id,
     },
   });
-  const waterMeter = await prisma.meter.create({
+  // BARU: Buat meteran untuk Kantor
+  const kantorMeter = await prisma.meter.create({
     data: {
-      meter_code: 'WATER-MAIN-01',
+      meter_code: 'ELEC-KANTOR-01',
+      energy_type_id: electricityType.energy_type_id,
+      category_id: categories.find((c) => c.name === 'Listrik Perkantoran')!
+        .category_id,
+      tariff_group_id: tariffB2.tariff_group_id, // Asumsi golongan tarif berbeda
+    },
+  });
+  const waterMeterKantor = await prisma.meter.create({
+    data: {
+      meter_code: 'WATER-KANTOR-01',
       energy_type_id: waterType.energy_type_id,
-      category_id: catWater.category_id,
+      category_id: catWaterKantor.category_id,
+      tariff_group_id: tariffB2.tariff_group_id,
+    },
+  });
+  const waterMeterTerminal = await prisma.meter.create({
+    data: {
+      meter_code: 'WATER-TERM-01',
+      energy_type_id: waterType.energy_type_id,
+      category_id: catWaterTerminal.category_id,
       tariff_group_id: tariffB2.tariff_group_id,
     },
   });
   const fuelMeter = await prisma.meter.create({
     data: {
-      meter_code: 'FUEL-GENSET-01',
+      meter_code: 'FUEL-GT-1700', // Sesuai data: Ground Tank 1700 kVA
       energy_type_id: fuelType.energy_type_id,
-      category_id: catFuel.category_id,
+      category_id: catGroundTank.category_id,
       tariff_group_id: tariffB2.tariff_group_id,
+      // PERBAIKAN: Sesuaikan dengan data spesifik tangki 1700 kVA
+      tank_height_cm: 231,
+      tank_volume_liters: 20000,
+    },
+  });
+  const fuelMeter800 = await prisma.meter.create({
+    data: {
+      meter_code: 'FUEL-GT-800', // Ground Tank 800 kVA
+      energy_type_id: fuelType.energy_type_id,
+      category_id: catGroundTank.category_id,
+      tariff_group_id: tariffB2.tariff_group_id,
+      tank_height_cm: 174,
+      tank_volume_liters: 10000,
     },
   });
 
@@ -441,125 +227,200 @@ async function main() {
       set_by_user_id: superAdminUser.user_id,
       rates: {
         create: [
-          { reading_type_id: wbpType.reading_type_id, value: 1700 },
-          { reading_type_id: lwbpType.reading_type_id, value: 1450 },
+          { reading_type_id: wbpType.reading_type_id, value: 1553.67 },
+          { reading_type_id: lwbpType.reading_type_id, value: 1035.78 },
+        ],
+      },
+    },
+  });
+  // BARU: Tambahkan skema harga untuk golongan tarif B2/TR
+  await prisma.priceScheme.create({
+    data: {
+      scheme_name: 'Tarif Dasar B2/TR 2024',
+      effective_date: new Date('2024-01-01T00:00:00.000Z'),
+      tariff_group_id: tariffB2.tariff_group_id,
+      set_by_user_id: superAdminUser.user_id,
+      rates: {
+        create: [
+          // Gunakan harga yang sama atau sesuaikan jika perlu
+          { reading_type_id: wbpType.reading_type_id, value: 1553.67 },
+          { reading_type_id: lwbpType.reading_type_id, value: 1035.78 },
+          // PERBAIKAN: Tambahkan tarif untuk BBM (Fuel Level)
+          { reading_type_id: fuelLevelType.reading_type_id, value: 6800 },
         ],
       },
     },
   });
   console.log('✅ Master data created.');
 
-  // LANGKAH 6: MULAI SEEDING DATA HISTORIS
-  console.log('🔄 Starting historical data generation...');
-  let lastReadings = {
-    [elecMeter.meter_id]: { wbp: STARTING_WBP, lwbp: STARTING_LWBP },
-    [waterMeter.meter_id]: { flow: STARTING_WATER },
-    [fuelMeter.meter_id]: { level: STARTING_FUEL_HEIGHT },
-  };
-
-  // 3. Loop untuk setiap hari ke belakang
-  for (let i = DAYS_TO_GENERATE; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    const dateForDb = normalizeDate(date);
-
-    console.log(
-      `\n🔄 Generating data for ${dateForDb.toISOString().split('T')[0]}...`
-    );
-
-    // --- Generate data untuk Meter Listrik ---
-    const wbpIncrement = getRandomIncrement(50, 150);
-    const lwbpIncrement = getRandomIncrement(100, 300);
-    lastReadings[elecMeter.meter_id].wbp += wbpIncrement;
-    lastReadings[elecMeter.meter_id].lwbp += lwbpIncrement;
-
-    await prisma.$transaction(async (tx) => {
-      await tx.readingSession.create({
-        data: {
-          meter_id: elecMeter.meter_id,
-          user_id: technician.user_id,
-          reading_date: dateForDb,
-          details: {
-            create: [
-              {
-                reading_type_id: wbpType.reading_type_id,
-                value: lastReadings[elecMeter.meter_id].wbp,
-              },
-              {
-                reading_type_id: lwbpType.reading_type_id,
-                value: lastReadings[elecMeter.meter_id].lwbp,
-              },
-            ],
-          },
+  // LANGKAH 5B: BUAT DATA ANGGARAN & TARGET EFISIENSI
+  console.log('💰 Creating budget and efficiency target data...');
+  const currentYear = new Date().getFullYear();
+  // PERBAIKAN: Gunakan `create` untuk menyertakan alokasi bersarang.
+  await prisma.annualBudget.create({
+    data: {
+      period_start: new Date(Date.UTC(currentYear, 0, 1)), // 1 Jan
+      period_end: new Date(Date.UTC(currentYear, 11, 31)), // 31 Des
+      energy_type_id: electricityType.energy_type_id,
+      total_budget: 4_151_357_000,
+      efficiency_tag: 0.95,
+      allocations: {
+        createMany: {
+          data: [
+            // Contoh alokasi: 70% ke meter Terminal, 30% ke meter Kantor
+            { meter_id: elecMeter.meter_id, weight: 0.7 },
+            { meter_id: kantorMeter.meter_id, weight: 0.3 },
+          ],
         },
-      });
-      await createOrUpdateDailySummary(tx, elecMeter.meter_id, dateForDb);
-    });
-    console.log(`   ✅ Data for ${elecMeter.meter_code} created.`);
+      },
+    },
+  });
 
-    // --- Generate data untuk Meter Air ---
-    const waterIncrement = getRandomIncrement(10, 25);
-    lastReadings[waterMeter.meter_id].flow += waterIncrement;
+  // Buat target awal untuk meteran listrik
+  const todayForTarget = new Date();
+  await prisma.efficiencyTarget.create({
+    data: {
+      meter_id: elecMeter.meter_id,
+      kpi_name: 'Target Awal kWh Harian',
+      target_value: 850, // Contoh target awal 850 kWh per hari
+      target_cost: 1_200_000, // Contoh target biaya
+      period_start: new Date(Date.UTC(todayForTarget.getUTCFullYear(), 0, 1)), // Dari awal tahun
+      period_end: new Date(Date.UTC(todayForTarget.getUTCFullYear(), 11, 31)), // Sampai akhir tahun
+      set_by_user_id: superAdminUser.user_id,
+    },
+  });
+  console.log('✅ Budget and target data created.');
 
+  // LANGKAH 6: BUAT DATA PEMBACAAN BBM HISTORIS
+  console.log('⛽ Seeding historical fuel reading data...');
+  const historicalFuelReadings = [
+    // Data untuk 29 Juli 2025
+    {
+      meterId: fuelMeter.meter_id, // 1700 kVA
+      date: new Date('2025-07-29T00:00:00.000Z'),
+      value: 64.0,
+    },
+    {
+      meterId: fuelMeter800.meter_id, // 800 kVA
+      date: new Date('2025-07-29T00:00:00.000Z'),
+      value: 10.0,
+    },
+    // Data untuk 29 Agustus 2025
+    {
+      meterId: fuelMeter.meter_id, // 1700 kVA
+      date: new Date('2025-08-29T00:00:00.000Z'),
+      value: 62.5,
+    },
+    {
+      meterId: fuelMeter800.meter_id, // 800 kVA
+      date: new Date('2025-08-29T00:00:00.000Z'),
+      value: 10.0,
+    },
+    // Data untuk 29 September 2025
+    {
+      meterId: fuelMeter.meter_id, // 1700 kVA
+      date: new Date('2025-09-29T00:00:00.000Z'),
+      value: 59.7,
+    },
+    {
+      meterId: fuelMeter800.meter_id, // 800 kVA
+      date: new Date('2025-09-29T00:00:00.000Z'),
+      value: 9.0,
+    },
+  ];
+
+  // PERBAIKAN: Urutkan data berdasarkan tanggal untuk memastikan kalkulasi berurutan
+  historicalFuelReadings.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  // Map untuk melacak pembacaan terakhir untuk setiap meter
+  const lastReadings = new Map<number, { date: Date; value: number }>();
+  const fuelPrice = DEFAULT_PRICES.FUEL;
+
+  for (const reading of historicalFuelReadings) {
     await prisma.$transaction(async (tx) => {
-      await tx.readingSession.create({
-        data: {
-          meter_id: waterMeter.meter_id,
-          user_id: technician.user_id,
-          reading_date: dateForDb,
-          details: {
-            create: [
-              {
-                reading_type_id: flowType.reading_type_id,
-                value: lastReadings[waterMeter.meter_id].flow,
-              },
-            ],
-          },
-        },
-      });
-      await createOrUpdateDailySummary(tx, waterMeter.meter_id, dateForDb);
-    });
-    console.log(`   ✅ Data for ${waterMeter.meter_code} created.`);
-
-    // --- Generate data untuk Meter BBM ---
-    const fuelDecrement = getRandomIncrement(2, 5); // Pemakaian mengurangi ketinggian
-    lastReadings[fuelMeter.meter_id].level -= fuelDecrement;
-    if (lastReadings[fuelMeter.meter_id].level < 20) {
-      // Jika mau habis, isi ulang
-      console.log(`     refueling ${fuelMeter.meter_code}...`);
-      lastReadings[fuelMeter.meter_id].level = STARTING_FUEL_HEIGHT;
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.readingSession.create({
-        data: {
-          meter_id: fuelMeter.meter_id,
-          user_id: technician.user_id,
-          reading_date: dateForDb,
-          details: {
-            create: [
-              {
+      try {
+        // 1. Buat ReadingSession untuk data mentah (cm)
+        await tx.readingSession.create({
+          data: {
+            meter_id: reading.meterId,
+            reading_date: reading.date,
+            user_id: technician.user_id,
+            details: {
+              create: {
                 reading_type_id: fuelLevelType.reading_type_id,
-                value: lastReadings[fuelMeter.meter_id].level,
+                value: reading.value,
               },
-            ],
+            },
           },
-        },
-      });
-      await createOrUpdateDailySummary(tx, fuelMeter.meter_id, dateForDb);
+        });
+        console.log(
+          `   -> Berhasil memasukkan data mentah BBM untuk meter ID ${reading.meterId} pada tanggal ${reading.date.toISOString().split('T')[0]}`
+        );
+
+        // 2. Hitung dan distribusikan konsumsi ke DailySummary
+        const meter =
+          reading.meterId === fuelMeter.meter_id ? fuelMeter : fuelMeter800;
+        const previousReading = lastReadings.get(reading.meterId);
+
+        if (previousReading) {
+          const heightDifference = new Prisma.Decimal(
+            previousReading.value
+          ).minus(reading.value);
+
+          // Hanya proses jika ada konsumsi (ketinggian menurun)
+          if (heightDifference.isPositive()) {
+            const litersPerCm = new Prisma.Decimal(
+              meter.tank_volume_liters!
+            ).div(meter.tank_height_cm!);
+            const totalConsumptionLiters = heightDifference.times(litersPerCm);
+            const totalCost = totalConsumptionLiters.times(fuelPrice);
+
+            // PERBAIKAN: Buat satu DailySummary untuk total konsumsi pada periode ini,
+            // menggunakan tanggal pembacaan saat ini.
+            console.log(
+              `     -> Menghitung total konsumsi BBM untuk periode ${previousReading.date.toISOString().split('T')[0]} hingga ${reading.date.toISOString().split('T')[0]}`
+            );
+            await tx.dailySummary.create({
+              data: {
+                summary_date: reading.date,
+                meter_id: reading.meterId,
+                total_consumption: totalConsumptionLiters,
+                total_cost: totalCost,
+              },
+            });
+            console.log(
+              `     ...Membuat 1 DailySummary dengan total konsumsi ${totalConsumptionLiters.toFixed(
+                2
+              )} L.`
+            );
+          } else {
+            console.log(
+              `     -> Ketinggian BBM naik atau sama, tidak ada konsumsi yang dicatat.`
+            );
+          }
+        }
+
+        // 3. Perbarui data pembacaan terakhir untuk meter ini
+        lastReadings.set(reading.meterId, {
+          date: reading.date,
+          value: reading.value,
+        });
+      } catch (error: any) {
+        if (error.code !== 'P2002') {
+          // Abaikan error duplikat jika seeder dijalankan ulang
+          console.error(
+            `   -> Gagal memproses data BBM untuk meter ID ${reading.meterId}:`,
+            error.message
+          );
+        }
+      }
     });
-    console.log(`   ✅ Data for ${fuelMeter.meter_code} created.`);
   }
+  console.log('✅ Historical fuel data created.');
 }
 
-main()
-  .then(() => {
-    console.log('\n🎉 Dummy reading data seeding finished successfully!');
-  })
-  .catch((e) => {
-    console.error('❌ Error seeding reading data:', e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+main().then(() => {
+  console.log('\n🎉 Database master data seeding finished successfully!');
+  // PERBAIKAN: Hapus pemanggilan runImport() dari seeder.
+  // Impor data CSV harus dijalankan sebagai perintah terpisah.
+});
