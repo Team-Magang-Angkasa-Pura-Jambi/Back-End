@@ -8,6 +8,7 @@ import { validate } from '../../../utils/validate.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { analysisController } from '../../../controllers/analysis.controller.js';
 import { bulkPredictionSchema } from '../../../validations/analysis.validation.js';
+import { recapController } from '../../../controllers/recap.controller.js';
 
 const analysisQuerySchema = z.object({
   query: z.object({
@@ -15,6 +16,19 @@ const analysisQuerySchema = z.object({
 
     month: z.string().regex(/^\d{4}-\d{2}$/, 'Format bulan harus YYYY-MM'),
     meterId: z.coerce.number().int().positive().optional(),
+  }),
+});
+
+// BARU: Skema validasi untuk prediksi tunggal
+const singlePredictionSchema = z.object({
+  body: z.object({
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal harus YYYY-MM-DD'),
+    meterId: z.coerce
+      .number()
+      .int()
+      .positive('meterId harus berupa angka positif'),
   }),
 });
 
@@ -47,7 +61,8 @@ const budgetAllocationQuerySchema = z.object({
 // BARU: Skema validasi untuk pratinjau anggaran
 const budgetPreviewSchema = z.object({
   body: z.object({
-    total_budget: z.coerce.number().positive(),
+    // PERBAIKAN: Input sekarang adalah ID anggaran induk, bukan total budget mentah.
+    parent_budget_id: z.coerce.number().int().positive(),
     period_start: z.coerce.date(),
     period_end: z.coerce.date(),
     // BARU: Terima data alokasi untuk pratinjau per meter
@@ -62,6 +77,22 @@ const budgetPreviewSchema = z.object({
   }),
 });
 
+// BARU: Skema validasi untuk pratinjau target efisiensi
+const efficiencyTargetPreviewSchema = z.object({
+  body: z.object({
+    target_value: z.coerce
+      .number()
+      .positive('Target value must be greater than 0'),
+    meter_id: z.coerce.number().int().positive('Invalid Meter ID'),
+    period_start: z.coerce.date({
+      errorMap: () => ({ message: 'Format tanggal mulai tidak valid' }),
+    }),
+    period_end: z.coerce.date({
+      errorMap: () => ({ message: 'Format tanggal akhir tidak valid' }),
+    }),
+  }),
+});
+
 // BARU: Skema validasi untuk persiapan anggaran periode berikutnya
 const prepareBudgetSchema = z.object({
   params: z.object({
@@ -69,6 +100,16 @@ const prepareBudgetSchema = z.object({
       .number()
       .int()
       .positive('ID Anggaran Induk tidak valid'),
+  }),
+});
+
+// BARU: Skema validasi untuk rekap bulanan
+const monthlyRecapSchema = z.object({
+  query: z.object({
+    year: z.coerce.number().int().min(2000).max(2100),
+    month: z.coerce.number().int().min(1).max(12),
+    energyType: z.enum(['Electricity', 'Water', 'Fuel']),
+    meterId: z.coerce.number().int().positive().optional(),
   }),
 });
 
@@ -127,10 +168,33 @@ export default (router: Router) => {
   );
 
   router.post(
+    `${prefix}/run-single-prediction`,
+    authorize('SuperAdmin', 'Admin', 'Technician'),
+    validate(singlePredictionSchema),
+    asyncHandler(analysisController.runSinglePrediction)
+  );
+
+  router.post(
     `${prefix}/run-bulk-predictions`,
     authorize('SuperAdmin'),
     validate(bulkPredictionSchema),
     asyncHandler(analysisController.runBulkPredictions)
+  );
+
+  // BARU: Endpoint untuk menjalankan klasifikasi untuk satu meter pada satu hari
+  router.post(
+    `${prefix}/run-single-classification`,
+    authorize('Admin', 'SuperAdmin'),
+    validate(singlePredictionSchema), // Menggunakan skema yang sama dengan prediksi tunggal
+    asyncHandler(analysisController.runSingleClassification)
+  );
+
+  // BARU: Endpoint untuk mendapatkan pratinjau target efisiensi dari anggaran
+  router.post(
+    `${prefix}/efficiency-target-preview`,
+    authorize('Admin', 'SuperAdmin'),
+    validate(efficiencyTargetPreviewSchema),
+    asyncHandler(analysisController.getEfficiencyTargetPreview)
   );
 
   // BARU: Endpoint untuk mendapatkan sisa anggaran yang bisa dialokasikan
@@ -139,5 +203,13 @@ export default (router: Router) => {
     authorize('Admin', 'SuperAdmin'),
     validate(prepareBudgetSchema),
     asyncHandler(analysisController.prepareNextPeriodBudget)
+  );
+
+  // BARU: Endpoint untuk mendapatkan rekap bulanan agregat
+  router.get(
+    `${prefix}/monthly-recap`,
+    authorize('Admin', 'SuperAdmin'),
+    validate(monthlyRecapSchema),
+    asyncHandler(recapController.getMonthlyRecap)
   );
 };

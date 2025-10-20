@@ -22,7 +22,7 @@ export default (router: Router) => {
     schemas: {
       create: annualBudgetSchema.create,
       update: annualBudgetSchema.update,
-      params: annualBudgetSchema.params,
+      params: annualBudgetSchema.byId,
       getAll: queryAnnualBudget,
     },
     authorizations: {

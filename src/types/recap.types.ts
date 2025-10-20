@@ -13,6 +13,8 @@ export interface RecapDataRow {
   lwbp: number | null;
   consumption: number | null; // PERBAIKAN: Tambahkan properti consumption
   classification: UsageCategory | null;
+  confidence_score?: number | null; // BARU: Tambahkan confidence score dari klasifikasi
+  prediction?: number | null; // BARU: Tambahkan data prediksi
   pax: number | null;
   cost: number | null;
   // BARU: Tambahkan properti untuk data suhu dan hari kerja

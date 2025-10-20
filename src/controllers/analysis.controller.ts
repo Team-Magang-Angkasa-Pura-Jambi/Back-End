@@ -124,9 +124,8 @@ class AnalysisController {
   ) => {
     try {
       const { parentBudgetId } = res.locals.validatedData.params;
-      const result = await this.analysisService.prepareNextPeriodBudget(
-        parentBudgetId
-      );
+      const result =
+        await this.analysisService.prepareNextPeriodBudget(parentBudgetId);
       res200({
         res,
         data: result,
@@ -153,6 +152,29 @@ class AnalysisController {
       next(error);
     }
   };
+
+  public runSinglePrediction = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { date, meterId } = res.locals.validatedData.body;
+      const baseDate = new Date(date);
+
+      // Panggil service untuk menjalankan prediksi dan tunggu hingga selesai.
+      // PERBAIKAN: Kirim meterId ke service
+      await this.analysisService.runPredictionForDate(baseDate, meterId);
+
+      res200({
+        res,
+        message: `Proses prediksi untuk meter ID ${meterId} berdasarkan data tanggal ${date} telah berhasil dijalankan.`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   public runBulkPredictions = async (
     req: Request,
     res: Response,
@@ -178,6 +200,54 @@ class AnalysisController {
       res200({
         res,
         message: 'Proses prediksi massal telah dimulai di latar belakang.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public runSingleClassification = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { date, meterId } = res.locals.validatedData.body;
+      const targetDate = new Date(date);
+
+      await this.analysisService.runSingleClassification(
+        targetDate,
+        Number(meterId)
+      );
+
+      res200({
+        res,
+        message: `Proses klasifikasi untuk meter ID ${meterId} pada tanggal ${date} telah berhasil dijalankan.`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public getEfficiencyTargetPreview = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { target_value, meter_id, period_start, period_end } =
+        res.locals.validatedData.body;
+      const result = await this.analysisService.getEfficiencyTargetPreview({
+        target_value,
+        meterId: meter_id,
+        periodStartDate: period_start,
+        periodEndDate: period_end,
+      });
+
+      res200({
+        res,
+        data: result,
+        message: `Pratinjau target efisiensi berhasil dihitung.`,
       });
     } catch (error) {
       next(error);

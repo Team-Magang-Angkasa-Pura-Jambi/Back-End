@@ -72,6 +72,9 @@ class WeatherService {
 
         return null;
       }
+      
+
+      
 
       let tempSum = 0;
       let maxTemp = -Infinity;

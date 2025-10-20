@@ -8,6 +8,8 @@ import type {
 } from '../types/analysis.types.js';
 import { Error400, Error404 } from '../utils/customError.js';
 import { BaseService } from '../utils/baseService.js';
+import { weatherService } from './weather.service.js';
+import { differenceInDays } from 'date-fns';
 
 // BARU: Tipe untuk hasil ringkasan klasifikasi
 export type ClassificationSummary = {
@@ -332,29 +334,6 @@ export class AnalysisService extends BaseService {
 
   /**
    * BARU: Menghitung ringkasan jumlah klasifikasi (BOROS, HEMAT, NORMAL)
-        let percentage: number | null = null;
-
-        if (remainingStock !== null && tankVolume !== null && tankVolume > 0) {
-          percentage = parseFloat(
-            ((remainingStock / tankVolume) * 100).toFixed(2)
-          );
-        }
-
-        finalResults.push({
-          date: currentDate,
-          meterName: meter.meter_code,
-          remaining_stock: remainingStock,
-          percentage: percentage,
-          tank_volume: tankVolume,
-        });
-      }
-    }
-
-    return finalResults;
-  }
-
-  /**
-   * BARU: Menghitung ringkasan jumlah klasifikasi (BOROS, HEMAT, NORMAL)
    * untuk periode dan filter yang diberikan.
    */
   public async getClassificationSummary(
@@ -612,110 +591,153 @@ export class AnalysisService extends BaseService {
    * Bisa dipanggil dari cron, bulk process, atau trigger lain.
    * @param baseDate - Tanggal yang datanya akan digunakan sebagai dasar prediksi.
    */
-  public async runPredictionForDate(baseDate: Date): Promise<void> {
-    const METER_ID_LISTRIK_TERMINAL = 9;
-    const METER_ID_AIR = 10;
-    const modelVersion = 'terminal-v1.1'; // Contoh versi model
+  public async runPredictionForDate(
+    baseDate: Date,
+    targetMeterId?: number
+  ): Promise<void> {
+    // PERBAIKAN: Ambil meter dari DB untuk mendapatkan ID yang benar
+    const [terminalMeter, kantorMeter] = await Promise.all([
+      prisma.meter.findUnique({ where: { meter_code: 'ELEC-TERM-01' } }),
+      prisma.meter.findUnique({ where: { meter_code: 'ELEC-KANTOR-01' } }),
+    ]);
+
+    if (!terminalMeter || !kantorMeter) {
+      console.error(
+        '[Prediction] Gagal menemukan meter ELEC-TERM-01 atau ELEC-KANTOR-01.'
+      );
+      return;
+    }
+
+    // PERBAIKAN: Jika targetMeterId diberikan, pastikan itu adalah salah satu dari dua meter ini.
+    if (
+      targetMeterId &&
+      targetMeterId !== terminalMeter.meter_id &&
+      targetMeterId !== kantorMeter.meter_id
+    ) {
+      console.error(
+        `[Prediction] Prediksi tunggal hanya didukung untuk meter Terminal (${terminalMeter.meter_id}) atau Kantor (${kantorMeter.meter_id}). ID yang diberikan: ${targetMeterId}`
+      );
+      return;
+    }
+    const modelVersion = 'pax-integrated-v3.1'; // Sesuaikan versi model
 
     const predictionDate = new Date(baseDate);
-    predictionDate.setUTCDate(baseDate.getUTCDate() + 1);
-    const predictionDateStr = predictionDate.toISOString().split('T')[0];
+    // PERBAIKAN: Prediksi dijalankan untuk H+1 dari baseDate
+    const predictionDateStr = baseDate.toISOString().split('T')[0];
 
     try {
-      // 1. Cek kelengkapan data pada `baseDate`
-      const [pax, listrik, air] = await Promise.all([
-        prisma.paxData.findUnique({ where: { data_date: baseDate } }),
-        prisma.readingSession.findUnique({
-          where: {
-            unique_meter_reading_per_day: {
-              meter_id: METER_ID_LISTRIK_TERMINAL,
-              reading_date: baseDate,
-            },
-          },
-        }),
-        prisma.readingSession.findUnique({
-          where: {
-            unique_meter_reading_per_day: {
-              meter_id: METER_ID_AIR,
-              reading_date: baseDate,
-            },
-          },
-        }),
-      ]);
+      // PERBAIKAN: Panggil weatherService untuk memastikan data cuaca ada.
+      // Jika gagal (misal: API down), gunakan nilai default agar prediksi tetap berjalan.
+      const weatherDataFromService =
+        await weatherService.getForecast(predictionDate);
+      const weatherData = {
+        suhu_rata: weatherDataFromService?.suhu_rata ?? 28.0,
+        suhu_max: weatherDataFromService?.suhu_max ?? 32.0,
+      };
 
-      // 2. Jika semua data lengkap, jalankan prediksi
-      if (pax && listrik && air) {
-        console.log(
-          `[Prediction] Data untuk ${baseDate.toISOString().split('T')[0]} lengkap. Menjalankan prediksi untuk ${predictionDateStr}...`
-        );
+      console.log(
+        `[Prediction]  Menjalankan prediksi untuk ${predictionDateStr}...`
+      );
 
-        const predictionResult =
-          await machineLearningService.getDailyPrediction(
+      const predictionsToRun = [];
+
+      // Tentukan prediksi mana yang akan dijalankan
+      if (!targetMeterId || targetMeterId === terminalMeter.meter_id) {
+        predictionsToRun.push(
+          this._runTerminalPrediction(
             predictionDate,
-            pax.total_pax // Kirim data pax ke service prediksi
-          );
-
-        if (predictionResult) {
-          // 3. Simpan atau perbarui hasil prediksi menggunakan upsert
-          await Promise.all([
-            prisma.consumptionPrediction.upsert({
-              where: {
-                prediction_date_meter_id_model_version: {
-                  prediction_date: predictionDate,
-                  meter_id: METER_ID_LISTRIK_TERMINAL,
-                  model_version: modelVersion,
-                },
-              },
-              update: {
-                predicted_value: predictionResult.prediksi_listrik_kwh,
-              },
-              create: {
-                prediction_date: predictionDate,
-                predicted_value: predictionResult.prediksi_listrik_kwh,
-                meter_id: METER_ID_LISTRIK_TERMINAL,
-                model_version: modelVersion,
-              },
-            }),
-            prisma.consumptionPrediction.upsert({
-              where: {
-                prediction_date_meter_id_model_version: {
-                  prediction_date: predictionDate,
-                  meter_id: METER_ID_AIR,
-                  model_version: modelVersion,
-                },
-              },
-              update: { predicted_value: predictionResult.prediksi_air_m3 },
-              create: {
-                prediction_date: predictionDate,
-                predicted_value: predictionResult.prediksi_air_m3,
-                meter_id: METER_ID_AIR,
-                model_version: modelVersion,
-              },
-            }),
-          ]);
-          console.log(
-            `[Prediction] Hasil prediksi untuk ${predictionDateStr} berhasil disimpan/diperbarui.`
-          );
-        }
-      } else {
-        // PERBAIKAN: Berikan log yang lebih detail tentang data apa yang hilang.
-        const missingData = [];
-        if (!pax) missingData.push('Data Pax');
-        if (!listrik) missingData.push('Data Listrik (Meter ID 9)');
-        if (!air) missingData.push('Data Air (Meter ID 10)');
-
-        console.log(
-          `[Prediction] Data untuk ${
-            baseDate.toISOString().split('T')[0]
-          } belum lengkap. Prediksi tidak dijalankan. Data yang hilang: [${missingData.join(
-            ', '
-          )}]`
+            terminalMeter.meter_id,
+            modelVersion,
+            weatherData
+          )
         );
       }
+      if (!targetMeterId || targetMeterId === kantorMeter.meter_id) {
+        predictionsToRun.push(
+          this._runKantorPrediction(
+            predictionDate,
+            kantorMeter.meter_id,
+            modelVersion,
+            weatherData
+          )
+        );
+      }
+
+      await Promise.all(predictionsToRun);
     } catch (error) {
       console.error(
         `[Prediction] Gagal menjalankan prediksi untuk ${predictionDateStr}:`,
         error
+      );
+    }
+  }
+
+  private async _runTerminalPrediction(
+    predictionDate: Date,
+    meterId: number,
+    modelVersion: string,
+    weatherData: { suhu_rata: number; suhu_max: number }
+  ) {
+    // PERBAIKAN: Kirim data cuaca yang sudah disiapkan
+    const predictionResult = await machineLearningService.getTerminalPrediction(
+      predictionDate,
+      weatherData
+    );
+    if (predictionResult) {
+      await prisma.consumptionPrediction.upsert({
+        where: {
+          prediction_date_meter_id_model_version: {
+            prediction_date: predictionDate,
+            meter_id: meterId,
+            model_version: modelVersion,
+          },
+        },
+        update: {
+          predicted_value: predictionResult.prediksi_kwh_terminal,
+        },
+        create: {
+          prediction_date: predictionDate,
+          predicted_value: predictionResult.prediksi_kwh_terminal,
+          meter_id: meterId,
+          model_version: modelVersion,
+        },
+      });
+      console.log(
+        `[Prediction] Hasil prediksi Terminal untuk ${predictionDate.toISOString().split('T')[0]} berhasil disimpan.`
+      );
+    }
+  }
+
+  private async _runKantorPrediction(
+    predictionDate: Date,
+    meterId: number,
+    modelVersion: string,
+    weatherData: { suhu_rata: number; suhu_max: number }
+  ) {
+    // PERBAIKAN: Kirim data cuaca yang sudah disiapkan
+    const predictionResult = await machineLearningService.getKantorPrediction(
+      predictionDate,
+      weatherData
+    );
+    if (predictionResult) {
+      await prisma.consumptionPrediction.upsert({
+        where: {
+          prediction_date_meter_id_model_version: {
+            prediction_date: predictionDate,
+            meter_id: meterId,
+            model_version: modelVersion,
+          },
+        },
+        update: { predicted_value: predictionResult.prediksi_kwh_kantor },
+        create: {
+          prediction_date: predictionDate,
+          predicted_value: predictionResult.prediksi_kwh_kantor,
+          meter_id: meterId,
+          model_version: modelVersion,
+        },
+      });
+      console.log(
+        `[Prediction] Hasil prediksi Kantor untuk ${predictionDate.toISOString().split('T')[0]} berhasil disimpan.`
       );
     }
   }
@@ -851,142 +873,212 @@ export class AnalysisService extends BaseService {
    * @param budgetData - Data anggaran sementara dari input pengguna.
    */
   public async getBudgetAllocationPreview(budgetData: {
-    total_budget: number;
+    // PERBAIKAN: Input sekarang adalah ID anggaran induk (tahunan)
+    parent_budget_id: number;
     period_start: Date;
     period_end: Date;
     allocations?: { meter_id: number; weight: number }[];
   }): Promise<{
     monthlyAllocation: Omit<
       MonthlyBudgetAllocation,
-      'realizationCost' | 'remainingBudget' | 'realizationPercentage'
+      | 'realizationCost'
+      | 'remainingBudget'
+      | 'realizationPercentage'
+      | 'monthName'
     >[];
     meterAllocationPreview: {
       meterId: number;
       meterName: string;
       allocatedBudget: number;
       dailyBudgetAllocation: number;
-      estimatedDailyKwh: number | null;
+      estimatedDailyKwh: number;
     }[];
+    calculationDetails: {
+      parentTotalBudget: number;
+      efficiencyBudget: number;
+      realizationToDate: number;
+      remainingBudgetForPeriod: number;
+      budgetPerMonth: number;
+      suggestedBudgetForPeriod: number; // BARU: Tambahkan saran
+    };
   }> {
-    const { total_budget, period_start, period_end, allocations } = budgetData;
+    const { parent_budget_id, period_start, period_end, allocations } =
+      budgetData;
 
-    // PERBAIKAN: Inisialisasi array kosong, bukan array 12 bulan.
-    const monthlyAllocation: Omit<
-      MonthlyBudgetAllocation,
-      'realizationCost' | 'remainingBudget' | 'realizationPercentage'
-    >[] = [];
+    // 1. Ambil data anggaran induk (tahunan)
+    const parentBudget = await this._prisma.annualBudget.findUnique({
+      where: { budget_id: parent_budget_id },
+      include: {
+        // PERBAIKAN: Ambil alokasi dari SEMUA anak untuk menghitung realisasi.
+        child_budgets: {
+          include: {
+            allocations: {
+              select: { meter_id: true },
+            },
+          },
+        },
+      },
+    });
 
-    // PERBAIKAN: Hitung jumlah bulan dalam periode, bukan jumlah hari.
+    if (!parentBudget) {
+      throw new Error404(
+        `Anggaran induk dengan ID ${parent_budget_id} tidak ditemukan.`
+      );
+    }
+
+    // 2. Hitung anggaran efisiensi (misal: 95% dari total)
+    const efficiencyTag = parentBudget.efficiency_tag ?? new Prisma.Decimal(1);
+    const efficiencyBudget = parentBudget.total_budget.times(efficiencyTag);
+
+    // 3. Hitung realisasi biaya hingga H-1 dari periode pratinjau
+    const realizationEndDate = new Date(period_start);
+    realizationEndDate.setUTCDate(realizationEndDate.getUTCDate() - 1);
+
+    // --- DEBUGGING LOGS ---
+    console.log('--- DEBUG: Menghitung Realisasi Anggaran ---');
+    console.log('Periode Anggaran Induk:', {
+      start: parentBudget.period_start.toISOString(),
+      end: parentBudget.period_end.toISOString(),
+    });
+    console.log(
+      'Periode Realisasi Dihitung Hingga:',
+      realizationEndDate.toISOString()
+    );
+
+    // PERBAIKAN: Hitung realisasi dengan menjumlahkan realisasi dari setiap anggaran anak
+    // sesuai dengan periode masing-masing anak.
+    let realizationToDate = new Prisma.Decimal(0);
+
+    // PERBAIKAN: Berikan tipe eksplisit untuk 'child' untuk membantu transpiler.
+    for (const child of parentBudget.child_budgets as Prisma.AnnualBudgetGetPayload<{
+      include: { allocations: { select: { meter_id: true } } };
+    }>[]) {
+      const childMeterIds = child.allocations.map((a) => a.meter_id);
+      if (childMeterIds.length > 0) {
+        // Pastikan rentang tanggal realisasi tidak melebihi periode anak atau tanggal akhir global
+        const effectiveEndDate =
+          realizationEndDate < child.period_end
+            ? realizationEndDate
+            : child.period_end;
+
+        const childRealizationResult =
+          await this._prisma.dailySummary.aggregate({
+            _sum: { total_cost: true },
+            where: {
+              meter_id: { in: childMeterIds },
+              summary_date: {
+                gte: child.period_start,
+                lte: effectiveEndDate,
+              },
+            },
+          });
+        realizationToDate = realizationToDate.plus(
+          childRealizationResult._sum.total_cost ?? new Prisma.Decimal(0)
+        );
+      }
+    }
+    console.log('Nilai Akhir realizationToDate:', realizationToDate.toNumber());
+
+    // 4. Hitung sisa anggaran yang tersedia untuk periode baru
+    const remainingBudgetForPeriod = efficiencyBudget.minus(realizationToDate);
+
+    // --- BARU: Hitung Saran Anggaran untuk Periode ---
+    let suggestedBudgetForPeriod: Prisma.Decimal;
+
+    // 5. Hitung panjang periode dalam bulan
     const periodMonths =
       (period_end.getUTCFullYear() - period_start.getUTCFullYear()) * 12 +
-      (period_end.getUTCMonth() - period_start.getUTCMonth());
+      (period_end.getUTCMonth() - period_start.getUTCMonth()) +
+      1;
+
+    console.log('Panjang Periode (bulan):', periodMonths);
 
     if (periodMonths <= 0) {
-      return { monthlyAllocation, meterAllocationPreview: [] };
+      throw new Error400('Periode tidak valid.');
     }
-    console.log(periodMonths);
 
-    // Hitung alokasi anggaran per bulan.
-    const budgetPerMonth = new Prisma.Decimal(total_budget).dividedBy(
-      periodMonths
-    );
+    // 6. Hitung alokasi anggaran per bulan untuk periode baru
+    let budgetPerMonth: Prisma.Decimal;
+    if (parentBudget.child_budgets.length === 0) {
+      // Skenario 1: Belum ada anggaran periode sebelumnya.
+      // Gunakan rata-rata dari anggaran tahunan.
+      budgetPerMonth = parentBudget.total_budget.div(12);
+    } else {
+      // Skenario 2: Sudah ada anggaran periode sebelumnya.
+      // Gunakan sisa anggaran dibagi panjang periode baru.
+      budgetPerMonth = remainingBudgetForPeriod.div(periodMonths);
+    }
 
-    // PERBAIKAN: Lakukan iterasi hanya dari bulan awal hingga bulan akhir dari rentang.
-    const loopStartDate = new Date(
-      Date.UTC(period_start.getUTCFullYear(), period_start.getUTCMonth(), 1)
-    );
+    // --- PERBAIKAN: Hitung Saran Anggaran untuk Periode ---
+    if (realizationToDate.isZero()) {
+      // Skenario 1: Belum ada realisasi. Gunakan budgetPerMonth dikali panjang periode.
+      // Di sini, budgetPerMonth adalah (total_budget / 12). Saran adalah total anggaran efisiensi.
+      suggestedBudgetForPeriod = efficiencyBudget;
+    } else {
+      // Skenario 2: Sudah ada realisasi. Gunakan sisa anggaran efisiensi.
+      suggestedBudgetForPeriod = remainingBudgetForPeriod;
+    }
 
+    // 7. Buat pratinjau alokasi bulanan
+    const monthlyAllocation: Omit<
+      MonthlyBudgetAllocation,
+      | 'realizationCost'
+      | 'remainingBudget'
+      | 'realizationPercentage'
+      | 'monthName'
+    >[] = [];
     for (
-      let d = loopStartDate;
+      let d = new Date(period_start);
       d <= period_end;
       d.setUTCMonth(d.getUTCMonth() + 1)
     ) {
-      const currentMonth = d.getUTCMonth();
-      const currentYear = d.getUTCFullYear();
-
-      const monthStartDate = new Date(Date.UTC(currentYear, currentMonth, 1));
-      const monthEndDate = new Date(Date.UTC(currentYear, currentMonth + 1, 0));
-
-      const overlapStart = new Date(
-        Math.max(monthStartDate.getTime(), period_start.getTime())
-      );
-      const overlapEnd = new Date(
-        Math.min(monthEndDate.getTime(), period_end.getTime())
-      );
-
-      if (overlapEnd >= overlapStart) {
-        monthlyAllocation.push({
-          month: currentMonth + 1,
-          monthName: monthStartDate.toLocaleString('id-ID', { month: 'long' }),
-          // Gunakan alokasi per bulan yang sudah dihitung.
-          allocatedBudget: budgetPerMonth.toNumber(),
-        });
-      }
+      monthlyAllocation.push({
+        month: d.getUTCMonth() + 1,
+        allocatedBudget: budgetPerMonth.toNumber(),
+      });
     }
 
-    // --- BARU: Kalkulasi Pratinjau Alokasi per Meter ---
+    // 8. Kalkulasi Pratinjau Alokasi per Meter
     const meterAllocationPreview: {
       meterId: number;
       meterName: string;
       allocatedBudget: number;
       dailyBudgetAllocation: number;
-      estimatedDailyKwh: number | null;
+      estimatedDailyKwh: number;
     }[] = [];
 
     if (allocations && allocations.length > 0) {
-      // Ambil harga rata-rata dari skema harga terbaru
-      const latestPriceScheme = await prisma.priceScheme.findFirst({
-        where: { is_active: true, tariff_group: { group_code: 'B3/TR' } }, // Asumsi B3 untuk terminal
-        include: { rates: { include: { reading_type: true } } },
-        orderBy: { effective_date: 'desc' },
-      });
-
-      let avgPricePerKwh: Prisma.Decimal | null = null;
-      if (latestPriceScheme) {
-        const wbpRate = latestPriceScheme.rates.find(
-          (r) => r.reading_type.type_name === 'WBP'
-        )?.value;
-        const lwbpRate = latestPriceScheme.rates.find(
-          (r) => r.reading_type.type_name === 'LWBP'
-        )?.value;
-        if (wbpRate && lwbpRate) {
-          avgPricePerKwh = new Prisma.Decimal(wbpRate).plus(lwbpRate).div(2);
-        }
-      }
-
-      // PERBAIKAN: Pindahkan deklarasi `periodDays` ke luar dari argumen `findMany`.
       const periodDays =
         (period_end.getTime() - period_start.getTime()) /
           (1000 * 60 * 60 * 24) +
         1;
 
-      const meters = await prisma.meter.findMany({
-        where: { meter_id: { in: allocations.map((a) => a.meter_id) } },
-        select: { meter_id: true, meter_code: true },
-      });
-      const meterMap = new Map(meters.map((m) => [m.meter_id, m.meter_code]));
-
       for (const alloc of allocations) {
-        const allocatedBudget = new Prisma.Decimal(total_budget).times(
-          alloc.weight
-        );
+        const allocatedBudget = remainingBudgetForPeriod.times(alloc.weight);
         const dailyBudgetAllocation = allocatedBudget.div(periodDays);
-        const estimatedDailyKwh =
-          avgPricePerKwh && !avgPricePerKwh.isZero()
-            ? dailyBudgetAllocation.div(avgPricePerKwh)
-            : null;
 
         meterAllocationPreview.push({
           meterId: alloc.meter_id,
-          meterName: meterMap.get(alloc.meter_id) ?? `Meter ${alloc.meter_id}`,
+          meterName: `Meter ${alloc.meter_id}`, // Placeholder, bisa diambil dari DB jika perlu
           allocatedBudget: allocatedBudget.toNumber(),
           dailyBudgetAllocation: dailyBudgetAllocation.toNumber(),
-          estimatedDailyKwh: estimatedDailyKwh?.toNumber() ?? null,
+          estimatedDailyKwh: 0, // Placeholder, logika estimasi kWh bisa ditambahkan di sini
         });
       }
     }
 
-    return { monthlyAllocation, meterAllocationPreview };
+    return {
+      monthlyAllocation,
+      meterAllocationPreview,
+      calculationDetails: {
+        parentTotalBudget: parentBudget.total_budget.toNumber(),
+        efficiencyBudget: efficiencyBudget.toNumber(),
+        realizationToDate: realizationToDate.toNumber(),
+        remainingBudgetForPeriod: remainingBudgetForPeriod.toNumber(),
+        budgetPerMonth: budgetPerMonth.toNumber(),
+        suggestedBudgetForPeriod: suggestedBudgetForPeriod.toNumber(),
+      },
+    };
   }
 
   /**
@@ -1113,12 +1205,18 @@ export class AnalysisService extends BaseService {
    */
   public async prepareNextPeriodBudget(parentBudgetId: number) {
     return this._handleCrudOperation(async () => {
-      // LANGKAH 1: Ambil data anggaran induk dan semua anak-anaknya.
+      // LANGKAH 1: Ambil data anggaran induk dan semua anak-anaknya beserta alokasinya.
       const parentBudget = await prisma.annualBudget.findUniqueOrThrow({
         where: { budget_id: parentBudgetId },
         include: {
-          // PERBAIKAN: Cukup ambil `total_budget` dari setiap anak.
-          child_budgets: { select: { total_budget: true } },
+          // PERBAIKAN: Ambil alokasi dari setiap anak untuk menghitung realisasi.
+          child_budgets: {
+            include: {
+              allocations: {
+                select: { meter_id: true },
+              },
+            },
+          },
         },
       });
 
@@ -1129,23 +1227,283 @@ export class AnalysisService extends BaseService {
         );
       }
 
-      // LANGKAH 2: Hitung total anggaran yang sudah dialokasikan ke anak-anaknya.
-      const totalAllocatedToChildren = parentBudget.child_budgets.reduce(
-        (sum, child) => sum.plus(child.total_budget),
-        new Prisma.Decimal(0)
-      );
+      // LANGKAH 2: Hitung total realisasi biaya dengan menjumlahkan realisasi dari setiap anggaran anak.
+      let totalRealizationCost = new Prisma.Decimal(0);
+      for (const child of parentBudget.child_budgets as Prisma.AnnualBudgetGetPayload<{
+        include: { allocations: { select: { meter_id: true } } };
+      }>[]) {
+        const childMeterIds = child.allocations.map((alloc) => alloc.meter_id);
+        if (childMeterIds.length > 0) {
+          const realizationResult = await prisma.dailySummary.aggregate({
+            _sum: { total_cost: true },
+            where: {
+              meter_id: { in: childMeterIds },
+              // PERBAIKAN: Gunakan periode dari anggaran anak, bukan induk.
+              summary_date: {
+                gte: child.period_start,
+                lte: child.period_end,
+              },
+            },
+          });
+          totalRealizationCost = totalRealizationCost.plus(
+            realizationResult._sum.total_cost ?? new Prisma.Decimal(0)
+          );
+        }
+      }
 
-      // LANGKAH 3: Hitung sisa anggaran yang tersedia dari pagu tahunan.
-      const availableBudgetForNextPeriod = parentBudget.total_budget.minus(
-        totalAllocatedToChildren
-      );
+      // LANGKAH 3: Hitung sisa anggaran yang tersedia dari pagu tahunan setelah dikurangi realisasi.
+      const availableBudgetForNextPeriod =
+        parentBudget.total_budget.minus(totalRealizationCost);
 
       // LANGKAH 4: Kembalikan hasilnya.
       return {
         parentBudgetId: parentBudget.budget_id,
         parentTotalBudget: parentBudget.total_budget.toNumber(),
-        totalAllocatedToChildren: totalAllocatedToChildren.toNumber(),
+        totalRealizationCost: totalRealizationCost.toNumber(),
         availableBudgetForNextPeriod: availableBudgetForNextPeriod.toNumber(),
+      };
+    });
+  }
+
+  /**
+   * BARU: Menjalankan klasifikasi untuk satu meter pada tanggal tertentu.
+   * @param date - Tanggal data yang akan diklasifikasi.
+   * @param meterId - ID meter yang akan diklasifikasi.
+   */
+  public async runSingleClassification(
+    date: Date,
+    meterId: number
+  ): Promise<void> {
+    return this._handleCrudOperation(async () => {
+      // 1. Ambil DailySummary untuk meter dan tanggal yang diberikan.
+      const summary = await prisma.dailySummary.findFirst({
+        where: {
+          meter_id: meterId,
+          summary_date: date,
+        },
+        include: {
+          meter: {
+            include: {
+              energy_type: true,
+              category: true,
+              tariff_group: {
+                include: {
+                  price_schemes: { include: { rates: true, taxes: true } },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!summary) {
+        throw new Error404(
+          `Tidak ada data ringkasan (DailySummary) yang ditemukan untuk meter ID ${meterId} pada tanggal ${date.toISOString().split('T')[0]}.`
+        );
+      }
+
+      // 2. Panggil logika klasifikasi yang sudah ada di ReadingService.
+      // Impor dinamis untuk menghindari dependensi sirkular.
+      const { ReadingService } = await import('./reading.service.js');
+      const readingService = new ReadingService();
+      // @ts-ignore - Memanggil metode privat untuk tujuan ini.
+      await readingService._classifyDailyUsage(summary, summary.meter);
+    });
+  }
+
+  /**
+   * BARU: Menghitung pratinjau target efisiensi berdasarkan anggaran.
+   * @param data - Berisi totalBudget, meterId, dan periode.
+   */
+  public async getEfficiencyTargetPreview(data: {
+    target_value: number; // PERBAIKAN: Menggunakan snake_case dari FE
+    meterId: number;
+    periodStartDate: Date;
+    periodEndDate: Date;
+  }) {
+    return this._handleCrudOperation(async () => {
+      const { target_value, meterId, periodStartDate, periodEndDate } = data;
+
+      // 1. Validasi periode
+      if (periodEndDate < periodStartDate) {
+        throw new Error400('Tanggal akhir tidak boleh sebelum tanggal mulai.');
+      }
+      const totalDays = differenceInDays(periodEndDate, periodStartDate) + 1;
+      if (totalDays <= 0) {
+        throw new Error400(
+          'Periode tidak valid, tanggal akhir harus setelah tanggal mulai.'
+        );
+      }
+
+      // 2. Ambil data meter dan skema harganya
+      const meter = await this._prisma.meter.findUnique({
+        where: { meter_id: meterId },
+        include: {
+          energy_type: true,
+          tariff_group: {
+            include: {
+              price_schemes: {
+                where: { is_active: true },
+                include: { rates: { include: { reading_type: true } } },
+                orderBy: { effective_date: 'desc' },
+              },
+            },
+          },
+        },
+      });
+
+      if (!meter) {
+        throw new Error404(`Meter dengan ID ${meterId} tidak ditemukan.`);
+      }
+
+      const activePriceScheme = meter.tariff_group?.price_schemes[0];
+      if (!activePriceScheme) {
+        throw new Error404(
+          `Tidak ada skema harga aktif yang ditemukan untuk golongan tarif meter '${meter.meter_code}'.`
+        );
+      }
+
+      // 3. Hitung harga rata-rata per unit
+      let avgPricePerUnit: Prisma.Decimal;
+      if (meter.energy_type.type_name === 'Electricity') {
+        const wbpRate = activePriceScheme.rates.find(
+          (r) => r.reading_type.type_name === 'WBP'
+        )?.value;
+        const lwbpRate = activePriceScheme.rates.find(
+          (r) => r.reading_type.type_name === 'LWBP'
+        )?.value;
+
+        if (!wbpRate || !lwbpRate) {
+          throw new Error400(
+            'Skema harga untuk Listrik tidak lengkap. Tarif WBP atau LWBP tidak ditemukan.'
+          );
+        }
+        // Menggunakan harga rata-rata untuk estimasi
+        avgPricePerUnit = wbpRate.plus(lwbpRate).div(2);
+      } else {
+        // Untuk Air atau BBM, ambil tarif pertama yang ada
+        const singleRate = activePriceScheme.rates[0]?.value;
+        if (!singleRate) {
+          throw new Error400(
+            `Skema harga untuk ${meter.energy_type.type_name} tidak memiliki tarif yang terdefinisi.`
+          );
+        }
+        avgPricePerUnit = singleRate;
+      }
+
+      if (avgPricePerUnit.isZero()) {
+        throw new Error400(
+          'Harga rata-rata per unit adalah nol. Tidak dapat menghitung target dari anggaran.'
+        );
+      }
+
+      // 4. Hitung estimasi biaya berdasarkan input targetKwh
+      const inputTotalKwh = new Prisma.Decimal(target_value).times(totalDays);
+      const estimatedTotalCost = inputTotalKwh.times(avgPricePerUnit);
+
+      // 5. Cari alokasi anggaran yang relevan untuk meter dan periode ini
+      const budgetAllocation = await this._prisma.budgetAllocation.findFirst({
+        where: {
+          meter_id: meterId,
+          budget: {
+            parent_budget_id: { not: null }, // Pastikan ini adalah anggaran periode (anak)
+            period_start: { lte: periodEndDate },
+            period_end: { gte: periodStartDate },
+          },
+        },
+        include: { budget: { include: { parent_budget: true } } },
+      });
+
+      let budgetInfo: object | null = null;
+      let suggestion: object | null = null;
+
+      if (budgetAllocation) {
+        const allocatedBudgetForMeter =
+          budgetAllocation.budget.total_budget.times(budgetAllocation.weight);
+
+        budgetInfo = {
+          budgetId: budgetAllocation.budget_id,
+          budgetPeriodStart: budgetAllocation.budget.period_start,
+          budgetPeriodEnd: budgetAllocation.budget.period_end,
+          meterAllocationWeight: budgetAllocation.weight.toNumber(),
+          allocatedBudgetForMeter: allocatedBudgetForMeter.toNumber(),
+          // PERBAIKAN: Tambahkan informasi realisasi
+          realizationToDate: 0, // Default value
+          remainingBudget: allocatedBudgetForMeter.toNumber(), // Default value
+        };
+
+        // PERBAIKAN: Hitung realisasi hingga H-1 dari tanggal mulai target
+        const realizationEndDate = new Date(periodStartDate);
+        realizationEndDate.setUTCDate(realizationEndDate.getUTCDate() - 1);
+
+        let remainingBudget = allocatedBudgetForMeter;
+        let realizedCost = new Prisma.Decimal(0); // PERBAIKAN: Deklarasikan di luar blok if
+
+        // Hanya hitung realisasi jika periode target dimulai setelah periode anggaran
+        if (realizationEndDate >= budgetAllocation.budget.period_start) {
+          const realizationResult = await this._prisma.dailySummary.aggregate({
+            _sum: { total_cost: true },
+            where: {
+              meter_id: meterId,
+              summary_date: {
+                gte: budgetAllocation.budget.period_start,
+                lte: realizationEndDate,
+              },
+            },
+          });
+
+          realizedCost =
+            realizationResult._sum.total_cost ?? new Prisma.Decimal(0); // PERBAIKAN: Assign nilai, jangan deklarasi ulang
+          remainingBudget = allocatedBudgetForMeter.minus(realizedCost);
+
+          // Update budgetInfo dengan data realisasi
+          (budgetInfo as any).realizationToDate = realizedCost.toNumber();
+          (budgetInfo as any).remainingBudget = remainingBudget.toNumber();
+        }
+
+        // --- PERBAIKAN: Logika baru untuk menghitung saran berdasarkan anggaran harian ---
+        const childBudget = budgetAllocation.budget;
+        const childPeriodDays =
+          differenceInDays(childBudget.period_end, childBudget.period_start) +
+          1;
+        const childPeriodMonths =
+          (childBudget.period_end.getUTCFullYear() -
+            childBudget.period_start.getUTCFullYear()) *
+            12 +
+          (childBudget.period_end.getUTCMonth() -
+            childBudget.period_start.getUTCMonth()) +
+          1;
+
+        // Hitung anggaran harian berdasarkan alokasi untuk meter ini
+        const dailyBudgetForMeter =
+          allocatedBudgetForMeter.div(childPeriodDays);
+
+        // Konversi anggaran harian (Rp) ke kWh
+        const suggestedDailyKwh = dailyBudgetForMeter.div(avgPricePerUnit);
+
+        suggestion = {
+          standard: {
+            message: `Berdasarkan alokasi anggaran periode ini, target harian Anda adalah sekitar ${suggestedDailyKwh.toDP(2)} ${meter.energy_type.unit_of_measurement}.`,
+            suggestedDailyKwh: suggestedDailyKwh.toNumber(),
+            suggestedTotalKwh: suggestedDailyKwh.times(totalDays).toNumber(),
+          },
+        };
+      }
+
+      // 6. Kembalikan hasil pratinjau dan saran
+      return {
+        input: {
+          ...data,
+        },
+        budget: budgetInfo,
+        preview: {
+          totalDays,
+          unitOfMeasurement: meter.energy_type.unit_of_measurement,
+          avgPricePerUnit: avgPricePerUnit.toNumber(),
+          inputTotalKwh: inputTotalKwh.toNumber(),
+          estimatedTotalCost: estimatedTotalCost.toNumber(),
+        },
+        suggestion,
       };
     });
   }

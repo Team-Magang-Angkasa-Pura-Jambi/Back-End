@@ -376,7 +376,8 @@ export class ReadingService extends GenericBaseService<
    * Orkestrator untuk memperbarui DailySummary.
    * Mengambil data, memanggil kalkulator, dan menulis hasilnya ke DB.
    */
-  private async _updateDailySummary( // PERBAIKAN: Fungsi ini sekarang menjadi pusat kalkulasi
+  private async _updateDailySummary(
+    // PERBAIKAN: Fungsi ini sekarang menjadi pusat kalkulasi
     tx: Prisma.TransactionClient,
     meter: MeterWithRelations,
     dateForDb: Date
@@ -573,21 +574,64 @@ export class ReadingService extends GenericBaseService<
       return;
     }
 
-    let classificationResult;
+    const classificationPromises = [];
     try {
       // 3. Panggil API ML dengan payload yang baru
       // PERBAIKAN: Tambahkan is_hari_kerja
       const dayOfWeek = classificationDate.getUTCDay();
       const isWorkday = dayOfWeek >= 1 && dayOfWeek <= 5 ? 1 : 0;
 
-      classificationResult = await machineLearningService.evaluateDailyUsage({
-        pax: paxData.total_pax,
-        suhu_rata: weatherData.avg_temp.toNumber(),
-        suhu_max: weatherData.max_temp.toNumber(),
-        is_hari_kerja: isWorkday,
-        aktual_kwh_terminal: terminalSummary.total_consumption?.toNumber() ?? 0,
-        aktual_kwh_kantor: kantorSummary.total_consumption?.toNumber() ?? 0,
-      });
+      // PERBAIKAN: Panggil API evaluasi per meter secara terpisah
+      const terminalPromise = machineLearningService
+        .evaluateTerminalUsage({
+          pax: paxData.total_pax,
+          suhu_rata: weatherData.avg_temp.toNumber(),
+          suhu_max: weatherData.max_temp.toNumber(),
+          aktual_kwh_terminal:
+            terminalSummary.total_consumption?.toNumber() ?? 0,
+        })
+        .catch((e) => {
+          console.error('[Classifier] Gagal evaluasi Terminal:', e.message);
+          return null; // Jangan hentikan proses jika satu gagal
+        });
+
+      const kantorPromise = machineLearningService
+        .evaluateKantorUsage({
+          suhu_rata: weatherData.avg_temp.toNumber(),
+          suhu_max: weatherData.max_temp.toNumber(),
+          is_hari_kerja: isWorkday,
+          aktual_kwh_kantor: kantorSummary.total_consumption?.toNumber() ?? 0,
+        })
+        .catch((e) => {
+          console.error('[Classifier] Gagal evaluasi Kantor:', e.message);
+          return null;
+        });
+
+      const [terminalResult, kantorResult] = await Promise.all([
+        terminalPromise,
+        kantorPromise,
+      ]);
+
+      // 4. Simpan hasil klasifikasi untuk kedua meter
+      const modelVersion = 'v1.3'; // Sesuaikan dengan versi kontrak API baru
+
+      if (terminalResult) {
+        await this._saveClassification(
+          terminalSummary,
+          terminalResult.kinerja_terminal,
+          terminalResult.deviasi_persen_terminal,
+          modelVersion
+        );
+      }
+
+      if (kantorResult) {
+        await this._saveClassification(
+          kantorSummary,
+          kantorResult.kinerja_kantor,
+          kantorResult.deviasi_persen_kantor,
+          modelVersion
+        );
+      }
     } catch (error) {
       console.error('[Classifier] Gagal memanggil ML API:', error);
       const title = 'Error Sistem: Server Machine Learning';
@@ -598,84 +642,45 @@ export class ReadingService extends GenericBaseService<
       return;
     }
 
-    if (!classificationResult) {
-      console.error(
-        '[Classifier] Gagal mendapatkan hasil klasifikasi dari ML API.'
-      );
-      return;
-    }
-
-    // 4. Simpan hasil klasifikasi untuk kedua meter
-    const {
-      kinerja_terminal,
-      deviasi_persen_terminal,
-      kinerja_kantor,
-      deviasi_persen_kantor,
-    } = classificationResult;
-    const modelVersion = 'v1.3'; // Sesuaikan dengan versi kontrak API baru
-
-    await Promise.all([
-      // Simpan klasifikasi untuk Terminal
-      this._prisma.dailyUsageClassification.upsert({
-        where: { summary_id: terminalSummary.summary_id },
-        update: {
-          classification: this._mapClassificationToEnum(kinerja_terminal),
-          confidence_score: deviasi_persen_terminal,
-          model_version: modelVersion,
-          reasoning: `Deviasi ${deviasi_persen_terminal.toFixed(2)}% dari prediksi normal.`,
-        },
-        create: {
-          summary_id: terminalSummary.summary_id,
-          meter_id: terminalSummary.meter_id,
-          classification_date: classificationDate,
-          classification: this._mapClassificationToEnum(kinerja_terminal),
-          confidence_score: deviasi_persen_terminal,
-          model_version: modelVersion,
-          reasoning: `Deviasi ${deviasi_persen_terminal.toFixed(2)}% dari prediksi normal.`,
-        },
-      }),
-      // Simpan klasifikasi untuk Kantor
-      this._prisma.dailyUsageClassification.upsert({
-        where: { summary_id: kantorSummary.summary_id },
-        update: {
-          classification: this._mapClassificationToEnum(kinerja_kantor),
-          confidence_score: deviasi_persen_kantor,
-          model_version: modelVersion,
-          reasoning: `Deviasi ${deviasi_persen_kantor.toFixed(2)}% dari prediksi normal.`,
-        },
-        create: {
-          summary_id: kantorSummary.summary_id,
-          meter_id: kantorSummary.meter_id,
-          classification_date: classificationDate,
-          classification: this._mapClassificationToEnum(kinerja_kantor),
-          confidence_score: deviasi_persen_kantor,
-          model_version: modelVersion,
-          reasoning: `Deviasi ${deviasi_persen_kantor.toFixed(2)}% dari prediksi normal.`,
-        },
-      }),
-    ]);
-
     console.log(
       `[Classifier] Klasifikasi untuk ${classificationDate.toISOString().split('T')[0]} berhasil disimpan.`
     );
+  }
 
-    // 5. Buat insight jika ada pemborosan
-    if (
-      this._mapClassificationToEnum(kinerja_terminal) === UsageCategory.BOROS
-    ) {
-      const title = 'Peringatan: Terdeteksi Pemakaian Boros';
-      const message = `Pemakaian listrik untuk meteran ${'ELEC-TERM-01'} pada tanggal ${classificationDate.toLocaleDateString()} diklasifikasikan sebagai BOROS.`;
+  /**
+   * Helper untuk menyimpan hasil klasifikasi ke database.
+   */
+  private async _saveClassification(
+    summary: Prisma.DailySummaryGetPayload<{}>,
+    kinerja: string,
+    deviasi: number,
+    modelVersion: string
+  ) {
+    const classification = this._mapClassificationToEnum(kinerja);
+    const reasoning = `Deviasi ${deviasi.toFixed(2)}% dari prediksi normal.`;
 
-      await this._prisma.analyticsInsight.create({
-        data: {
-          title,
-          description: message,
-          severity: InsightSeverity.HIGH,
-          insight_date: classificationDate,
-          meter_id: terminalSummary.meter_id,
-          source_data_ref: { summaryId: terminalSummary.summary_id },
-        },
-      });
+    await this._prisma.dailyUsageClassification.upsert({
+      where: { summary_id: summary.summary_id },
+      update: {
+        classification,
+        confidence_score: deviasi,
+        model_version: modelVersion,
+        reasoning,
+      },
+      create: {
+        summary_id: summary.summary_id,
+        meter_id: summary.meter_id,
+        classification_date: summary.summary_date,
+        classification,
+        confidence_score: deviasi,
+        model_version: modelVersion,
+        reasoning,
+      },
+    });
+
+    // Buat insight jika ada pemborosan
+    if (classification === UsageCategory.BOROS) {
+      await this._createBorosInsight(summary);
     }
   }
 
@@ -1578,42 +1583,70 @@ export class ReadingService extends GenericBaseService<
 
       const orderByClause = this._buildOrderByClause(sortBy, sortOrder);
 
-      const readingSessions = await this._prisma.readingSession.findMany({
-        where: whereClause,
-        include: {
-          meter: {
-            include: {
-              energy_type: true,
-              daily_logbooks: {
-                where: {
-                  log_date: whereClause.reading_date, // Filter logbook berdasarkan rentang tanggal yang sama
+      // BARU: Ambil data sesi dan data pax secara paralel
+      const [readingSessions, paxData] = await Promise.all([
+        this._prisma.readingSession.findMany({
+          where: whereClause,
+          include: {
+            meter: {
+              include: {
+                energy_type: true,
+                daily_logbooks: {
+                  where: {
+                    log_date: whereClause.reading_date, // Filter logbook berdasarkan rentang tanggal yang sama
+                  },
                 },
               },
             },
-          },
-          user: {
-            select: {
-              username: true,
-            },
-          },
-          details: {
-            include: {
-              reading_type: {
-                select: {
-                  type_name: true,
-                },
+            user: {
+              select: {
+                username: true,
               },
             },
-            orderBy: {
-              reading_type_id: 'asc',
+            details: {
+              include: {
+                reading_type: {
+                  select: {
+                    type_name: true,
+                  },
+                },
+              },
+              orderBy: {
+                reading_type_id: 'asc',
+              },
             },
           },
-        },
-        orderBy: orderByClause,
+          orderBy: orderByClause,
+        }),
+        this._prisma.paxData.findMany({
+          where: {
+            data_date: whereClause.reading_date,
+          },
+        }),
+      ]);
+
+      // BARU: Buat Map untuk akses cepat ke data pax
+      const paxDataMap = new Map(
+        paxData.map((p) => [
+          p.data_date.toISOString().split('T')[0],
+          { total_pax: p.total_pax, pax_id: p.pax_id },
+        ])
+      );
+
+      // BARU: Gabungkan data pax ke dalam setiap sesi pembacaan
+      const dataWithPax = readingSessions.map((session) => {
+        const dateString = session.reading_date.toISOString().split('T')[0];
+        const paxInfo = paxDataMap.get(dateString);
+        return {
+          ...session,
+          // PERBAIKAN: Kirim pax (jumlah) dan pax_id secara terpisah
+          pax: paxInfo?.total_pax ?? null,
+          pax_id: paxInfo?.pax_id ?? null,
+        };
       });
 
       return {
-        data: readingSessions,
+        data: dataWithPax,
         message: 'Successfully retrieved reading history.',
       };
     });

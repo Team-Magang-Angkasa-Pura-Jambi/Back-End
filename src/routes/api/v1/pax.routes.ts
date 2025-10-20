@@ -22,7 +22,7 @@ export default (router: Router) => {
       getById: ['Admin', 'SuperAdmin'],
       create: ['Technician', 'Admin', 'SuperAdmin'],
       update: ['Admin', 'SuperAdmin'],
-      delete: ['SuperAdmin'],
+      delete: ['SuperAdmin', 'Admin', 'Technician'],
     },
   });
 
