@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc || true && npx copyfiles -u 1 src/generated/**/* dist",
     "start": "node dist/index.js",
-    "dev": "tsx watch --inspect src/index.ts",
+    "dev": "tsx watch --inspect --clear-screen=false src/index.ts",
     "migrate:dev": "prisma migrate dev",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",

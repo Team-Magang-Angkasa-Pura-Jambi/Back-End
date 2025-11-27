@@ -185,7 +185,7 @@ def _evaluate_kantor(suhu_rata: float, suhu_max: float, is_hari_kerja: int, aktu
 @app.get("/")
 def read_root():
     """Endpoint dasar untuk mengecek apakah API berjalan."""
-    return {"status": "API Alokasi Dana Aktif"}
+    return {"status": "API Machine Learning Aktif"}
 
 @app.post("/predict", summary="Prediksi Keseluruhan (Pax, Terminal, Kantor)")
 def predict_consumption(data: PredictionInput):
