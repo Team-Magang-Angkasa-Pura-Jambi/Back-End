@@ -7,9 +7,6 @@ import type {
   UpdateRoleBody,
 } from '../types/role.type.js';
 
-/**
- * Controller untuk menangani request HTTP terkait Peran.
- */
 export class RoleController extends BaseController<
   Role,
   CreateRoleBody,

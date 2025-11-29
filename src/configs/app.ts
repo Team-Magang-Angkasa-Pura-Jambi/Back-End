@@ -20,21 +20,6 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
-// app.get('/test-notification', (req, res) => {
-//   try {
-//     const payload = {
-//       title: '🔔 Sebuah Pemikiran Absurd',
-//       // --- JOKE DIMASUKKAN DI SINI ---
-//       message:
-//         'Bunglon itu katanya hebat bisa nyamar. Menurut saya kurang canggih. Kenapa dia nggak sekalian berubah jadi tukang fotokopi? Kan lebih berguna. Nempel di ijazah, "krek", temennya nempel, "krek". Lebih membantu ekosistem pertemanan.',
-//       link: '#',
-//     };
-//     socketServer.io.emit('new_notification', payload);
-//     res.status(200).send('Notifikasi tes berhasil dikirim.');
-//   } catch (error) {
-//     res.status(500).send('Gagal mengirim notifikasi tes.');
-//   }
-// });
 app.use(cors(corsOptions));
 app.use(json());
 app.use(urlencoded({ extended: false }));
@@ -47,5 +32,4 @@ apiV1(app);
 app.use(ErrorHandler.handleNotFound);
 app.use(ErrorHandler.errorHandler);
 
-// Memulai semua cron job yang terdaftar
 initializeCronJobs();

@@ -37,8 +37,8 @@ export default (app: any) => {
   router.get('/', indexController.index);
 
   authRoutes(router);
-
   router.use(authMiddleware);
+
   userRoute(router);
 
   meterRoutes(router);
@@ -65,7 +65,6 @@ export default (app: any) => {
   machineLearningRoute(router);
   dailyLogbookRoute(router);
   alertRoute(router);
-  alertRoute(router);
-  budgetRoute(router); // Rute ini sekarang mendaftarkan /budget/process
+  budgetRoute(router);
   annualBudgetRoute(router);
 };

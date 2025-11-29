@@ -46,9 +46,7 @@ export abstract class GenericBaseService<
   /**
    * Kontrak untuk membuat entitas baru. Menerima data input sederhana.
    */
-  public override async create(data: TCreateInput): Promise<TModel> {
-   
-    
+  public async create(data: TCreateInput): Promise<TModel> {
     const args = { data } as TCreateArgs;
     return this._create(args);
   }
@@ -57,8 +55,6 @@ export abstract class GenericBaseService<
    * Kontrak untuk memperbarui entitas. Menerima data input sederhana.
    */
   public async update(id: number, data: TUpdateInput): Promise<TModel> {
-    // Memanggil helper _update dengan membungkus data input
-    // ke dalam objek { data: ... } yang diharapkan Prisma.
     const args = { data } as unknown as Omit<TUpdateArgs, 'where'>;
     return this._update(id, args);
   }
@@ -66,7 +62,7 @@ export abstract class GenericBaseService<
   // --- METHOD CRUD PUBLIK LAINNYA ---
 
   public async findAll(
-    args?: TFindManyArgs,
+    args?: TFindManyArgs ,
     customMessages?: CustomErrorMessages
   ): Promise<TModel[]> {
     return this._handleCrudOperation(
