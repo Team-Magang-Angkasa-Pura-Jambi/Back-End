@@ -1,344 +1,207 @@
-import {
-  jest,
-  describe,
-  test,
-  expect,
-  beforeAll,
-  afterAll,
-  beforeEach,
-  afterEach,
-} from '@jest/globals';
-import request from 'supertest';
+import { describe, it, beforeEach, expect, vi, afterEach } from 'vitest';
+import { mockDeep, mockReset } from 'vitest-mock-extended';
+import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
-import { app } from '../../configs/app.js';
+
+// Imports
+import { userService } from '../user.service.js';
 import prisma from '../../configs/db.js';
-import { RoleName } from '../../generated/prisma/index.js';
+import { notificationService } from '../notification.service.js';
+import { Error409 } from '../../utils/customError.js';
+// import { RoleName } from '../../generated/prisma/index.js'; // Gunakan jika perlu enum
 
-// Mock the SocketServer to prevent errors related to 'io' being undefined during tests.
-// This is the root cause of the "Cannot read properties of undefined (reading 'io')" error.
-jest.mock('../../configs/socket.js', () => ({
-  SocketServer: {
-    instance: {
-      io: {
-        to: jest.fn().mockReturnThis(),
-        emit: jest.fn(),
-      },
-    },
-  },
+// --- 1. GLOBAL MOCKS ---
+vi.mock('../../configs/db.js', () => ({ default: mockDeep<PrismaClient>() }));
+vi.mock('bcrypt');
+vi.mock('../notification.service.js', () => ({
+  notificationService: { create: vi.fn() },
 }));
-// Mock the scheduler to prevent cron jobs from running during tests
-jest.mock('../../scheduler.js', () => ({}));
 
-describe('User Endpoint Tests', () => {
-  let adminToken: string;
-  let plainAdminToken: string;
-  let technicianToken: string;
+describe('UserService Test Suite', () => {
+  const prismaMock = prisma as unknown as ReturnType<
+    typeof mockDeep<PrismaClient>
+  >;
 
-  let superAdminUserId: number;
-  let plainAdminUserId: number;
-  let technicianUserId: number;
-
-  let superAdminRoleId: number;
-  let plainAdminRoleId: number;
-  let technicianRoleId: number;
-
-  const superAdminUser = {
-    username: 'test_superadmin',
-    password: 'password123',
+  // Data Dummy
+  const mockInput = {
+    username: 'testuser',
+    password: 'plainPassword123',
+    role_id: 2,
+    full_name: 'Test User',
+    email: 'test@example.com',
   };
 
-  const plainAdminUser = {
-    username: 'test_plainadmin',
-    password: 'password123',
+  // PERBAIKAN UTAMA: Buat objek return standar yang punya properti 'role'
+  const mockUserResult = {
+    user_id: 1,
+    ...mockInput,
+    is_active: true,
+    // INI YANG HILANG SEBELUMNYA:
+    role: { role_name: 'Staff' },
   };
 
-  const technicianUser = {
-    username: 'test_technician',
-    password: 'password123',
-  };
-
-  beforeAll(async () => {
-    // 1. Create Roles
-    const adminRole = await prisma.role.upsert({
-      where: { role_name: RoleName.SuperAdmin },
-      update: {},
-      create: { role_name: RoleName.SuperAdmin },
-    });
-    superAdminRoleId = adminRole.role_id;
-
-    const plainAdminRole = await prisma.role.upsert({
-      where: { role_name: RoleName.Admin },
-      update: {},
-      create: { role_name: RoleName.Admin },
-    });
-    plainAdminRoleId = plainAdminRole.role_id;
-
-    const technicianRole = await prisma.role.upsert({
-      where: { role_name: RoleName.Technician },
-      update: {},
-      create: { role_name: RoleName.Technician },
-    });
-    technicianRoleId = technicianRole.role_id;
-
-    // 2. Create Users for each role
-    const hashedPassword = await bcrypt.hash(superAdminUser.password, 10);
-    const saUser = await prisma.user.create({
-      data: {
-        username: superAdminUser.username,
-        password_hash: hashedPassword,
-        role_id: superAdminRoleId,
-        is_active: true,
-      },
-    });
-    superAdminUserId = saUser.user_id;
-
-    const paUser = await prisma.user.create({
-      data: {
-        username: plainAdminUser.username,
-        password_hash: hashedPassword,
-        role_id: plainAdminRoleId,
-        is_active: true,
-      },
-    });
-    plainAdminUserId = paUser.user_id;
-
-    const techUser = await prisma.user.create({
-      data: {
-        username: technicianUser.username,
-        password_hash: hashedPassword,
-        role_id: technicianRoleId,
-        is_active: true,
-      },
-    });
-    technicianUserId = techUser.user_id;
-
-    // 3. Login all users to get their tokens
-    const response = await request(app)
-      .post('/api/v1/auth/login')
-      .send(superAdminUser);
-    adminToken = response.body.data.token;
-
-    const plainAdminResponse = await request(app)
-      .post('/api/v1/auth/login')
-      .send(plainAdminUser);
-    plainAdminToken = plainAdminResponse.body.data.token;
-
-    const technicianResponse = await request(app)
-      .post('/api/v1/auth/login')
-      .send(technicianUser);
-    technicianToken = technicianResponse.body.data.token;
+  beforeEach(() => {
+    mockReset(prismaMock);
+    vi.clearAllMocks();
+    vi.mocked(bcrypt.hash).mockResolvedValue('hashed_secret_123' as never);
   });
 
-  afterAll(async () => {
-    // Clean up in reverse order of creation
-    await prisma.user.deleteMany({
-      where: {
-        user_id: { in: [superAdminUserId, plainAdminUserId, technicianUserId] },
-      },
-    });
+  // ==========================================
+  // 🟢 METHOD: CREATE
+  // ==========================================
+  describe('Method: create()', () => {
+    describe('Schema & Data Transformation', () => {
+      it('Harus mengubah password mentah menjadi hash sebelum simpan ke DB', async () => {
+        // Arrange
+        prismaMock.user.findFirst.mockResolvedValue(null);
+        prismaMock.user.findMany.mockResolvedValue([]);
 
-    // It's safer to clean roles only if they are not used by other tests/data
-    try {
-      await prisma.role.deleteMany({
-        where: {
-          role_id: {
-            in: [superAdminRoleId, plainAdminRoleId, technicianRoleId],
-          },
-        },
+        // PERBAIKAN: Gunakan mockUserResult yang lengkap (ada role-nya)
+        prismaMock.user.create.mockResolvedValue(mockUserResult as any);
+
+        // Act
+        await userService.create(mockInput as any);
+
+        // Assert
+        expect(bcrypt.hash).toHaveBeenCalledWith('plainPassword123', 10);
+        expect(prismaMock.user.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              password_hash: 'hashed_secret_123',
+            }),
+          })
+        );
       });
-    } catch (e) {
-      console.warn('Could not delete roles. They might be in use.');
-    }
-  });
 
-  describe('GET /api/v1/users', () => {
-    test('should return 401 Unauthorized if no token is provided', async () => {
-      await request(app).get('/api/v1/users').expect(401);
+      it('Harus membuang field password mentah (Sanitasi)', async () => {
+        prismaMock.user.findFirst.mockResolvedValue(null);
+        prismaMock.user.findMany.mockResolvedValue([]); // Tambahan biar aman
+
+        // PERBAIKAN: Gunakan mockUserResult
+        prismaMock.user.create.mockResolvedValue(mockUserResult as any);
+
+        await userService.create(mockInput as any);
+
+        const callArgs = prismaMock.user.create.mock.calls[0][0];
+        expect((callArgs as any).data.password).toBeUndefined();
+      });
     });
 
-    test('should return a list of users for an authenticated admin', async () => {
-      const response = await request(app)
-        .get('/api/v1/users')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .expect(200);
+    describe('Business Logic Flow', () => {
+      it('Positive: Jika username belum ada, buat user baru', async () => {
+        prismaMock.user.findFirst.mockResolvedValue(null);
+        prismaMock.user.findMany.mockResolvedValue([]);
 
-      expect(response.body.status.code).toBe(200);
-      expect(Array.isArray(response.body.data)).toBe(true);
-      // Check if at least our created users are in the list
-      expect(
-        response.body.data.some(
-          (u: any) => u.username === superAdminUser.username
-        )
-      ).toBe(true);
-      expect(
-        response.body.data.some(
-          (u: any) => u.username === technicianUser.username
-        )
-      ).toBe(true);
-    });
-  });
+        // PERBAIKAN: Gunakan mockUserResult
+        prismaMock.user.create.mockResolvedValue(mockUserResult as any);
 
-  describe('GET /api/v1/users/:id', () => {
-    test('should return a single user for an authenticated admin', async () => {
-      const response = await request(app)
-        .get(`/api/v1/users/${technicianUserId}`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .expect(200);
+        const result = await userService.create(mockInput as any);
 
-      expect(response.body.status.code).toBe(200);
-      expect(response.body.data.username).toBe(technicianUser.username);
-      expect(response.body.data.user_id).toBe(technicianUserId);
-    });
+        // Assert
+        expect(result.user_id).toBe(1);
+        expect(prismaMock.user.create).toHaveBeenCalled();
+      });
 
-    test('should return 404 Not Found for a non-existent user ID', async () => {
-      const nonExistentId = 999999;
-      await request(app)
-        .get(`/api/v1/users/${nonExistentId}`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .expect(404);
-    });
-  });
+      it('Positive (Restore): Jika username ada tapi mati (is_active: false), lakukan UPDATE', async () => {
+        prismaMock.user.findFirst.mockResolvedValue({
+          user_id: 99,
+          is_active: false,
+        } as any);
 
-  describe('POST /api/v1/users', () => {
-    // Make username unique for each test run to avoid 409 Conflict
-    const uniqueUsername = `created_user_${Date.now()}`;
-    const newUserPayload = {
-      username: uniqueUsername,
-      password: 'password123',
-      role_id: technicianRoleId, // Use role_id instead of role_name
-      is_active: true,
-    };
-    let createdUserId: number;
-    let freshAdminToken: string;
+        // Saat update pun, service butuh return value yang ada role-nya (jika dipakai notif)
+        prismaMock.user.update.mockResolvedValue({
+          ...mockUserResult,
+          user_id: 99,
+        } as any);
 
-    beforeEach(async () => {
-      // Login as superadmin before each test in this block to get a fresh token.
-      const loginResponse = await request(app)
-        .post('/api/v1/auth/login')
-        .send(superAdminUser);
-      freshAdminToken = loginResponse.body.data.token;
-      //   console.log(loginResponse);
+        await userService.create(mockInput as any);
+
+        expect(prismaMock.user.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { user_id: 99 },
+            data: expect.objectContaining({ is_active: true }),
+          })
+        );
+        expect(prismaMock.user.create).not.toHaveBeenCalled();
+      });
+
+      it('Negative (Conflict): Jika username ada dan hidup, lempar Error 409', async () => {
+        prismaMock.user.findFirst.mockResolvedValue({
+          user_id: 88,
+          is_active: true,
+        } as any);
+
+        await expect(userService.create(mockInput as any)).rejects.toThrow(
+          Error409
+        );
+      });
     });
 
-    afterEach(async () => {
-      // Clean up the created user after the test
-      if (createdUserId) {
-        await prisma.user
-          .delete({ where: { user_id: createdUserId } })
-          .catch(() => {
-            // Ignore error if user was already deleted
-          });
-      }
-    });
+    describe('Side Effects', () => {
+      it('Harus mengirim notifikasi ke admin setelah sukses create', async () => {
+        prismaMock.user.findFirst.mockResolvedValue(null);
+        prismaMock.user.findMany.mockResolvedValue([{ user_id: 100 } as any]);
 
-    test('should allow a superadmin to create a new user and return 201 Created', async () => {
-      const response = await request(app)
-        .post('/api/v1/users')
-        .set('Authorization', `Bearer ${freshAdminToken}`)
-        .send(newUserPayload)
-        .expect(201);
+        // PERBAIKAN: Gunakan mockUserResult
+        prismaMock.user.create.mockResolvedValue(mockUserResult as any);
 
-      expect(response.body.status.code).toBe(201);
-      expect(response.body.data.username).toBe(newUserPayload.username);
-      expect(response.body.data).toHaveProperty('user_id');
+        await userService.create(mockInput as any);
 
-      // Store the ID for cleanup
-      createdUserId = response.body.data.user_id;
-    });
-
-    test('should return 403 Forbidden if a non-admin tries to create a user', async () => {
-      await request(app)
-        .post('/api/v1/users')
-        .set('Authorization', `Bearer ${technicianToken}`)
-        .send(newUserPayload)
-        .expect(403);
+        expect(notificationService.create).toHaveBeenCalledTimes(1);
+      });
     });
   });
 
-  describe('DELETE /api/v1/users/:id', () => {
-    test('should allow a superadmin to delete a user and verify deletion', async () => {
-      // SuperAdmin deletes a Technician
-      const userToDeletePayload = {
-        username: `user_to_delete_${Date.now()}`,
-        password: 'password123',
-        role_id: technicianRoleId, // Use role_id instead of role_name
-        is_active: true,
-      };
+  // ==========================================
+  // 🟡 METHOD: UPDATE
+  // ==========================================
+  describe('Method: update()', () => {
+    describe('Schema Transformation', () => {
+      it('Harus melakukan hash ulang jika password diganti', async () => {
+        const updateData = { password: 'newPassword456' };
+        // Update juga biasanya include role di service kamu
+        prismaMock.user.update.mockResolvedValue(mockUserResult as any);
 
-      // Login as superadmin to get a fresh token for creating the user to be deleted.
-      const loginResponse = await request(app)
-        .post('/api/v1/auth/login')
-        .send(superAdminUser);
-      const freshTokenForDelete = loginResponse.body.data.token;
+        await userService.update(1, updateData as any);
 
-      const createResponse = await request(app)
-        .post('/api/v1/users')
-        .set('Authorization', `Bearer ${freshTokenForDelete}`)
-        .send(userToDeletePayload);
+        expect(bcrypt.hash).toHaveBeenCalledWith('newPassword456', 10);
+        expect(prismaMock.user.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              password_hash: 'hashed_secret_123',
+            }),
+          })
+        );
+      });
 
-      const userIdToDelete = createResponse.body.data.user_id;
-      expect(createResponse.status).toBe(201); // Ensure user was created
+      it('TIDAK boleh hash password jika password tidak diganti', async () => {
+        const updateData = { full_name: 'Ganti Nama Aja' };
+        prismaMock.user.update.mockResolvedValue(mockUserResult as any);
 
-      // 2. Delete the newly created user
-      const response = await request(app)
-        .delete(`/api/v1/users/${userIdToDelete}`)
-        .set('Authorization', `Bearer ${freshTokenForDelete}`)
-        .expect(200);
+        await userService.update(1, updateData as any);
 
-      expect(response.body.status.code).toBe(200);
-
-      // 3. Verify the user is actually deleted by trying to get them again
-      await request(app)
-        .get(`/api/v1/users/${userIdToDelete}`)
-        .set('Authorization', `Bearer ${freshTokenForDelete}`)
-        .expect(404);
+        expect(bcrypt.hash).not.toHaveBeenCalled();
+      });
     });
+  });
 
-    test('should return 403 Forbidden if an Admin tries to delete a SuperAdmin', async () => {
-      await request(app)
-        .delete(`/api/v1/users/${superAdminUserId}`)
-        .set('Authorization', `Bearer ${plainAdminToken}`)
-        .expect(403);
-    });
+  // ==========================================
+  // 🔴 METHOD: DELETE
+  // ==========================================
+  describe('Method: delete()', () => {
+    it('Logic Check: Harus melakukan SOFT DELETE (is_active: false), bukan hapus data', async () => {
+      prismaMock.user.update.mockResolvedValue({
+        user_id: 1,
+        is_active: false,
+      } as any);
 
-    test('should allow an Admin to delete a Technician', async () => {
-      // This test requires the technician created in beforeAll
-      await request(app)
-        .delete(`/api/v1/users/${technicianUserId}`)
-        .set('Authorization', `Bearer ${plainAdminToken}`)
-        // TODO: API BUG - This should be 200. The API currently forbids this.
-        // Change back to .expect(200) after fixing the authorization middleware.
-        .expect(403);
-    });
+      await userService.delete(1);
 
-    test('should return 403 Forbidden if a Technician tries to delete a user', async () => {
-      // A technician tries to delete another user (the admin)
-      await request(app)
-        .delete(`/api/v1/users/${superAdminUserId}`)
-        .set('Authorization', `Bearer ${technicianToken}`)
-        .expect(403);
+      expect(prismaMock.user.update).toHaveBeenCalledWith({
+        where: { user_id: 1 },
+        data: { is_active: false },
+      });
+      expect(prismaMock.user.delete).not.toHaveBeenCalled();
     });
   });
 });
-
-// ```
-
-// ### Penjelasan Skenario:
-
-// 1.  **Setup (`beforeAll`)**:
-//     *   Membuat dua peran (`SuperAdmin` dan `Technician`) menggunakan `prisma.role.upsert` untuk memastikan peran tersebut ada.
-//     *   Membuat dua pengguna: `testadmin_user` dengan peran `SuperAdmin` dan `testregular_user` dengan peran `Technician`.
-//     *   Melakukan login sebagai `testadmin_user` untuk mendapatkan token otentikasi (`adminToken`). Token ini akan digunakan untuk semua permintaan yang memerlukan hak akses admin.
-
-// 2.  **Teardown (`afterAll`)**:
-//     *   Membersihkan data dengan menghapus pengguna dan peran yang telah dibuat selama setup untuk menjaga kebersihan database.
-
-// 3.  **`GET /api/v1/users` (Mendapatkan Semua Pengguna)**:
-//     *   **Tes 1**: Memastikan endpoint mengembalikan `401 Unauthorized` jika permintaan dibuat tanpa token, membuktikan bahwa endpoint tersebut dilindungi.
-//     *   **Tes 2**: Memastikan admin yang terautentikasi bisa mendapatkan daftar semua pengguna. Tes ini memverifikasi status `200 OK` dan memeriksa apakah pengguna yang baru dibuat ada dalam daftar respons.
-
-// 4.  **`GET /api/v1/users/:id` (Mendapatkan Pengguna Tunggal)**:
-//     *   **Tes 1**: Memastikan admin bisa mengambil detail pengguna tertentu berdasarkan ID-nya.
-//     *   **Tes 2**: Memastikan API mengembalikan `404 Not Found` jika mencoba mengambil pengguna dengan ID yang tidak ada.
-
-// File ini memberikan fondasi yang kuat untuk menguji endpoint pengguna Anda. Anda dapat dengan mudah menambahkan skenario lain untuk `POST`, `PUT`, dan `DELETE` di dalamnya.

@@ -9,15 +9,13 @@ export const requiredString = (fieldName: string) =>
     .trim()
     .min(1, { message: `${fieldName} tidak boleh kosong.` });
 
-    
 export const zodString = (fieldName: string) =>
   z
     .string({ error: `${fieldName} wajib diisi.` })
     .trim()
     .min(1, { message: `${fieldName} tidak boleh kosong.` });
 
-
-    /**
+/**
  * Helper untuk validasi integer positif
  */
 export const positiveInt = (fieldName: string) =>

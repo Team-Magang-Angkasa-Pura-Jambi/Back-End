@@ -1,6 +1,5 @@
 import http from 'http';
 import 'dotenv/config';
-
 import { app } from './configs/app.js';
 import { SocketServer } from './configs/socket.js';
 import { startDataCheckCron } from './services/corn/dataChecker.js';

@@ -31,7 +31,7 @@ model User {
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
 
-  role                  Role                 @relation(fields: [role_id], references: [role_id] onDelete:Restrict)
+  role                  Role                 @relation(fields: [role_id], references: [role_id], onDelete:Restrict)
   notifications         Notification[]
   reading_sessions      ReadingSession[]
   price_schemes_set     PriceScheme[]
@@ -212,9 +212,9 @@ model ReadingSession {
   updated_at   DateTime @updatedAt
 
   meter_id Int
-  user_id  Int
+  user_id  Int?
   meter    Meter @relation(fields: [meter_id], references: [meter_id], onDelete: Cascade)
-  user     User  @relation(fields: [user_id], references: [user_id], onDelete:setNull)
+  user     User?  @relation(fields: [user_id], references: [user_id], onDelete:SetNull)
   details  ReadingDetail[]
 
   @@unique([meter_id, reading_date], name: "unique_meter_reading_per_day")
