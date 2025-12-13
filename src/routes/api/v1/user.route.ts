@@ -16,7 +16,6 @@ import { asyncHandler } from '../../../utils/asyncHandler.js';
 export default (router: Router) => {
   const prefix = '/users';
   const userRouter = createCrudRouter(prefix, {
-    // createCrudRouter returns an express.Router() instance
     ServiceClass: UserService,
     ControllerClass: UserController,
     idParamName: 'userId',
@@ -32,26 +31,19 @@ export default (router: Router) => {
       getAll: ['Admin', 'SuperAdmin'],
       getById: ['Admin', 'SuperAdmin', 'Technician'],
       create: ['SuperAdmin'],
-      update: ['Admin', 'SuperAdmin'],
+      update: ['Technician', 'Admin', 'SuperAdmin'],
       delete: ['SuperAdmin'],
     },
   });
 
-  // Menambahkan endpoint kustom untuk riwayat aktivitas
   router.get(
     prefix + '/:userId/activities',
     validate(userSchemas.byId),
-    authorize('Admin', 'SuperAdmin', 'Technician'), // Menggunakan otorisasi yang sama dengan getById
+    authorize('Admin', 'SuperAdmin', 'Technician'),
     asyncHandler(userController.getActivityHistory)
   );
 
-  // BARU: Endpoint kustom untuk force delete (hard delete)
-  router.delete(
-    prefix + '/:userId/force',
-    validate(userSchemas.byId),
-    authorize('SuperAdmin'), // Hanya SuperAdmin yang boleh
-    asyncHandler(userController.forceDelete)
-  );
+  
 
   router.use(userRouter);
 };

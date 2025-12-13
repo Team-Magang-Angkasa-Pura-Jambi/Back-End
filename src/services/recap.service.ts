@@ -217,22 +217,23 @@ export class RecapService extends BaseService {
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
 
-    if (endDate >= today) {
-      const yesterday = new Date(today);
-      yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-      endDate = new Date(
-        Date.UTC(
-          yesterday.getUTCFullYear(),
-          yesterday.getUTCMonth(),
-          yesterday.getUTCDate(),
-          23,
-          59,
-          59,
-          999
-        )
-      );
-    }
+    // if (endDate >= today) {
+    //   const yesterday = new Date(today);
+    //   yesterday.setUTCDate(yesterday.getUTCDate());
+    //   endDate = new Date(
+    //     Date.UTC(
+    //       yesterday.getUTCFullYear(),
+    //       yesterday.getUTCMonth(),
+    //       yesterday.getUTCDate(),
+    //       0,
+    //       0,
+    //       0,
+    //       0
+    //     )
+    //   );
+    // }
 
+    console.log(endDate);
     if (energyType == 'Fuel') {
       const whereClause: Prisma.ReadingSessionWhereInput = {
         reading_date: { gte: startDate, lte: endDate },
@@ -257,7 +258,7 @@ export class RecapService extends BaseService {
             },
           },
         },
-        orderBy: { reading_date: 'desc' },
+        orderBy: { reading_date: 'asc' },
       });
 
       const fuelData: RecapDataRow[] = [];
@@ -269,6 +270,7 @@ export class RecapService extends BaseService {
 
         const currentHeight =
           currentSession.details[0]?.value ?? new Prisma.Decimal(0);
+        console.log(currentHeight);
         const previousHeight =
           previousSession?.details[0]?.value ?? new Prisma.Decimal(0);
 
@@ -313,7 +315,7 @@ export class RecapService extends BaseService {
         });
       }
 
-      const fuelSummary = this._calculateSummary(fuelData, new Map(), 'Fuel');
+      const fuelSummary = this._calculateSummary(fuelData, 'Fuel');
       return { data: fuelData, meta: fuelSummary };
     }
 

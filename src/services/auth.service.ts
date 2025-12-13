@@ -7,7 +7,6 @@ import { userService, UserService } from './user.service.js';
 import type { LoginBody } from '../types/auth.type.js';
 import prisma from '../configs/db.js';
 
-// ✅ type payload JWT agar lebih aman
 export interface IJwtPayload {
   id: number;
   username: string;
@@ -24,28 +23,23 @@ export class AuthService extends BaseService {
    */
   public async login(data: LoginBody) {
     const { username, password } = data;
+
     const JWT_SECRET = process.env.JWT_SECRET;
     if (!JWT_SECRET) {
-      console.error(
-        'FATAL ERROR: JWT_SECRET environment variable is not defined.'
-      );
-      process.exit(1);
+      throw new Error('JWT_SECRET environment variable is not defined.');
     }
 
-    // Cari user by username
     const user = await this.userService.findByUsername(username);
 
     if (!user || !user.is_active) {
       throw new Error401('Nama pengguna atau kata sandi salah.');
     }
 
-    // Cocokkan password
     const isPasswordMatch = await bcrypt.compare(password, user.password_hash);
     if (!isPasswordMatch) {
       throw new Error401('Nama pengguna atau kata sandi salah.');
     }
 
-    // Pastikan role tersedia
     if (!user.role) {
       throw new Error500('Data pengguna tidak valid: peran tidak ditemukan.');
     }
@@ -67,14 +61,6 @@ export class AuthService extends BaseService {
       token,
     };
   }
-
-  /**
-   * Ambil data user yang sedang login (whoami).
-   */
-  public async whoami(userId: number) {
-    return this.userService.findById(userId);
-  }
 }
 
-// ✅ bikin singleton biar langsung dipakai di controller
 export const authService = new AuthService(userService);

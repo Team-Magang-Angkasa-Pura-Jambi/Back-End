@@ -1,25 +1,18 @@
 import type { Response } from 'express';
 import type { HttpError } from './customError.js';
 
-// --- Definisi Tipe Data untuk Respons ---
-
-// Tipe dasar untuk semua parameter helper
 interface ResponseParams {
   res: Response;
   message: string;
 }
 
-// Tipe untuk respons sukses yang bisa membawa data generik
 interface SuccessResponseParams<T> extends ResponseParams {
   data?: T;
 }
 
-// Tipe untuk respons error yang bisa membawa objek error
 interface ErrorResponseParams extends ResponseParams {
   error?: Error | HttpError;
 }
-
-// --- Helper untuk Respons Sukses ---
 
 /**
  * Mengirim respons sukses 200 OK.

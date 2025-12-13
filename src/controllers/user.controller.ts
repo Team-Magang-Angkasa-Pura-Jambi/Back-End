@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { res200, res201 } from '../utils/response.js';
+import { res200 } from '../utils/response.js';
 import type { User } from '../generated/prisma/index.js';
 import { BaseController } from '../utils/baseController.js';
 import type {
@@ -7,7 +7,7 @@ import type {
   GetUsersQuery,
   UpdateUserBody,
 } from '../types/user.type.js';
-import { UserService } from '../services/user.service.js';
+import { userService, UserService } from '../services/user.service.js';
 
 export class UserController extends BaseController<
   User,
@@ -17,7 +17,7 @@ export class UserController extends BaseController<
   UserService
 > {
   constructor() {
-    super(new UserService(), 'userId');
+    super(userService, 'userId');
   }
 
   /**
@@ -35,34 +35,7 @@ export class UserController extends BaseController<
     });
   };
 
-  /**
-   * BARU: Controller untuk menghapus pengguna secara permanen.
-   */
-  public forceDelete = async (req: Request, res: Response) => {
-    const { userId } = res.locals.validatedData.params;
-
-    const result = await this.service.forceDelete(userId);
-
-    res200({
-      res,
-      message: 'Pengguna berhasil dihapus secara permanen.',
-      data: result,
-    });
-  };
-  // public override delete = async (req: Request, res: Response) => {
-  //   const { userId } = res.locals.validatedData.params;
-  //   if (!this.service.softDelete) {
-  //     throw new Error('Metode softDelete tidak tersedia pada service ini.');
-  //   }
-
-  //   const deletedUser = await this.service.softDelete(userId);
-
-  //   res200({
-  //     res,
-  //     message: 'Pengguna berhasil dinonaktifkan (soft delete).',
-  //     data: deletedUser,
-  //   });
-  // };
+  
 }
 
 export const userController = new UserController();
