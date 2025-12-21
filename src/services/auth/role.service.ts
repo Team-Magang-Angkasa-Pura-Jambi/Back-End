@@ -1,13 +1,11 @@
-import prisma from '../configs/db.js';
+import prisma from '../../configs/db.js';
 import type {
   $Enums,
   Prisma,
   Role,
   RoleName,
-} from '../generated/prisma/index.js';
-import type { DefaultArgs } from '../generated/prisma/runtime/library.js';
-import type { CustomErrorMessages } from '../utils/baseService.js';
-import { GenericBaseService } from '../utils/GenericBaseService.js';
+} from '../../generated/prisma/index.js';
+import { GenericBaseService } from '../../utils/GenericBaseService.js';
 
 type CreateRoleInput = {
   role_name: RoleName;
@@ -31,15 +29,17 @@ export class RoleService extends GenericBaseService<
   }
 
   public findById(
-    id: number,
+    id: number
   ): Promise<{ role_id: number; role_name: $Enums.RoleName }> {
-    return prisma.role.findUniqueOrThrow({
-      where: { role_id: id },
-      include: {
-        users: true,
-        _count: true,
-      },
-    });
+    return this._handleCrudOperation(() =>
+      this._model.findUniqueOrThrow({
+        where: { role_id: id },
+        include: {
+          users: true,
+          _count: true,
+        },
+      })
+    );
   }
 }
 export const roleService = new RoleService();

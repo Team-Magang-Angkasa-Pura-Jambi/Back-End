@@ -1,5 +1,5 @@
 import type z from 'zod';
-import type { roleSchemas } from '../validations/role.validation.js';
+import type { roleSchemas } from '../../validations/auth/role.validation.js';
 
 // Mengekstrak tipe dari skema Zod untuk body request
 

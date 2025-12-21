@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type {
   userQuerySchema,
   userSchemas,
-} from '../validations/user.validation.js';
+} from '../../validations/auth/user.validation.js';
 
 export type CreateUserBody = z.infer<typeof userSchemas.body>;
 

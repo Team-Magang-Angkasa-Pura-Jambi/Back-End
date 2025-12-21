@@ -1,8 +1,6 @@
 import { z } from 'zod';
-import type {
-  queryGetByMeter,
-  readingTypeSchema,
-} from '../validations/readingType.validation.js';
+import { queryGetByMeter, readingTypeSchema } from '../../validations/metering/readingType.validation.js';
+
 
 export type CreateReadingTypeBody = z.infer<typeof readingTypeSchema.body>;
 

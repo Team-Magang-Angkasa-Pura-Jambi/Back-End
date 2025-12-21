@@ -3,10 +3,10 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
 // 1. IMPORT SERVICE YANG MAU DITES
-import { authService } from '../auth.service.js';
+import { authService } from '../auth/auth.service.js';
 
 // 2. IMPORT DEPENDENCY UNTUK DI-MOCK
-import { userService } from '../user.service.js';
+import { userService } from '../auth/user.service.js';
 import { Error401, Error500 } from '../../utils/customError.js';
 
 // 3. MOCK MODULES

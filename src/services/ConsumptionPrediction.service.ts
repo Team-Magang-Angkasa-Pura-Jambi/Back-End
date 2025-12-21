@@ -12,7 +12,7 @@ import type {
 import type {
   CreateMeterCategoryBody,
   UpdateMeterCategoryBody,
-} from '../types/meterCategory.type.js';
+} from '../types/metering/meterCategory.type.js';
 import type { CustomErrorMessages } from '../utils/baseService.js';
 import { GenericBaseService } from '../utils/GenericBaseService.js';
 

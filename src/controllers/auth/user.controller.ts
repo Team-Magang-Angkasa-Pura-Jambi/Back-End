@@ -1,13 +1,13 @@
 import type { Request, Response } from 'express';
-import { res200 } from '../utils/response.js';
-import type { User } from '../generated/prisma/index.js';
-import { BaseController } from '../utils/baseController.js';
+import { res200 } from '../../utils/response.js';
+import type { User } from '../../generated/prisma/index.js';
+import { BaseController } from '../../utils/baseController.js';
 import type {
   CreateUserBody,
   GetUsersQuery,
   UpdateUserBody,
-} from '../types/user.type.js';
-import { userService, UserService } from '../services/user.service.js';
+} from '../../types/auth/user.type.js';
+import { userService, UserService } from '../../services/auth/user.service.js';
 
 export class UserController extends BaseController<
   User,
@@ -34,8 +34,6 @@ export class UserController extends BaseController<
       data: result,
     });
   };
-
-  
 }
 
 export const userController = new UserController();

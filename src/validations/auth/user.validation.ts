@@ -1,12 +1,7 @@
 import { z } from 'zod';
-import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
-import {
-  optionalString,
-  positiveInt,
-  requiredString,
-  zodString,
-} from '../utils/schmeHelper.js';
-import { RoleName } from '../generated/prisma/index.js';
+import { CrudSchemaBuilder } from '../../utils/shemaHandler.js';
+import { positiveInt, zodString } from '../../utils/schmeHelper.js';
+import { RoleName } from '../../generated/prisma/index.js';
 
 const userIdSchema = positiveInt('User ID');
 const passwordRules = zodString('Password');
@@ -27,7 +22,10 @@ const userParamsSchema = z.object({
 export const userQuerySchema = z.object({
   query: z.object({
     roleName: z.nativeEnum(RoleName).optional(),
-    isActive: z.coerce.boolean().optional(),
+    isActive: z
+      .enum(['true', 'false'])
+      .optional()
+      .transform((val) => val === 'true'),
     search: z.string().trim().optional(),
   }),
 });

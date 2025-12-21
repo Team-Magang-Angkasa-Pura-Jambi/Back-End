@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 
 // Imports
-import { userService } from '../user.service.js';
+import { userService } from '../auth/user.service.js';
 import prisma from '../../configs/db.js';
 import { notificationService } from '../notification.service.js';
 import { Error409 } from '../../utils/customError.js';

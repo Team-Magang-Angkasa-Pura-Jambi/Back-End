@@ -38,9 +38,7 @@ import {
   _updateDailySummary,
 } from './helpers/reading-summarizer.js';
 import { _classifyDailyUsage } from './helpers/forecast-calculator.js';
-import { DefaultArgs } from '../../generated/prisma/runtime/library.js';
 import { CustomErrorMessages } from '../../utils/baseService.js';
-import { PaginationParams } from '../../types/common/index.js';
 
 export class ReadingService extends GenericBaseService<
   typeof prisma.readingSession,
