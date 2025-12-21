@@ -1,5 +1,5 @@
 import type { Router } from 'express';
-import { ReadingService } from '../../../services/reading.service.js';
+import { ReadingService } from '../../../services/metering/reading.service.js';
 
 import { validate } from '../../../utils/validate.js';
 import {
@@ -7,14 +7,18 @@ import {
   getReadingsSchema,
   queryLastReading,
   readingSessionSchemas,
-} from '../../../validations/reading.validation.js';
+} from '../../../validations/metering/reading.validation.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
-import { readingController, ReadingController } from '../../../controllers/reading.controller.js';
+import {
+  readingController,
+  ReadingController,
+} from '../../../controllers/metering/reading.controller.js';
+
+const prefix = '/readings';
 
 export default (router: Router) => {
-  // const readingController = new ReadingController();
-  const userRouter = createCrudRouter('/readings', {
+  const userRouter = createCrudRouter(prefix, {
     ServiceClass: ReadingService,
     ControllerClass: ReadingController,
     idParamName: 'sessionId',
@@ -30,12 +34,11 @@ export default (router: Router) => {
       getAll: ['Admin', 'SuperAdmin'],
       getById: ['Admin', 'SuperAdmin'],
       create: ['Technician', 'Admin', 'SuperAdmin'],
-      update: ['Technician', 'Admin', 'SuperAdmin'], // PERBAIKAN: Izinkan Teknisi & Admin untuk update
+      update: ['Technician', 'Admin', 'SuperAdmin'],
       delete: ['Admin', 'SuperAdmin'],
     },
   });
 
-  const prefix = '/readings';
   router.get(
     prefix + '/last',
     validate(queryLastReading),

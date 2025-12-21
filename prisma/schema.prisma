@@ -348,7 +348,7 @@ model DailyLogbook {
   meter                   Meter    @relation(fields: [meter_id], references: [meter_id])
 
   // PERBAIKAN: Kolom generik untuk perubahan konsumsi
-  consumption_change_percent Decimal? @db.Decimal(5, 2)
+  consumption_change_percent Decimal? @db.Decimal(15, 2)
 
   // BARU: Analisis penghematan/pemborosan vs target
   savings_value           Decimal? @db.Decimal(12, 2) // Penghematan (kWh, m3)

@@ -1,6 +1,6 @@
 import z from 'zod';
-import { positiveInt, requiredString } from './schmeHelper.js';
-import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
+import { positiveInt, requiredString } from '../../utils/schmeHelper.js';
+import { CrudSchemaBuilder } from '../../utils/shemaHandler.js';
 
 const meterCategoryParamsSchema = z.object({
   categoryId: positiveInt('category ID'),
@@ -15,8 +15,4 @@ export const meterCategorySchema = new CrudSchemaBuilder({
   paramsSchema: meterCategoryParamsSchema,
 });
 
-export const queryMeterCatagory = meterCategorySchema.getList(
-    z.object({
-        
-    })
-);
+export const queryMeterCatagory = meterCategorySchema.getList(z.object({}));

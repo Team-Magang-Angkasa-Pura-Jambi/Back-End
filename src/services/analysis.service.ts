@@ -1304,7 +1304,7 @@ export class AnalysisService extends BaseService {
 
       // 2. Panggil logika klasifikasi yang sudah ada di ReadingService.
       // Impor dinamis untuk menghindari dependensi sirkular.
-      const { ReadingService } = await import('./reading.service.js');
+      const { ReadingService } = await import('./metering/reading.service.js');
       const readingService = new ReadingService();
       // @ts-ignore - Memanggil metode privat untuk tujuan ini.
       await readingService._classifyDailyUsage(summary, summary.meter);

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type {
   meterSchema,
   queryMeter,
-} from '../validations/meter.validation.js';
+} from '../../validations/metering/meter.validation.js';
 
 export type CreateMeterBody = z.infer<typeof meterSchema.body>;
 

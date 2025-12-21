@@ -7,7 +7,6 @@ import { energyTypeRoutes } from './energy.routes.js';
 import { roleRoutes } from './role.routes.js';
 
 import { readingTypeRoutes } from './readingType.route.js';
-import readingDetailRoute from './readingDetail.route.js';
 import priceSchemeRoute from './priceScheme.route.js';
 import userRoute from './user.route.js';
 import efficencyTargetRoute from './efficencyTarget.route.js';
@@ -47,7 +46,6 @@ export default (app: any) => {
   readingRoutes(router);
 
   readingTypeRoutes(router);
-  readingDetailRoute(router);
   priceSchemeRoute(router);
   efficencyTargetRoute(router);
   SchemeRateRoute(router);

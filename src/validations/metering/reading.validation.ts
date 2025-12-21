@@ -1,6 +1,19 @@
 import z from 'zod';
-import { isoDate, positiveInt, positiveNumber } from './schmeHelper.js';
-import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
+import {
+  isoDate,
+  positiveInt,
+  positiveNumber,
+} from '../../utils/schmeHelper.js';
+import { CrudSchemaBuilder } from '../../utils/shemaHandler.js';
+import { DateRangeRules, PaginationRules } from '../common/index.js';
+
+const EnergyTypeEnum = z.enum(['Electricity', 'Water', 'Fuel']);
+
+const QueryIdentifiers = z.object({
+  meterId: z.coerce.number().int().positive().optional(),
+  userId: z.coerce.number().int().positive().optional(),
+  readingTypeId: z.coerce.number().int().positive().optional(),
+});
 
 export const readingSessionBodySchema = z.object({
   reading_date: isoDate('Tanggal Pembacaan'),
@@ -19,22 +32,23 @@ export const readingSessionBodySchema = z.object({
 export const readingSessionParamsSchema = z.object({
   sessionId: positiveInt('ID Sesi'),
 });
+
 export const readingSessionSchemas = new CrudSchemaBuilder({
   bodySchema: readingSessionBodySchema,
   paramsSchema: readingSessionParamsSchema,
 });
 
 export const getReadingsSchema = z.object({
-  energyTypeName: z.enum(['Electricity', 'Water', 'Fuel']).optional(),
-  date: z.coerce.date().optional(),
-  meterId: z.coerce.number().int().positive().optional(),
-  userId: z.coerce.number().int().positive().optional(),
-  page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().positive().max(100).default(10),
-  search: z.string().trim().optional(),
-  sortBy: z.string().optional(),
-  sortOrder: z.enum(['asc', 'desc']).default('asc'),
+  query: PaginationRules.merge(
+    QueryIdentifiers.pick({ meterId: true, userId: true })
+  ).extend({
+    energyTypeName: EnergyTypeEnum.optional(),
+    date: z.coerce.date().optional(),
+    startDate: z.coerce.date().optional(),
+    endDate: z.coerce.date().optional(),
+  }),
 });
+
 export const queryLastReading = z.object({
   query: z.object({
     meterId: positiveInt('meter ID'),
@@ -44,18 +58,8 @@ export const queryLastReading = z.object({
 });
 
 export const getHistoryQuerySchema = z.object({
-  query: z.object({
-    energyTypeName: z.enum(['Electricity', 'Water', 'Fuel']).optional(),
-    startDate: z
-      .string()
-      .datetime({ message: 'Start date must be a valid ISO string' })
-      .optional(),
-    endDate: z
-      .string()
-      .datetime({ message: 'End date must be a valid ISO string' })
-      .optional(),
-    // `coerce` akan secara otomatis mengubah string dari query menjadi number
-    meterId: z.coerce.number().int().positive().optional(),
+  query: DateRangeRules.merge(QueryIdentifiers.pick({ meterId: true })).extend({
+    energyTypeName: EnergyTypeEnum.optional(),
     sortBy: z.enum(['reading_date', 'created_at']).optional(),
     sortOrder: z.enum(['asc', 'desc']).optional(),
   }),

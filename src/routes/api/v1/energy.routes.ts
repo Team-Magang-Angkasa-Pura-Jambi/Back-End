@@ -2,11 +2,11 @@ import type { Router } from 'express';
 import {
   energyTypeSchema,
   queryEnergy,
-} from '../../../validations/energy.validation.js';
+} from '../../../validations/metering/energy.validation.js';
 
 import { createCrudRouter } from '../../../utils/routerFactory.js';
-import { EnergyTypeService } from '../../../services/energy.service.js';
-import { EnergyTypeController } from '../../../controllers/energy.controller.js';
+import { EnergyTypeService } from '../../../services/metering/energy.service.js';
+import { EnergyTypeController } from '../../../controllers/metering/energy.controller.js';
 
 export const energyTypeRoutes = (router: Router) => {
   const energyTypeRouter = createCrudRouter('/energy-types', {

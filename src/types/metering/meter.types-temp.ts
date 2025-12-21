@@ -1,4 +1,4 @@
-import type { Meter, MeterStatus } from '../generated/prisma/index.js';
+import type { Meter, MeterStatus } from '../../generated/prisma/index.js';
 
 // Tipe dasar untuk properti yang bisa di-query
 export type GetMetersQuery = {
@@ -18,8 +18,9 @@ export type CreateMeterBody = {
   category_id: number;
   tariff_group_id: number;
   // Properti opsional khusus untuk BBM
-  tank_height_cm?: number;
-  tank_volume_liters?: number;
+  tank_height_cm?: number | null;
+  tank_volume_liters?: number | null;
+  rollover_limit?: number | null;
 };
 
 // Tipe untuk body request saat memperbarui meter
@@ -30,5 +31,5 @@ export type UpdateMeterBody = Partial<CreateMeterBody>;
 export type MeterWithRelations = Meter & {
   energy_type: { type_name: string };
   category: { name: string };
-  tariff_group: { group_code: string };
+  tariff_group: { group_code: string; faktor_kali: number };
 };

@@ -1,12 +1,11 @@
-import prisma from '../configs/db.js';
-import { Prisma, type ReadingType } from '../generated/prisma/index.js';
-import { GenericBaseService } from '../utils/GenericBaseService.js';
+import prisma from '../../configs/db.js';
+import { Prisma, type ReadingType } from '../../generated/prisma/index.js';
+import { GenericBaseService } from '../../utils/GenericBaseService.js';
 import type {
   CreateReadingTypeBody,
   GetReadingTypesQuery,
   UpdateReadingTypeBody,
-} from '../types/readingType.type.js';
-import type { GetQueryLastReading } from '../types/reading.types.js';
+} from '../../types/readingType.type.js';
 
 type ReadingTypeWithEnergyType = Prisma.ReadingTypeGetPayload<{
   include: { energy_type: true };
@@ -40,12 +39,8 @@ export class ReadingTypeService extends GenericBaseService<
 
     // PERBAIKAN: Ini adalah cara yang benar untuk memfilter berdasarkan relasi
     if (meterId) {
-      where.details = {
-        some: {
-          session: {
-            meter_id: meterId,
-          },
-        },
+      where.session_details = {
+        some: { session: { meter_id: meterId } },
       };
     }
 
@@ -53,14 +48,17 @@ export class ReadingTypeService extends GenericBaseService<
       where,
       include: {
         energy_type: true,
-        applicable_to_categories: true, // Selalu sertakan relasi energy_type
+        applicable_to_categories: true,
       },
       orderBy: {
         reading_type_id: 'asc',
       },
     };
 
-    return this._handleCrudOperation(() => this._model.findMany(findArgs));
+    const result = this._handleCrudOperation(() =>
+      this._model.findMany(findArgs)
+    );
+    return result as unknown as ReadingTypeWithEnergyType[];
   }
 
   // public async create(data: {

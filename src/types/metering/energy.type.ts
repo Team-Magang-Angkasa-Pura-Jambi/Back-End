@@ -2,8 +2,8 @@ import { z } from 'zod';
 import type {
   energyTypeSchema,
   queryEnergy,
-} from '../validations/energy.validation.js';
-import type { getReadingsSchema } from '../validations/reading.validation.js';
+} from '../../validations/energy.validation.js';
+
 
 export type CreateEnergyTypeBody = z.infer<typeof energyTypeSchema.body>;
 

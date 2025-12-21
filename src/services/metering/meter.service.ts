@@ -1,11 +1,31 @@
-import prisma from '../configs/db.js';
-import { Prisma, type Meter } from '../generated/prisma/index.js';
+import prisma from '../../configs/db.js';
 import {
-  BaseService,
-  GenericBaseService,
-} from '../utils/GenericBaseService.js';
-import { Error400 } from '../utils/customError.js';
-import type { CreateMeterBody, UpdateMeterBody } from '../types/meter.types.js';
+  $Enums,
+  Prisma,
+  RoleName,
+  User,
+  type Meter,
+} from '../../generated/prisma/index.js';
+import { GenericBaseService } from '../../utils/GenericBaseService.js';
+import { Error400 } from '../../utils/customError.js';
+import type {
+  CreateMeterBody,
+  UpdateMeterBody,
+} from '../../types/metering/meter.types-temp.js';
+import { CustomErrorMessages } from '../../utils/baseService.js';
+import { DefaultArgs } from '../../generated/prisma/runtime/library.js';
+
+type TariffGroupForValidation = Prisma.TariffGroupGetPayload<{
+  include: {
+    price_schemes: {
+      include: {
+        rates: {
+          include: { reading_type: true };
+        };
+      };
+    };
+  };
+}>;
 
 export class MeterService extends GenericBaseService<
   typeof prisma.meter,
@@ -22,71 +42,106 @@ export class MeterService extends GenericBaseService<
     super(prisma, prisma.meter, 'meter_id');
   }
 
-  /**
-   * Membuat meter baru dengan validasi khusus untuk tipe 'Fuel'.
-   */
+  public async findAllwithRole(
+    userId: number,
+    args?: Prisma.MeterFindManyArgs & {
+      energyTypeId?: number;
+      typeName?: string;
+    },
+    customMessages?: CustomErrorMessages
+  ) {
+    const { energyTypeId, typeName, ...restArgs } = args || {};
 
-  public override async findAll(
-    query: MeterQuery = {}
-  ): Promise<MeterWithEnergyType[]> {
-    const { energyTypeId, typeName } = query;
-    const where: Prisma.MeterWhereInput = {};
+    const user = await prisma.user.findFirstOrThrow({
+      where: { user_id: userId },
+      select: { role: { select: { role_name: true } } },
+    });
 
-    // Bangun klausa 'where' secara dinamis
+    const roleName = user.role.role_name;
+
+    const where: Prisma.MeterWhereInput = {
+      ...restArgs.where,
+    };
+    if (roleName !== 'SuperAdmin') {
+      where.status = { not: 'Deleted' };
+    }
     if (energyTypeId) {
       where.energy_type_id = energyTypeId;
     }
+
     if (typeName) {
       where.energy_type = {
-        type_name: {
-          contains: typeName,
-          mode: 'insensitive',
+        is: {
+          type_name: {
+            contains: typeName,
+            mode: 'insensitive',
+          },
         },
       };
     }
 
     const findArgs: Prisma.MeterFindManyArgs = {
+      ...restArgs,
       where,
-      // PERBAIKAN UTAMA: Selalu sertakan relasi energy_type
+
       include: {
+        ...(restArgs.include as any),
+
         category: true,
         tariff_group: true,
         energy_type: true,
-        _count: true,
       },
-      orderBy: {
-        meter_id: 'asc',
-      },
+
+      orderBy: restArgs.orderBy || { meter_id: 'asc' },
     };
 
-    return this._handleCrudOperation(() => this._model.findMany(findArgs));
+    return super.findAll(findArgs as any, customMessages);
   }
+
   public override async create(data: CreateMeterBody): Promise<Meter> {
     return this._handleCrudOperation(async () => {
       const energyType = await this._prisma.energyType.findUniqueOrThrow({
         where: { energy_type_id: data.energy_type_id },
       });
 
-      // BARU: Validasi bahwa golongan tarif yang dipilih memiliki konfigurasi harga yang valid
-      // untuk tipe energi yang bersangkutan.
-      await this._validateTariffGroupConfiguration(
-        data.tariff_group_id,
-        energyType.type_name
-      );
+      const tariffGroup = await this._prisma.tariffGroup.findUnique({
+        where: { tariff_group_id: data.tariff_group_id },
+        include: {
+          price_schemes: {
+            include: {
+              rates: {
+                include: { reading_type: true },
+              },
+            },
+          },
+        },
+      });
+
+      if (!tariffGroup) {
+        throw new Error400(
+          `Golongan tarif dengan ID ${data.tariff_group_id} tidak ditemukan.`
+        );
+      }
+
+      this._validateTariffGroupConfiguration(tariffGroup, energyType.type_name);
 
       const createData: Prisma.MeterCreateInput = {
         meter_code: data.meter_code,
         status: data.status,
+
         energy_type: { connect: { energy_type_id: data.energy_type_id } },
         category: { connect: { category_id: data.category_id } },
         tariff_group: { connect: { tariff_group_id: data.tariff_group_id } },
+
+        tank_height_cm: null,
+        tank_volume_liters: null,
+        rollover_limit: data.rollover_limit ?? null,
       };
 
-      // Validasi khusus jika tipe energi adalah 'Fuel'
       if (energyType.type_name === 'Fuel') {
         if (
-          data.tank_height_cm == null ||
-          data.tank_volume_liters == null ||
+          !data.tank_height_cm ||
+          !data.tank_volume_liters ||
           data.tank_height_cm <= 0 ||
           data.tank_volume_liters <= 0
         ) {
@@ -94,13 +149,11 @@ export class MeterService extends GenericBaseService<
             "Untuk meter tipe 'Fuel', properti 'tank_height_cm' dan 'tank_volume_liters' wajib diisi dan harus lebih besar dari 0."
           );
         }
+
         createData.tank_height_cm = data.tank_height_cm;
         createData.tank_volume_liters = data.tank_volume_liters;
-        createData.rollover_limit = null; // Pastikan null jika tipe Fuel
-      } else {
-        // Pastikan properti tangki null untuk tipe lain
-        createData.tank_height_cm = null;
-        createData.tank_volume_liters = null;
+
+        createData.rollover_limit = null;
       }
 
       return this._model.create({
@@ -122,13 +175,11 @@ export class MeterService extends GenericBaseService<
     data: UpdateMeterBody
   ): Promise<Meter> {
     return this._handleCrudOperation(async () => {
-      // Ambil data meter saat ini untuk mengetahui tipe energinya
       const currentMeter = await this._model.findUniqueOrThrow({
-        where: { [this._idField]: id },
+        where: { meter_id: id },
         include: { energy_type: true },
       });
 
-      // Tentukan tipe energi final (jika diubah atau tetap sama)
       const finalEnergyTypeId =
         data.energy_type_id ?? currentMeter.energy_type_id;
       const finalEnergyType =
@@ -138,19 +189,34 @@ export class MeterService extends GenericBaseService<
               where: { energy_type_id: finalEnergyTypeId },
             });
 
-      // BARU: Validasi konfigurasi tarif jika grup tarif atau tipe energi diubah.
       if (data.tariff_group_id || data.energy_type_id) {
-        await this._validateTariffGroupConfiguration(
-          data.tariff_group_id ?? currentMeter.tariff_group_id,
+        const targetTariffGroupId =
+          data.tariff_group_id ?? currentMeter.tariff_group_id;
+
+        const fullTariffGroup = await this._prisma.tariffGroup.findUnique({
+          where: { tariff_group_id: targetTariffGroupId },
+          include: {
+            price_schemes: {
+              include: { rates: { include: { reading_type: true } } },
+            },
+          },
+        });
+
+        if (!fullTariffGroup) {
+          throw new Error400(
+            `Golongan tarif dengan ID ${targetTariffGroupId} tidak ditemukan.`
+          );
+        }
+
+        this._validateTariffGroupConfiguration(
+          fullTariffGroup,
           finalEnergyType.type_name
         );
       }
 
       const updateData: Prisma.MeterUpdateInput = { ...data };
 
-      // Validasi khusus jika tipe energi final adalah 'Fuel'
       if (finalEnergyType.type_name === 'Fuel') {
-        // Jika properti tangki tidak disediakan dalam update, gunakan nilai yang ada
         const tankHeight =
           data.tank_height_cm ?? currentMeter.tank_height_cm?.toNumber();
         const tankVolume =
@@ -170,13 +236,12 @@ export class MeterService extends GenericBaseService<
         updateData.tank_height_cm = tankHeight;
         updateData.tank_volume_liters = tankVolume;
       } else {
-        // Jika tipe diubah menjadi BUKAN 'Fuel', pastikan properti tangki di-reset menjadi null
         updateData.tank_height_cm = null;
         updateData.tank_volume_liters = null;
       }
 
       return this._model.update({
-        where: { [this._idField]: id },
+        where: { meter_id: id },
         data: updateData,
         include: {
           energy_type: true,
@@ -187,54 +252,59 @@ export class MeterService extends GenericBaseService<
     });
   }
 
+  public override async delete(
+    id: number,
+    args?: Omit<Prisma.MeterDeleteArgs<DefaultArgs>, 'where'>
+  ): Promise<Meter> {
+    const availableChild = await prisma.readingSession.findFirst({
+      where: { meter_id: id },
+    });
+
+    if (!availableChild) {
+      return this._handleCrudOperation(() =>
+        this._model.delete({ where: { meter_id: id } })
+      );
+    }
+
+    return this._handleCrudOperation(() =>
+      this._model.update({
+        where: { meter_id: id },
+        data: { status: 'Deleted' },
+        ...args,
+      })
+    );
+  }
+
   /**
    * BARU: Memvalidasi bahwa sebuah Golongan Tarif (TariffGroup) memiliki setidaknya
    * satu skema harga yang valid untuk tipe energi tertentu.
    * @param tariffGroupId - ID dari TariffGroup yang akan divalidasi.
    * @param energyTypeName - Nama dari tipe energi ('Electricity', 'Water', 'Fuel').
    */
-  private async _validateTariffGroupConfiguration(
-    tariffGroupId: number,
+
+  private _validateTariffGroupConfiguration(
+    tariffGroup: TariffGroupForValidation,
     energyTypeName: string
-  ): Promise<void> {
-    const tariffGroup = await this._prisma.tariffGroup.findUnique({
-      where: { tariff_group_id: tariffGroupId },
-      include: {
-        price_schemes: {
-          include: { rates: { include: { reading_type: true } } },
-        },
-      },
-    });
-
-    if (!tariffGroup) {
-      throw new Error400(
-        `Golongan tarif dengan ID ${tariffGroupId} tidak ditemukan.`
-      );
-    }
-
+  ): void {
     if (tariffGroup.price_schemes.length === 0) {
       throw new Error400(
         `Golongan tarif '${tariffGroup.group_code}' tidak memiliki skema harga yang terkonfigurasi.`
       );
     }
 
-    // Validasi khusus untuk Listrik: harus ada tarif WBP & LWBP di setidaknya satu skema.
     if (energyTypeName === 'Electricity') {
       const hasValidElectricityScheme = tariffGroup.price_schemes.some(
         (scheme) => {
-          const hasWbp = scheme.rates.some(
-            (rate) => rate.reading_type.type_name === 'WBP'
+          const rateTypes = new Set(
+            scheme.rates.map((r) => r.reading_type.type_name)
           );
-          const hasLwbp = scheme.rates.some(
-            (rate) => rate.reading_type.type_name === 'LWBP'
-          );
-          return hasWbp && hasLwbp;
+          return rateTypes.has('WBP') && rateTypes.has('LWBP');
         }
       );
 
       if (!hasValidElectricityScheme) {
         throw new Error400(
-          `Golongan tarif '${tariffGroup.group_code}' tidak memiliki skema harga yang valid untuk Listrik. Pastikan setidaknya satu skema memiliki tarif untuk WBP dan LWBP.`
+          `Golongan tarif '${tariffGroup.group_code}' (Listrik) wajib memiliki tarif untuk WBP dan LWBP.`
         );
       }
     }

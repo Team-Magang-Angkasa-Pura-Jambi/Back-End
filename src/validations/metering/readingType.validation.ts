@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { positiveInt, requiredString } from './schmeHelper.js';
-import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
+import { positiveInt, requiredString } from '../../utils/schmeHelper.js';
+import { CrudSchemaBuilder } from '../../utils/shemaHandler.js';
 
 export const ReadingTypeBodySchema = z.object({
   type_name: requiredString('type name'),

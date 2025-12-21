@@ -1,5 +1,5 @@
 import z from 'zod';
-import { isoDate, positiveInt, requiredString } from './schmeHelper.js';
+import { isoDate, positiveInt, requiredString } from '../utils/schmeHelper.js';
 import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
 
 const defaultSchema = z.object({

@@ -5,12 +5,12 @@ import type {
   CreateReadingSessionBody,
   GetReadingSessionsQuery,
   UpdateReadingSessionBody,
-} from '../types/reading.types.js';
-import { res200, res201 } from '../utils/response.js';
-import { Error401 } from '../utils/customError.js';
-import { BaseController } from '../utils/baseController.js';
-import { ReadingService } from '../services/reading.service.js';
-import type { ReadingSession } from '../generated/prisma/index.js';
+} from '../../types/metering/reading.types.js';
+import { res200 } from '../../utils/response.js';
+import { Error401 } from '../../utils/customError.js';
+import { BaseController } from '../../utils/baseController.js';
+import { ReadingService } from '../../services/metering/reading.service.js';
+import type { ReadingSession } from '../../generated/prisma/index.js';
 
 /**
  * Controller untuk menangani request HTTP terkait Sesi Pembacaan.
@@ -19,8 +19,6 @@ import type { ReadingSession } from '../generated/prisma/index.js';
 type CreateReadingSessionInternal = CreateReadingSessionBody & {
   user_id: number;
 };
-// const readingService = new ReadingService();
-// const reading = new ReadingService();
 
 export class ReadingController extends BaseController<
   ReadingSession,
@@ -36,9 +34,9 @@ export class ReadingController extends BaseController<
     req: Request,
     res: Response
   ): Promise<void> => {
-    const validatedQuery = res.locals.validatedData;
+    const validatedQuery = res.locals.validatedData.query;
 
-    const result = await this.service.findAllWithFilters(validatedQuery);
+    const result = await this.service.findAll(validatedQuery);
 
     res200({ res, message: 'success', data: result });
   };

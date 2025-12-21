@@ -604,7 +604,7 @@ export class RecapService extends BaseService {
       );
 
       // PERBAIKAN: Impor ReadingService sekali di luar loop.
-      const { ReadingService } = await import('./reading.service.js');
+      const { ReadingService } = await import('./metering/reading.service.js');
       const readingService = new ReadingService();
 
       for (let i = 0; i < totalSummaries; i++) {

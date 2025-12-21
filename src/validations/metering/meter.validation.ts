@@ -1,11 +1,11 @@
-import { MeterStatus } from '../generated/prisma/index.js';
+import { MeterStatus } from '../../generated/prisma/index.js';
 import {
   optionalString,
   positiveInt,
   positiveNumber,
   requiredString,
-} from './schmeHelper.js';
-import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
+} from '../../utils/schmeHelper.js';
+import { CrudSchemaBuilder } from '../../utils/shemaHandler.js';
 import z from 'zod';
 
 const meterParamsSchema = z.object({

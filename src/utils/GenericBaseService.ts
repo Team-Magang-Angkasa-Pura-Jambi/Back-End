@@ -1,20 +1,8 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/index.js';
+import { PaginationParams } from '../types/common/index.js';
 import { BaseService, type CustomErrorMessages } from './baseService.js';
 import { Error400 } from './customError.js';
 
-/**
- * Kelas dasar abstrak untuk menyediakan fungsionalitas CRUD generik.
- *
- * @template TDelegate - Tipe delegasi model Prisma (e.g., prisma.user).
- * @template TModel - Tipe model hasil (e.g., User).
- * @template TCreateInput - Tipe input sederhana untuk operasi create (dari Zod).
- * @template TUpdateInput - Tipe input sederhana untuk operasi update (dari Zod).
- * @template TFindManyArgs - Tipe argumen Prisma untuk findMany.
- * @template TFindUniqueArgs - Tipe argumen Prisma untuk findUnique.
- * @template TCreateArgs - Tipe argumen Prisma untuk create.
- * @template TUpdateArgs - Tipe argumen Prisma untuk update.
- * @template TDeleteArgs - Tipe argumen Prisma untuk delete.
- */
 export abstract class GenericBaseService<
   TDelegate extends {
     findMany: any;
@@ -26,7 +14,7 @@ export abstract class GenericBaseService<
   TModel,
   TCreateInput,
   TUpdateInput,
-  TFindManyArgs,
+  TFindManyArgs extends { [key: string]: any }, // Constraint ini sudah bagus agar fleksibel
   TFindUniqueArgs,
   TCreateArgs,
   TUpdateArgs,
@@ -41,19 +29,13 @@ export abstract class GenericBaseService<
     this._idField = idField;
   }
 
-  // --- KONTRAK PUBLIK (WAJIB DIIMPLEMENTASIKAN OLEH KELAS ANAK) ---
+  // --- KONTRAK PUBLIK ---
 
-  /**
-   * Kontrak untuk membuat entitas baru. Menerima data input sederhana.
-   */
   public async create(data: TCreateInput): Promise<TModel> {
-    const args = { data } as TCreateArgs;
+    const args = { data } as unknown as TCreateArgs; // Tambah unknown agar casting aman
     return this._create(args);
   }
 
-  /**
-   * Kontrak untuk memperbarui entitas. Menerima data input sederhana.
-   */
   public async update(id: number, data: TUpdateInput): Promise<TModel> {
     const args = { data } as unknown as Omit<TUpdateArgs, 'where'>;
     return this._update(id, args);
@@ -62,13 +44,27 @@ export abstract class GenericBaseService<
   // --- METHOD CRUD PUBLIK LAINNYA ---
 
   public async findAll(
-    args?: TFindManyArgs ,
+    args?: TFindManyArgs & PaginationParams,
     customMessages?: CustomErrorMessages
   ): Promise<TModel[]> {
-    return this._handleCrudOperation(
-      () => this._model.findMany(args),
-      customMessages
-    );
+    // [FIX] Ganti TEntity[] menjadi TModel[] (karena TEntity tidak didefinisikan)
+
+    return this._handleCrudOperation(async () => {
+      // 1. Destructuring: Ambil page & limit, sisanya adalah args murni Prisma
+      const { page = 1, limit = 10, ...prismaArgs } = args || {};
+
+      // 2. Kalkulasi Pagination
+      const take = Number(limit);
+      const skip = (Number(page) - 1) * take;
+
+      // 3. Panggil Prisma
+      // Kita spread prismaArgs (select, include, where) dan inject take/skip manual
+      return this._model.findMany({
+        ...prismaArgs,
+        take: take,
+        skip: skip,
+      });
+    }, customMessages);
   }
 
   public async findById(
@@ -76,7 +72,10 @@ export abstract class GenericBaseService<
     args?: Omit<TFindUniqueArgs, 'where'>,
     customMessages?: CustomErrorMessages
   ): Promise<TModel> {
-    const queryArgs = { ...args, where: { [this._idField]: id } };
+    // Casting 'as any' diperlukan karena Dynamic Key {[this._idField]: id}
+    // sering dianggap tidak kompatibel dengan strict typing Prisma WhereInput
+    const queryArgs = { ...args, where: { [this._idField]: id } } as any;
+
     return this._handleCrudOperation(
       () => this._model.findUniqueOrThrow(queryArgs),
       customMessages
@@ -88,18 +87,16 @@ export abstract class GenericBaseService<
     args?: Omit<TDeleteArgs, 'where'>,
     customMessages?: CustomErrorMessages
   ): Promise<TModel> {
-    const queryArgs = { ...args, where: { [this._idField]: id } };
+    const queryArgs = { ...args, where: { [this._idField]: id } } as any;
+
     return this._handleCrudOperation(
       () => this._model.delete(queryArgs),
       customMessages
     );
   }
 
-  // --- HELPER INTERNAL (HANYA BISA DIAKSES OLEH KELAS ANAK) ---
+  // --- HELPER INTERNAL ---
 
-  /**
-   * Helper internal untuk operasi 'create' yang menggunakan tipe argumen dari Prisma.
-   */
   protected async _create(
     args: TCreateArgs,
     customMessages?: CustomErrorMessages
@@ -110,22 +107,22 @@ export abstract class GenericBaseService<
     );
   }
 
-  /**
-   * Helper internal untuk operasi 'update' yang menggunakan tipe argumen dari Prisma.
-   */
   protected async _update(
     id: number,
     args: Omit<TUpdateArgs, 'where'>,
     customMessages?: CustomErrorMessages
   ): Promise<TModel> {
+    // Validasi sederhana: Pastikan ada data yang dikirim
     if (
       !args ||
-      typeof (args as any).data !== 'object' ||
+      !(args as any).data ||
       Object.keys((args as any).data).length === 0
     ) {
       throw new Error400('Tidak ada data yang dikirim untuk diupdate.');
     }
-    const queryArgs = { ...args, where: { [this._idField]: id } };
+
+    const queryArgs = { ...args, where: { [this._idField]: id } } as any;
+
     return this._handleCrudOperation(
       () => this._model.update(queryArgs),
       customMessages

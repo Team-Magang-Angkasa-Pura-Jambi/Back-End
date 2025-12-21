@@ -15,7 +15,8 @@ import {
 export interface CustomErrorMessages {
   P2002?: string; // Data duplikat
   P2003?: string; // Relasi terhubung
-  P2025?: string; // Data tidak ditemukan
+  P2025?: string;
+  message?:string; // Data tidak ditemukan
   // Tambahkan kode error lain di sini jika perlu
 }
 

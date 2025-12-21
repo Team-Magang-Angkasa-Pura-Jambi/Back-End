@@ -3,7 +3,7 @@ import { mockDeep, mockReset } from 'vitest-mock-extended';
 import { PrismaClient } from '@prisma/client';
 
 // 1. IMPORT SERVICE & DEPENDENCIES
-import { ReadingService } from '../reading.service.js'; // Import Class
+import { ReadingService } from '../metering/reading.service.js'; // Import Class
 import prisma from '../../configs/db.js';
 import { Prisma } from '../../generated/prisma/index.js';
 

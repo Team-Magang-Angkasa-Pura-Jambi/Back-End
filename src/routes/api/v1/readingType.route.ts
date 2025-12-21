@@ -1,13 +1,13 @@
 import type { Router } from 'express';
-import { ReadingTypeService } from '../../../services/readingType.service.js';
+import { ReadingTypeService } from '../../../services/metering/readingType.service.js';
 import {
   readingTypeController,
   ReadingTypeController,
-} from '../../../controllers/readingType.controller.js';
+} from '../../../controllers/metering/readingType.controller.js';
 import {
   queryGetByMeter,
   readingTypeSchema,
-} from '../../../validations/readingType.validation.js';
+} from '../../../validations/metering/readingType.validation.js';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
 
 export const readingTypeRoutes = (router: Router) => {

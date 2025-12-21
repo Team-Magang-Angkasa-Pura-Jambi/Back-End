@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { RoleName } from '../generated/prisma/index.js';
-import { positiveInt, requiredString } from './schmeHelper.js';
+import { positiveInt, requiredString } from '../utils/schmeHelper.js';
 import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
 
 export const roleBodySchema = z.object({

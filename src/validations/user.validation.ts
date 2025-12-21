@@ -5,7 +5,7 @@ import {
   positiveInt,
   requiredString,
   zodString,
-} from './schmeHelper.js';
+} from '../utils/schmeHelper.js';
 import { RoleName } from '../generated/prisma/index.js';
 
 const userIdSchema = positiveInt('User ID');

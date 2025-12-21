@@ -83,6 +83,6 @@ export abstract class BaseController<
   public delete = async (req: Request, res: Response) => {
     const id = res.locals.validatedData.params[this.idParamName];
     await this.service.delete(id);
-    res200({ res, message: 'Berhasil menghapus data secara permanen.' });
+    res200({ res, message: 'Berhasil menghapus data.' });
   };
 }

@@ -1,14 +1,7 @@
-import { ReadingDetailService } from '../services/readingDetail.service.js';
 
-import type {
-  CreateReadingDetailBody,
-  GetReadingDetailsQuery,
-  UpdateReadingDetailBody,
-} from '../types/readingDetail.type.js';
 import { BaseController } from '../utils/baseController.js';
 import type {
   ConsumptionPrediction,
-  ReadingDetail,
 } from '../generated/prisma/index.js';
 import type {
   CreateConsumptionPredictionBody,
