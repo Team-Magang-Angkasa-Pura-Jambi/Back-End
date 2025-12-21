@@ -99,7 +99,9 @@ export class UserService extends GenericBaseService<
    * @returns Daftar pengguna yang aktif.
    */
 
-  public override async findAll(args?: GetUsersQuery): Promise<User[]> {
+  public override async findAll(
+    args?: Partial<GetUsersQuery>
+  ): Promise<User[]> {
     const { roleName, isActive, search, ...restArgs } = args || {};
     const where: Prisma.UserWhereInput = {};
 

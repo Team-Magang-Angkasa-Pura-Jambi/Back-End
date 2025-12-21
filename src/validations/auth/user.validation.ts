@@ -25,6 +25,7 @@ export const userQuerySchema = z.object({
     isActive: z
       .enum(['true', 'false'])
       .optional()
+      .default('true')
       .transform((val) => val === 'true'),
     search: z.string().trim().optional(),
   }),
