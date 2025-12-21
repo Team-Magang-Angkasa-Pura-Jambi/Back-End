@@ -31,13 +31,15 @@ export class RoleService extends GenericBaseService<
   public findById(
     id: number
   ): Promise<{ role_id: number; role_name: $Enums.RoleName }> {
-    return prisma.role.findUniqueOrThrow({
-      where: { role_id: id },
-      include: {
-        users: true,
-        _count: true,
-      },
-    });
+    return this._handleCrudOperation(() =>
+      this._model.findUniqueOrThrow({
+        where: { role_id: id },
+        include: {
+          users: true,
+          _count: true,
+        },
+      })
+    );
   }
 }
 export const roleService = new RoleService();

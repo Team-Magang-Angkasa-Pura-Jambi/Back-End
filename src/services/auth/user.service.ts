@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import prisma from '../../configs/db.js';
-import { Prisma, RoleName, User } from '../../generated/prisma/index.js';
+import { Prisma, Role, RoleName, User } from '../../generated/prisma/index.js';
 import type {
   CreateUserBody,
   GetUsersQuery,
@@ -9,6 +9,8 @@ import type {
 import { Error409 } from '../../utils/customError.js';
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
 import { notificationService } from '../notification.service.js';
+import { DefaultArgs } from '../../generated/prisma/runtime/library.js';
+import { CustomErrorMessages } from '../../utils/baseService.js';
 
 export class UserService extends GenericBaseService<
   typeof prisma.user,
@@ -97,23 +99,43 @@ export class UserService extends GenericBaseService<
    * @returns Daftar pengguna yang aktif.
    */
 
-  public override async findAll(query?: any): Promise<User[]> {
-    const typedQuery: GetUsersQuery = query || {};
-    const { roleName, isActive, search } = typedQuery;
+  public override async findAll(args?: GetUsersQuery): Promise<User[]> {
+    const { roleName, isActive, search, ...restArgs } = args || {};
+    const where: Prisma.UserWhereInput = {};
 
-    const findArgs: Prisma.UserFindManyArgs = {
-      where: {
-        ...(roleName && { role: { role_name: roleName } }),
-        is_active: isActive ?? true,
-        ...(search && {
-          username: { contains: search, mode: 'insensitive' },
-        }),
-      },
-      include: { role: true },
-    };
+    if (roleName) {
+      where.role = { role_name: roleName };
+    }
+    if (isActive !== undefined) {
+      where.is_active = isActive;
+    }
 
-    return this._handleCrudOperation(() => this._model.findMany(findArgs));
+    if (search) {
+      where.username = { contains: search, mode: 'insensitive' };
+    }
+
+    return this._handleCrudOperation(() =>
+      this._model.findMany({ where, include: { role: true } })
+    );
   }
+
+  // public override async findAll(query?: any): Promise<User[]> {
+  //   const typedQuery: GetUsersQuery = query || {};
+  //   const { roleName, isActive, search } = typedQuery;
+
+  //   const findArgs: Prisma.UserFindManyArgs = {
+  //     where: {
+  //       ...(roleName && { role: { role_name: roleName } }),
+  //       is_active: isActive ?? true,
+  //       ...(search && {
+  //         username: { contains: search, mode: 'insensitive' },
+  //       }),
+  //     },
+  //     include: { role: true },
+  //   };
+
+  //   return this._handleCrudOperation(() => this._model.findMany(findArgs));
+  // }
 
   public override async update(
     id: number,

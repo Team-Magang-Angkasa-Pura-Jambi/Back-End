@@ -22,7 +22,10 @@ const userParamsSchema = z.object({
 export const userQuerySchema = z.object({
   query: z.object({
     roleName: z.nativeEnum(RoleName).optional(),
-    isActive: z.coerce.boolean().optional(),
+    isActive: z
+      .enum(['true', 'false'])
+      .optional()
+      .transform((val) => val === 'true'),
     search: z.string().trim().optional(),
   }),
 });
