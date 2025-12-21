@@ -13,8 +13,16 @@ export interface RecapDataRow {
   lwbp: number | null;
   consumption: number | null; // PERBAIKAN: Tambahkan properti consumption
   classification: UsageCategory | null;
+  confidence_score?: number | null; // BARU: Tambahkan confidence score dari klasifikasi
+  prediction?: number | null; // BARU: Tambahkan data prediksi
   pax: number | null;
   cost: number | null;
+  // BARU: Tambahkan properti untuk data suhu dan hari kerja
+  avg_temp?: number | null;
+  max_temp?: number | null;
+  is_workday?: boolean;
+  // BARU: Tambahkan properti untuk sisa stok BBM
+  remaining_stock?: number | null;
 }
 
 export interface RecapSummary {

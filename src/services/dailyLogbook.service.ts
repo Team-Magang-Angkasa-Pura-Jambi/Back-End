@@ -17,12 +17,17 @@ type SummaryWithRelations = Prisma.DailySummaryGetPayload<{
     total_consumption: true;
     total_cost: true;
     meter: {
+      // Tambahkan relasi yang dibutuhkan
       select: {
         meter_id: true;
         meter_code: true;
         energy_type: { select: { type_name: true; unit_of_measurement: true } };
       };
     };
+    classification: {
+      // BARU: Sertakan data klasifikasi
+      select: { classification: true };
+    } | null;
   };
 }>;
 
@@ -102,14 +107,26 @@ export class DailyLogbookService extends GenericBaseService<
   public async findAll(
     query: GetLogbooksQuery
   ): Promise<{ data: DailyLogbook[]; meta: any }> {
-    const { limit, page, startDate, endDate } = query;
+    const { limit, page, startDate, endDate, date } = query;
 
     const where: Prisma.DailyLogbookWhereInput = {};
 
-    if (startDate && endDate) {
+    // PERBAIKAN: Prioritaskan filter 'date' jika ada, jika tidak, gunakan rentang tanggal.
+    if (date) {
+      const targetDate = new Date(date);
+      targetDate.setUTCHours(0, 0, 0, 0);
+      where.log_date = targetDate;
+    } else if (startDate && endDate) {
+      // PERBAIKAN: Normalisasi tanggal untuk memastikan query mencakup seluruh hari.
+      const start = new Date(startDate);
+      start.setUTCHours(0, 0, 0, 0); // Set ke awal hari
+
+      const end = new Date(endDate);
+      end.setUTCHours(23, 59, 59, 999); // Set ke akhir hari
+
       where.log_date = {
-        gte: new Date(startDate),
-        lte: new Date(endDate),
+        gte: start,
+        lte: end,
       };
     }
 
@@ -217,10 +234,8 @@ export class DailyLogbookService extends GenericBaseService<
       await Promise.all([
         this._prisma.dailySummary.findMany({
           where: { summary_date: targetDate },
-          select: {
-            summary_id: true,
-            total_consumption: true,
-            total_cost: true,
+          // PERBAIKAN: Gunakan 'include' untuk mengambil relasi, bukan 'select' dan argumen top-level.
+          include: {
             meter: {
               select: {
                 meter_id: true,
@@ -230,15 +245,22 @@ export class DailyLogbookService extends GenericBaseService<
                 },
               },
             },
+            classification: {
+              select: {
+                classification: true,
+              },
+            },
           },
         }),
         this._prisma.dailySummary.findMany({
           where: { summary_date: previousDate },
+          // PERBAIKAN: Sertakan relasi yang sama seperti di atas untuk konsistensi tipe
           select: {
             summary_id: true,
             total_consumption: true,
             total_cost: true,
             meter: { select: { meter_id: true } },
+            classification: { select: { classification: true } },
           },
         }),
         this._prisma.efficiencyTarget.findMany({
@@ -271,9 +293,15 @@ export class DailyLogbookService extends GenericBaseService<
     const { logData, savingsSummary, targetDeviationPercent } =
       this._calculateSavingsAndOverage(summary, previousSummary, target);
 
+    // BARU: Tambahkan informasi klasifikasi ke dalam catatan
+    let classificationNote = '';
+    if (summary.classification) {
+      classificationNote = ` Perilaku pemakaian diklasifikasikan sebagai **${summary.classification.classification}**.`;
+    }
+
     const summaryNotes = `Ringkasan untuk meter ${
       meter.meter_code
-    }: ${savingsSummary}`;
+    }: ${savingsSummary}${classificationNote}`;
 
     return {
       ...logData,

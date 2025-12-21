@@ -1,6 +1,10 @@
 import { z, ZodObject } from 'zod';
 import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
-import { optionalString, positiveInt, requiredString } from './schmeHelper.js';
+import {
+  optionalString,
+  positiveInt,
+  requiredString,
+} from '../utils/schmeHelper.js';
 
 const tariffGroupBodySchema = z.object({
   group_code: requiredString('Group Code'),

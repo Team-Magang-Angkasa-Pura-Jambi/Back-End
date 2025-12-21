@@ -6,8 +6,11 @@ import { alertController } from '../../../controllers/alert.controller.js';
 import {
   alertIdParamSchema,
   emptySchema,
+  // Asumsikan Anda telah membuat skema ini di file validasi
+  bulkDeleteAlertsSchema,
   getAlertsSchema,
   getLatestAlertsSchema,
+  updateAlertStatusSchema,
 } from '../../../validations/alert.validation.js';
 
 export default (router: Router) => {
@@ -63,5 +66,21 @@ export default (router: Router) => {
     authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(alertIdParamSchema),
     asyncHandler(alertController.acknowledge)
+  );
+
+  // Endpoint yang sudah ada untuk update status
+  router.patch(
+    `${prefix}/:alertId/status`,
+    authorize('Admin', 'SuperAdmin'),
+    validate(updateAlertStatusSchema),
+    asyncHandler(alertController.updateStatus)
+  );
+
+  // BARU: Endpoint untuk menghapus beberapa alert sekaligus
+  router.post(
+    `${prefix}/bulk-delete`,
+    authorize('Admin', 'SuperAdmin'), // Hanya Admin dan SuperAdmin yang bisa hapus massal
+    validate(bulkDeleteAlertsSchema),
+    asyncHandler(alertController.bulkDelete)
   );
 };

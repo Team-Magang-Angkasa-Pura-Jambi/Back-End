@@ -2,13 +2,14 @@
 
 import prisma from '../configs/db.js';
 import type { Prisma } from '../generated/prisma/index.js';
-import { socketServer } from '../socket-instance.js';
+// import { socketServer } from '../socket-instance.js';
 import type { GetNotificationSchemaQuery } from '../types/notification.types.js';
 import { GenericBaseService } from '../utils/GenericBaseService.js';
 import type {
   NotificationSchemaBody,
   UpdateNotificationSchemaBody,
 } from '../types/notification.types.js';
+import { SocketServer } from '../configs/socket.js';
 
 type CreateNotificationInput = {
   user_id: number;
@@ -45,7 +46,8 @@ export class NotificationService extends GenericBaseService<
 
       // 2. Kirim sinyal ke client melalui WebSocket bahwa ada notifikasi baru.
       //    Client kemudian bisa melakukan fetch untuk mendapatkan notifikasi terbaru.
-      socketServer.io
+      // PERBAIKAN: Gunakan instance singleton yang benar untuk mengakses server socket.
+      SocketServer.instance.io
         .to(String(data.user_id))
         .emit('new_notification_available');
 

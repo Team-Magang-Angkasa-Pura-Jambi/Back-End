@@ -1,12 +1,12 @@
 import bcrypt from 'bcrypt';
 import prisma from '../configs/db.js';
-import { Prisma, RoleName } from '../generated/prisma/index.js';
+import { Prisma, RoleName, User } from '../generated/prisma/index.js';
 import type {
   CreateUserBody,
+  GetUsersQuery,
   UpdateUserBody,
-  User,
-} from '../types/user.types.js';
-import { Error409 } from '../utils/customError.js';
+} from '../types/user.type.js';
+import { Error404, Error409 } from '../utils/customError.js';
 import { GenericBaseService } from '../utils/GenericBaseService.js';
 import { notificationService } from './notification.service.js';
 
@@ -27,29 +27,47 @@ export class UserService extends GenericBaseService<
 
   public override async create(data: CreateUserBody): Promise<User> {
     return this._handleCrudOperation(async () => {
-      const existingUser = await this._model.findUnique({
+      const existingUser = await this._model.findFirst({
         where: { username: data.username },
       });
 
       if (existingUser) {
-        throw new Error409('Username sudah digunakan.');
+        if (existingUser.is_active) {
+          throw new Error409('Username sudah digunakan oleh pengguna aktif.');
+        }
+
+        console.log(
+          `[UserService] Pengguna tidak aktif '${data.username}' ditemukan. Mengaktifkan kembali dengan data baru.`
+        );
+        const hashedPassword = await bcrypt.hash(data.password, 10);
+        // const { password } = data; 
+        const restoredUser = await this._model.update({
+          where: { user_id: existingUser.user_id },
+          data: {
+            
+            is_active: true, 
+            role: { connect: { role_id: data.role_id } },
+            password_hash: hashedPassword,
+          },
+          include: { role: true },
+        });
+        return restoredUser as User;
       }
 
+      
       const hashedPassword = await bcrypt.hash(data.password, 10);
-
+      const { password, ...restData } = data; 
       const newUser = await this._model.create({
         data: {
-          username: data.username,
+          ...restData,
           password_hash: hashedPassword,
-          role_id: data.role_id,
-          is_active: data.is_active,
         },
         include: {
           role: true,
         },
       });
 
-      // BARU: Kirim notifikasi ke semua admin dan superadmin
+      
       const admins = await this._prisma.user.findMany({
         where: {
           role: { role_name: { in: [RoleName.Admin, RoleName.SuperAdmin] } },
@@ -67,7 +85,7 @@ export class UserService extends GenericBaseService<
           user_id: admin.user_id,
           title: 'Pengguna Baru Dibuat',
           message,
-          link: `/management/users/${newUser.user_id}`, // Contoh link ke halaman detail user
+          link: `/management/users/${newUser.user_id}`, 
         });
       }
 
@@ -76,42 +94,125 @@ export class UserService extends GenericBaseService<
   }
 
   /**
+   * BARU: Mengambil semua pengguna dengan filter `is_active: true` secara default.
+   * Ini akan menimpa metode `findAll` dari GenericBaseService.
+   * @param args - Argumen query dari Prisma, seperti `where`, `orderBy`, dll.
+   * @returns Daftar pengguna yang aktif.
+   */
+  
+
+  public override async findAll(
+    query?: any
+  ): Promise<User[]> {
+    const typedQuery: GetUsersQuery = query || {};
+    const { roleName, isActive, search } = typedQuery;
+
+    const findArgs: Prisma.UserFindManyArgs = {
+      where: {
+        ...(roleName && { role: { role_name: roleName } }),
+        is_active: isActive ?? true, 
+        ...(search && {
+          username: { contains: search, mode: 'insensitive' },
+        }),
+      },
+      include: { role: true },
+    };
+
+    
+    return super.findAll(findArgs);
+  }
+
+  public override async update(
+    id: number,
+    data: UpdateUserBody
+  ): Promise<User> {
+    return this._handleCrudOperation(async () => {
+      
+      const { role_id, password, ...restData } = data;
+      const updateData: Prisma.UserUpdateInput = { ...restData };
+
+      if (password) {
+        updateData.password_hash = await bcrypt.hash(password, 10);
+      }
+
+      if (role_id) {
+        updateData.role = {
+          connect: { role_id: role_id },
+        };
+      }
+
+      const updatedUser = await this._model.update({
+        where: { user_id: id },
+        data: updateData,
+        include: { role: true },
+      });
+
+      return updatedUser as User;
+    });
+  }
+
+  /**
+   * Melakukan soft delete dengan mengubah status is_active menjadi false.
+   * Ini memastikan integritas data historis tetap terjaga.
+   * @param id - ID pengguna yang akan di-nonaktifkan.
+   */
+  public override async delete(id: number): Promise<User> {
+    return this._handleCrudOperation(() =>
+      this._model.update({
+        where: { user_id: id },
+        data: { is_active: false },
+      })
+    );
+  }
+
+  public async findByUsername(
+    username: string
+  ): Promise<(User & { role: any }) | null> {
+    return this._handleCrudOperation(() =>
+      this._model.findUnique({
+        where: { username },
+        include: { role: true },
+      })
+    );
+  }
+  /**
    * BARU: Mengambil riwayat aktivitas pengguna, seperti sesi pembacaan yang telah dibuat.
    * @param userId - ID pengguna yang riwayatnya akan diambil.
    * @returns Daftar sesi pembacaan yang diurutkan berdasarkan tanggal terbaru.
    */
+
   public async getActivityHistory(userId: number) {
-    // Tentukan batas waktu 7 hari yang lalu
+    
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    // 1. Ambil semua data pengguna beserta relasi aktivitasnya.
+    
     const userWithRelations = await this._model.findUniqueOrThrow({
       where: { user_id: userId },
-      // Omit password_hash from the result for security
+      
       include: {
-        // Aktivitas pencatatan meter
+        
         reading_sessions: {
           where: {
-            created_at: { gte: sevenDaysAgo }, // Filter 7 hari terakhir
+            created_at: { gte: sevenDaysAgo }, 
           },
           include: {
             meter: { select: { meter_code: true, energy_type: true } },
           },
           orderBy: { created_at: 'desc' },
         },
-        // Aktivitas pengaturan skema harga
+        
         price_schemes_set: {
           where: {
-            effective_date: { gte: sevenDaysAgo }, // PERBAIKAN: Gunakan 'effective_date'
+            effective_date: { gte: sevenDaysAgo }, 
           },
           include: { tariff_group: { select: { group_name: true } } },
           orderBy: { effective_date: 'desc' },
         },
-        // Aktivitas pengaturan target efisiensi
+        
         efficiency_targets_set: {
           where: {
-            period_start: { gte: sevenDaysAgo }, // PERBAIKAN: Gunakan 'period_start'
+            period_start: { gte: sevenDaysAgo }, 
           },
           include: { meter: { select: { meter_code: true } } },
           orderBy: { period_start: 'desc' },
@@ -119,7 +220,7 @@ export class UserService extends GenericBaseService<
       },
     });
 
-    // 2. Ubah setiap jenis aktivitas menjadi format yang seragam.
+    
     const readingHistory = userWithRelations.reading_sessions.map(
       (session) => ({
         type: 'Pencatatan Meter',
@@ -140,23 +241,23 @@ export class UserService extends GenericBaseService<
       })
     );
 
-    // BARU: Tambahkan pemetaan untuk target efisiensi
+    
     const efficiencyTargetHistory =
       userWithRelations.efficiency_targets_set.map((target) => ({
         type: 'Pengaturan Target',
-        timestamp: target.period_start, // PERBAIKAN: Gunakan 'period_start' sebagai timestamp
+        timestamp: target.period_start, 
         description: `Mengatur target "${target.kpi_name}" untuk meter ${target.meter.meter_code}.`,
         details: target,
       }));
 
-    // 3. Gabungkan semua riwayat dan urutkan dari yang terbaru.
+    
     const fullHistory = [
       ...readingHistory,
       ...priceSchemeHistory,
-      ...efficiencyTargetHistory, // Gabungkan riwayat target
+      ...efficiencyTargetHistory, 
     ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
-    // 4. Kembalikan data pengguna beserta riwayat yang sudah terstruktur.
+    
     const {
       reading_sessions,
       price_schemes_set,
@@ -164,17 +265,6 @@ export class UserService extends GenericBaseService<
       ...user
     } = userWithRelations;
     return { ...user, history: fullHistory };
-  }
-
-  public async findByUsername(
-    username: string
-  ): Promise<(User & { role: any }) | null> {
-    return this._handleCrudOperation(() =>
-      this._model.findUnique({
-        where: { username },
-        include: { role: true },
-      })
-    );
   }
 }
 

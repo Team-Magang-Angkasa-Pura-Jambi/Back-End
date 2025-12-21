@@ -15,7 +15,8 @@ import {
 export interface CustomErrorMessages {
   P2002?: string; // Data duplikat
   P2003?: string; // Relasi terhubung
-  P2025?: string; // Data tidak ditemukan
+  P2025?: string;
+  message?:string; // Data tidak ditemukan
   // Tambahkan kode error lain di sini jika perlu
 }
 
@@ -73,6 +74,12 @@ export abstract class BaseService {
           throw new Error400(`Kolom wajib '${constraint}' tidak boleh kosong.`);
         }
         default: {
+          // BARU: Tambahkan penanganan untuk error batas paket Prisma
+          if (error.message.includes('planLimitReached')) {
+            throw new Error500(
+              'Batas penggunaan paket Prisma telah tercapai. Silakan periksa dasbor akun Prisma Anda.'
+            );
+          }
           console.error(`Prisma Error [${error.code}]:`, error.message);
           throw new Error500('Terjadi kesalahan pada operasi database.');
         }

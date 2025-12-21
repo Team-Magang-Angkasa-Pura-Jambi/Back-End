@@ -1,22 +1,24 @@
 import type { Router } from 'express';
-import { ReadingService } from '../../../services/reading.service.js';
-import {
-  readingController,
-  ReadingController,
-} from '../../../controllers/reading.controller.js';
+import { ReadingService } from '../../../services/metering/reading.service.js';
+
 import { validate } from '../../../utils/validate.js';
 import {
   getHistoryQuerySchema,
   getReadingsSchema,
   queryLastReading,
   readingSessionSchemas,
-} from '../../../validations/reading.validation.js';
+} from '../../../validations/metering/reading.validation.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
-import { authorize } from '../../../middleware/auth.middleware.js';
+import {
+  readingController,
+  ReadingController,
+} from '../../../controllers/metering/reading.controller.js';
 
-export const readingRoutes = (router: Router) => {
-  const userRouter = createCrudRouter('/readings', {
+const prefix = '/readings';
+
+export default (router: Router) => {
+  const userRouter = createCrudRouter(prefix, {
     ServiceClass: ReadingService,
     ControllerClass: ReadingController,
     idParamName: 'sessionId',
@@ -32,12 +34,11 @@ export const readingRoutes = (router: Router) => {
       getAll: ['Admin', 'SuperAdmin'],
       getById: ['Admin', 'SuperAdmin'],
       create: ['Technician', 'Admin', 'SuperAdmin'],
-      update: ['SuperAdmin'],
+      update: ['Technician', 'Admin', 'SuperAdmin'],
       delete: ['Admin', 'SuperAdmin'],
     },
   });
 
-  const prefix = '/readings';
   router.get(
     prefix + '/last',
     validate(queryLastReading),
@@ -51,4 +52,3 @@ export const readingRoutes = (router: Router) => {
 
   router.use(userRouter);
 };
-  

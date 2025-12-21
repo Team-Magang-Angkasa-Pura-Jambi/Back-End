@@ -16,6 +16,20 @@ class RecapController {
     }
   };
 
+  public getMonthlyRecap = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const query = res.locals.validatedData.query;
+      const result = await recapService.getMonthlyRecap(query);
+      res200({ res, data: result, message: 'Rekap bulanan berhasil diambil.' });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   public recalculateRecap = async (
     req: Request,
     res: Response,

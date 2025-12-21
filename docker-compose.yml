@@ -1,23 +1,25 @@
-# docker-compose.yml
-
 version: '3.8'
 
 services:
-  # Layanan Backend TypeScript Anda
   backend-ts:
-    build: . # Asumsikan Dockerfile untuk TypeScript ada di root
+    build:
+      context: .
+      dockerfile: Dockerfile.dev # 1. Menggunakan Dockerfile khusus dev
     ports:
-      - "3000:3000" # Mapping port dari host ke container
+      - '8080:8080' # <-- Ubah port di komputer Anda menjadi 8080
+      - '9229:9229' # 2. Port untuk debugging Node.js (dari flag --inspect)
     environment:
-      # Kirim URL layanan ML sebagai environment variable
-      PORT: 3000 # Memberitahu aplikasi untuk berjalan di port 3000 di dalam container
-      ML_API_URL: http://ml-api:8000
+      PORT: 3000
+      ML_API_URL: http://ml-api:8000 # Aplikasi di dalam kontainer tetap berjalan di port 3000
     depends_on:
-      - ml-api # Pastikan layanan ML berjalan sebelum backend TS
+      - ml-api
+    volumes:
+      - .:/usr/src/app # 3. Mount kode sumber lokal ke dalam container
+      - /usr/src/app/node_modules # 4. Mencegah folder node_modules lokal menimpa yang ada di container
+    command: npm run dev # 5. Menjalankan aplikasi dalam mode watch
 
-  # Layanan Machine Learning Python
   ml-api:
     build:
-      context: ./scripts # Path ke folder yang berisi Dockerfile Python
+      context: ./script
     ports:
-      - "8000:8000"
+      - '8000:8000'

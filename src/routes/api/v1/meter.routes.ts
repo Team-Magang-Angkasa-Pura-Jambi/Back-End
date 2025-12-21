@@ -1,11 +1,11 @@
 import type { Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
-import { MeterService } from '../../../services/meter.service.js';
-import { MeterController } from '../../../controllers/meter.controller.js';
+import { MeterService } from '../../../services/metering/meter.service.js';
+import { MeterController } from '../../../controllers/metering/meter.controller.js';
 import {
   meterSchema,
   queryMeter,
-} from '../../../validations/meter.validation.js';
+} from '../../../validations/metering/meter.validation.js';
 
 export const meterRoutes = (router: Router) => {
   const meterRouter = createCrudRouter('/meters', {
@@ -25,7 +25,7 @@ export const meterRoutes = (router: Router) => {
       getById: ['Admin', 'SuperAdmin', 'Technician'],
       create: ['SuperAdmin', 'Admin'],
       update: ['Admin', 'SuperAdmin'],
-      delete: ['SuperAdmin'],
+      delete: ['SuperAdmin', 'Admin'],
     },
   });
 

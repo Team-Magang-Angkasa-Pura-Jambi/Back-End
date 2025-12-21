@@ -5,10 +5,8 @@ import { authMiddleware } from '../../../middleware/auth.middleware.js';
 import { meterRoutes } from './meter.routes.js';
 import { energyTypeRoutes } from './energy.routes.js';
 import { roleRoutes } from './role.routes.js';
-import { readingRoutes } from './reading.routes.js';
 
 import { readingTypeRoutes } from './readingType.route.js';
-import readingDetailRoute from './readingDetail.route.js';
 import priceSchemeRoute from './priceScheme.route.js';
 import userRoute from './user.route.js';
 import efficencyTargetRoute from './efficencyTarget.route.js';
@@ -27,6 +25,9 @@ import TariffGroupRoute from './TariffGroup.route.js';
 import machineLearningRoute from './machineLearning.route.js';
 import alertRoute from './alert.route.js';
 import dailyLogbookRoute from './dailyLogbook.route.js';
+import budgetRoute from './budget.route.js';
+import annualBudgetRoute from './annualBudget.route.js';
+import readingRoutes from './reading.routes.js';
 
 export default (app: any) => {
   const router = Router();
@@ -35,8 +36,8 @@ export default (app: any) => {
   router.get('/', indexController.index);
 
   authRoutes(router);
-
   router.use(authMiddleware);
+
   userRoute(router);
 
   meterRoutes(router);
@@ -45,7 +46,6 @@ export default (app: any) => {
   readingRoutes(router);
 
   readingTypeRoutes(router);
-  readingDetailRoute(router);
   priceSchemeRoute(router);
   efficencyTargetRoute(router);
   SchemeRateRoute(router);
@@ -63,5 +63,6 @@ export default (app: any) => {
   machineLearningRoute(router);
   dailyLogbookRoute(router);
   alertRoute(router);
-  alertRoute(router);
+  budgetRoute(router);
+  annualBudgetRoute(router);
 };

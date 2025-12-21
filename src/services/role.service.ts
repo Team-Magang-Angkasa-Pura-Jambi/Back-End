@@ -32,8 +32,6 @@ export class RoleService extends GenericBaseService<
 
   public findById(
     id: number,
-    args?: Omit<Prisma.RoleFindUniqueArgs<DefaultArgs>, 'where'> | undefined,
-    customMessages?: CustomErrorMessages
   ): Promise<{ role_id: number; role_name: $Enums.RoleName }> {
     return prisma.role.findUniqueOrThrow({
       where: { role_id: id },

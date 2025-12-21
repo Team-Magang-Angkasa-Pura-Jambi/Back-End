@@ -1,3 +1,4 @@
+// src/configs/socket.ts
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import type {
@@ -8,51 +9,74 @@ import type {
 } from '../types/socket.types.js';
 
 export class SocketServer {
+  public static instance: SocketServer;
   public io: Server<ClientToServerEvents, ServerToClientEvents>;
 
   constructor(httpServer: HttpServer) {
-    this.io = new Server(httpServer, {
-      cors: {
-        // Ganti "http://localhost:3000" dengan alamat frontend Anda
-        origin: 'http://localhost:3000',
-        methods: ['GET', 'POST'],
-      },
-    });
-
-    this.io.on('connection', this.handleConnection);
+    // Singleton pattern: ensure only one instance is created
+    SocketServer.instance = this;
+    this.io = new Server<ClientToServerEvents, ServerToClientEvents>(
+      httpServer,
+      {
+        cors: {
+          origin: [
+            'http://localhost:3000',
+            'https://sentinel-angkasa-pura.vercel.app',
+          ],
+          methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+          allowedHeaders: ['Content-Type', 'Authorization'],
+        },
+      }
+    );
   }
 
+  /**
+   * Inisialisasi koneksi dan event listener socket
+   */
+  public init() {
+    this.io.on('connection', (socket) => this.handleConnection(socket));
+    console.log(
+      '✅ Socket.IO server initialized and listening for connections.'
+    );
+  }
+
+  /**
+   * Mengirim notifikasi atau pengingat ke user tertentu
+   */
   public sendDataReminder(userId: string, payload: MissingDataPayload) {
     console.log(`
       🔔 Mengirim pengingat ke user: ${userId}
       🔹 Tipe Meteran: ${payload.meterType}
       🔹 Pesan: ${payload.message}
     `);
-
-    // Kirim event 'data_reminder' ke room user yang spesifik
     this.io.to(userId).emit('data_reminder', payload);
   }
-  // Menggunakan arrow function untuk memastikan `this` merujuk ke instance class
 
-  private handleConnection = (
+  /**
+   * Menangani koneksi client baru
+   */
+  private handleConnection(
     socket: Socket<ClientToServerEvents, ServerToClientEvents>
-  ) => {
+  ) {
     console.log(`🔌 New client connected: ${socket.id}`);
+
     socket.on('join_room', (userId: string) => {
-      socket.join(userId); // Memasukkan koneksi ini ke dalam room sesuai userId
+      socket.join(userId);
       console.log(`🚪 Client ${socket.id} bergabung ke room: ${userId}`);
     });
-    // Mengirim info ke client yang baru terhubung
+
     socket.emit('server_info', { version: '1.0.0' });
 
-    // Mendaftarkan semua event listener untuk socket ini
     this.registerSocketEvents(socket);
 
     socket.on('disconnect', () => {
       console.log(`🔌 Client disconnected: ${socket.id}`);
     });
-  };
+  }
 
+  /**
+   * Registrasi event custom dari client
+   */
   private registerSocketEvents(
     socket: Socket<ClientToServerEvents, ServerToClientEvents>
   ) {
@@ -60,13 +84,7 @@ export class SocketServer {
       console.log(
         `📩 Received message from ${payload.author}: ${payload.text}`
       );
-
-      // Mengirimkan kembali pesan ke SEMUA client yang terhubung
       this.io.emit('new_message', payload);
     });
-  }
-
-  public listen(port: number) {
-    console.log(`✅ Socket.IO server is ready.`);
   }
 }

@@ -1,7 +1,7 @@
 // src/validations/recap.validation.ts
 
 import { z } from 'zod';
-import { isoDate, positiveInt } from './schmeHelper.js';
+import { isoDate, positiveInt } from '../utils/schmeHelper.js';
 
 export const getRecapSchema = z.object({
   query: z.object({

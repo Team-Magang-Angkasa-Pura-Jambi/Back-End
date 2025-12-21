@@ -63,7 +63,7 @@ export abstract class BaseController<
    * [FIX] Method create sekarang memanggil service dengan lebih sederhana,
    * sesuai dengan kontrak interface yang baru.
    */
-  public override create = async (req: Request, res: Response) => {
+  public create = async (req: Request, res: Response) => {
     const body: TCreateInput = res.locals.validatedData.body;
     const result = await this.service.create(body);
     res201({ res, message: 'Berhasil membuat data baru.', data: result });
@@ -83,6 +83,6 @@ export abstract class BaseController<
   public delete = async (req: Request, res: Response) => {
     const id = res.locals.validatedData.params[this.idParamName];
     await this.service.delete(id);
-    res200({ res, message: 'Berhasil menghapus data secara permanen.' });
+    res200({ res, message: 'Berhasil menghapus data.' });
   };
 }

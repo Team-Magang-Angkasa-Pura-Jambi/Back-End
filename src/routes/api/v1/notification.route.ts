@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { notificationController } from '../../../controllers/notification.controller.js';
 import { validate } from '../../../utils/validate.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import {
@@ -12,9 +11,11 @@ import {
   emptySchema,
   markAsReadSchema,
 } from '../../../validations/notification.validation.js';
+import { NotificationController } from '../../../controllers/notification.controller.js';
 
 export default (router: Router) => {
   const prefix = '/notifications';
+  const notificationController = new NotificationController();
 
   // Menerapkan middleware otentikasi untuk semua rute notifikasi
 

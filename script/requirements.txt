@@ -4,3 +4,5 @@ uvicorn
 pandas
 scikit-learn
 joblib
+xgboost
+holidays

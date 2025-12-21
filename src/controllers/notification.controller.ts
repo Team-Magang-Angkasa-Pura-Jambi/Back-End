@@ -22,7 +22,7 @@ export class NotificationController extends BaseController<
 > {
   constructor() {
     // PERBAIKAN: Gunakan instance singleton agar konsisten.
-    super(notificationService, 'notificationId');
+    super(new NotificationService(), 'notificationId');
   }
 
   public override getAll = async (
@@ -121,4 +121,4 @@ export class NotificationController extends BaseController<
   };
 }
 
-export const notificationController = new NotificationController();
+// export const notificationController = new NotificationController();

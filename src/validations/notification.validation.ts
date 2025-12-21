@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { positiveInt } from './schmeHelper.js';
+import { positiveInt } from '../utils/schmeHelper.js';
 
 export const getNotificationsSchema = z.object({
   query: z.object({

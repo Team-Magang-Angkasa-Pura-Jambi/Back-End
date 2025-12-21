@@ -44,7 +44,19 @@ export function startEfficiencyTargetScheduler() {
 
         // Ambil semua meter aktif dan admin
         const [activeMeters, admins] = await Promise.all([
-          prisma.meter.findMany({ where: { status: MeterStatus.Active } }),
+          prisma.meter.findMany({
+            where: { status: MeterStatus.Active },
+            // BARU: Sertakan relasi yang dibutuhkan untuk kalkulasi biaya
+            include: {
+              tariff_group: {
+                include: {
+                  price_schemes: {
+                    include: { rates: { include: { reading_type: true } } },
+                  },
+                },
+              },
+            },
+          }),
           prisma.user.findMany({
             where: {
               role: {
@@ -88,6 +100,41 @@ export function startEfficiencyTargetScheduler() {
           const newTargetValue =
             averageDailyConsumption * (1 - EFFICIENCY_IMPROVEMENT_PERCENTAGE);
 
+          // BARU: Hitung estimasi biaya untuk target baru
+          let estimatedTargetCost = new Prisma.Decimal(0);
+          const activePriceScheme = meter.tariff_group.price_schemes
+            .filter((ps) => ps.effective_date <= period_start && ps.is_active)
+            .sort(
+              (a, b) => b.effective_date.getTime() - a.effective_date.getTime()
+            )[0];
+
+          if (activePriceScheme) {
+            // Asumsi sederhana: untuk listrik, bagi rata target ke WBP dan LWBP
+            // Ini bisa disempurnakan jika ada data rasio historis
+            const wbpRate =
+              activePriceScheme.rates.find(
+                (r) => r.reading_type.type_name === 'WBP'
+              )?.value ?? new Prisma.Decimal(0);
+            const lwbpRate =
+              activePriceScheme.rates.find(
+                (r) => r.reading_type.type_name === 'LWBP'
+              )?.value ?? new Prisma.Decimal(0);
+
+            if (!wbpRate.isZero() && !lwbpRate.isZero()) {
+              const avgPrice = wbpRate.plus(lwbpRate).div(2);
+              estimatedTargetCost = new Prisma.Decimal(newTargetValue).times(
+                avgPrice
+              );
+            } else {
+              // Untuk Air atau Fuel
+              const singleRate =
+                activePriceScheme.rates[0]?.value ?? new Prisma.Decimal(0);
+              estimatedTargetCost = new Prisma.Decimal(newTargetValue).times(
+                singleRate
+              );
+            }
+          }
+
           // Buat atau perbarui target untuk bulan ini
           await prisma.efficiencyTarget.create({
             data: {
@@ -95,6 +142,8 @@ export function startEfficiencyTargetScheduler() {
                 period_start.toISOString().split('T')[0]
               }`,
               target_value: new Prisma.Decimal(newTargetValue.toFixed(2)),
+              // BARU: Simpan estimasi biaya target
+              target_cost: estimatedTargetCost,
               period_start,
               period_end,
               meter_id: meter.meter_id,

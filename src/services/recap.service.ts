@@ -1,23 +1,21 @@
-// src/services/recap.service.ts
 import prisma from '../configs/db.js';
-import { socketServer } from '../socket-instance.js';
-import { readingService } from './reading.service.js';
-import type { Prisma } from '../generated/prisma/index.js';
+
+import { Prisma } from '../generated/prisma/index.js';
 import type {
   GetRecapQuery,
   RecapApiResponse,
   RecapDataRow,
   RecapSummary,
 } from '../types/recap.types.js';
+import { notificationService } from './notification.service.js';
 import { BaseService } from '../utils/baseService.js';
-// differenceInDays dan getDaysInMonth tidak lagi digunakan, bisa dihapus jika tidak ada pemakaian lain.
+import { SocketServer } from '../configs/socket.js';
 
-// Helper type untuk data agregat harian di dalam memori
 type AggregatedDailyData = {
   costBeforeTax: number;
   costWithTax: number;
   wbp: number;
-  lwbp: number; // PERBAIKAN: Nama properti konsisten
+  lwbp: number;
   consumption: number;
 };
 
@@ -26,44 +24,350 @@ export class RecapService extends BaseService {
     super(prisma);
   }
 
+  /**
+   * BARU: Menghitung dan mengembalikan ringkasan data bulanan secara agregat.
+   * @param query - Berisi tahun, bulan, dan filter opsional.
+   */
+  public async getMonthlyRecap(query: GetRecapQuery) {
+    const { year, month } = query;
+
+    const currentStartDate = new Date(Date.UTC(year, month - 1, 1));
+    const currentEndDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+
+    const previousMonthDate = new Date(currentStartDate);
+    previousMonthDate.setUTCMonth(previousMonthDate.getUTCMonth() - 1);
+    const prevStartDate = new Date(
+      Date.UTC(
+        previousMonthDate.getUTCFullYear(),
+        previousMonthDate.getUTCMonth(),
+        1
+      )
+    );
+    const prevEndDate = new Date(
+      Date.UTC(
+        previousMonthDate.getUTCFullYear(),
+        previousMonthDate.getUTCMonth() + 1,
+        0,
+        23,
+        59,
+        59,
+        999
+      )
+    );
+
+    const [currentData, previousData] = await Promise.all([
+      this._getAggregatedDataForPeriod(currentStartDate, currentEndDate, query),
+      this._getAggregatedDataForPeriod(prevStartDate, prevEndDate, query),
+    ]);
+
+    return {
+      total_consumption: {
+        currentValue: currentData.total_consumption,
+        previousValue: previousData.total_consumption,
+        percentageChange: this._calculatePercentageChange(
+          currentData.total_consumption,
+          previousData.total_consumption
+        ),
+      },
+      total_cost: {
+        currentValue: currentData.total_cost,
+        previousValue: previousData.total_cost,
+        percentageChange: this._calculatePercentageChange(
+          currentData.total_cost,
+          previousData.total_cost
+        ),
+      },
+      total_target_consumption: {
+        currentValue: currentData.total_target_consumption,
+        previousValue: previousData.total_target_consumption,
+        percentageChange: this._calculatePercentageChange(
+          currentData.total_target_consumption,
+          previousData.total_target_consumption
+        ),
+      },
+      total_target_cost: {
+        currentValue: currentData.total_target_cost,
+        previousValue: previousData.total_target_cost,
+        percentageChange: this._calculatePercentageChange(
+          currentData.total_target_cost,
+          previousData.total_target_cost
+        ),
+      },
+      total_pax: {
+        currentValue: currentData.total_pax,
+        previousValue: previousData.total_pax,
+        percentageChange: this._calculatePercentageChange(
+          currentData.total_pax,
+          previousData.total_pax
+        ),
+      },
+    };
+  }
+
+  /**
+   * Helper untuk menghitung persentase perubahan dengan aman.
+   */
+  private _calculatePercentageChange(
+    current: number,
+    previous: number
+  ): number | null {
+    if (previous === 0) {
+      return current > 0 ? null : 0;
+    }
+    const change = ((current - previous) / previous) * 100;
+    return parseFloat(change.toFixed(2));
+  }
+
+  /**
+   * BARU: Helper privat untuk mengambil dan mengagregasi data untuk periode tertentu.
+   */
+  private async _getAggregatedDataForPeriod(
+    startDate: Date,
+    endDate: Date,
+    query: GetRecapQuery
+  ) {
+    const { energyType, meterId } = query;
+
+    const whereClause: Prisma.DailySummaryWhereInput = {
+      summary_date: { gte: startDate, lte: endDate },
+      meter: {
+        energy_type: { type_name: energyType },
+        ...(meterId && { meter_id: meterId }),
+      },
+    };
+
+    const [summaryAggregates, paxAggregate, targetAggregates] =
+      await Promise.all([
+        this._prisma.dailySummary.aggregate({
+          _sum: {
+            total_consumption: true,
+            total_cost: true,
+          },
+          where: whereClause,
+        }),
+        this._prisma.paxData.aggregate({
+          _sum: { total_pax: true },
+          where: {
+            data_date: { gte: startDate, lte: endDate },
+          },
+        }),
+        this._prisma.efficiencyTarget.aggregate({
+          _sum: {
+            target_value: true,
+            target_cost: true,
+          },
+          where: {
+            meter: {
+              energy_type: { type_name: energyType },
+              ...(meterId && { meter_id: meterId }),
+            },
+            // Hitung target hanya pada hari-hari dalam periode
+            // Ini adalah pendekatan sederhana; bisa disempurnakan jika target tidak harian
+            period_start: { lte: endDate },
+            period_end: { gte: startDate },
+          },
+        }),
+      ]);
+
+    // Untuk target, kita perlu menghitung jumlah hari irisan
+    const targets = await this._prisma.efficiencyTarget.findMany({
+      where: {
+        meter: {
+          energy_type: { type_name: energyType },
+          ...(meterId && { meter_id: meterId }),
+        },
+        period_start: { lte: endDate },
+        period_end: { gte: startDate },
+      },
+    });
+
+    let totalTargetConsumption = 0;
+    let totalTargetCost = 0;
+
+    for (const target of targets) {
+      const overlapStart = Math.max(
+        startDate.getTime(),
+        target.period_start.getTime()
+      );
+      const overlapEnd = Math.min(
+        endDate.getTime(),
+        target.period_end.getTime()
+      );
+      const days = (overlapEnd - overlapStart) / (1000 * 3600 * 24) + 1;
+      if (days > 0) {
+        totalTargetConsumption += target.target_value.toNumber() * days;
+        totalTargetCost += (target.target_cost?.toNumber() ?? 0) * days;
+      }
+    }
+
+    return {
+      total_consumption:
+        summaryAggregates._sum.total_consumption?.toNumber() ?? 0,
+      total_cost: summaryAggregates._sum.total_cost?.toNumber() ?? 0,
+      total_pax: paxAggregate._sum.total_pax ?? 0,
+      total_target_consumption: totalTargetConsumption,
+      total_target_cost: totalTargetCost,
+    };
+  }
+
   public async getRecap(query: GetRecapQuery): Promise<RecapApiResponse> {
-    const { energyType, startDate, endDate, sortBy, sortOrder, meterId } =
-      query;
+    const { energyType, sortBy, sortOrder, meterId } = query;
+    let { startDate, endDate } = query;
+
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
+    // if (endDate >= today) {
+    //   const yesterday = new Date(today);
+    //   yesterday.setUTCDate(yesterday.getUTCDate());
+    //   endDate = new Date(
+    //     Date.UTC(
+    //       yesterday.getUTCFullYear(),
+    //       yesterday.getUTCMonth(),
+    //       yesterday.getUTCDate(),
+    //       0,
+    //       0,
+    //       0,
+    //       0
+    //     )
+    //   );
+    // }
+
+    console.log(endDate);
+    if (energyType == 'Fuel') {
+      const whereClause: Prisma.ReadingSessionWhereInput = {
+        reading_date: { gte: startDate, lte: endDate },
+        ...(meterId && { meter_id: meterId }),
+      };
+
+      const fuelSessions = await this._prisma.readingSession.findMany({
+        where: whereClause,
+        include: {
+          details: true,
+          meter: {
+            include: {
+              tariff_group: {
+                include: {
+                  price_schemes: {
+                    include: { rates: true },
+                    where: { is_active: true },
+                    orderBy: { effective_date: 'desc' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { reading_date: 'asc' },
+      });
+
+      const fuelData: RecapDataRow[] = [];
+
+      for (let i = 0; i < fuelSessions.length; i++) {
+        const currentSession = fuelSessions[i];
+
+        const previousSession = i > 0 ? fuelSessions[i - 1] : null;
+
+        const currentHeight =
+          currentSession.details[0]?.value ?? new Prisma.Decimal(0);
+        console.log(currentHeight);
+        const previousHeight =
+          previousSession?.details[0]?.value ?? new Prisma.Decimal(0);
+
+        let consumptionLiters = new Prisma.Decimal(0);
+        let cost = new Prisma.Decimal(0);
+        let remainingStockLiters = new Prisma.Decimal(0);
+
+        if (previousSession && currentHeight.lessThan(previousHeight)) {
+          const meter = currentSession.meter;
+          const heightDiff = previousHeight.minus(currentHeight);
+          const litersPerCm = new Prisma.Decimal(meter.tank_volume_liters!).div(
+            meter.tank_height_cm!
+          );
+          consumptionLiters = heightDiff.times(litersPerCm);
+
+          const priceScheme = meter.tariff_group.price_schemes[0];
+          const fuelPrice =
+            priceScheme?.rates[0]?.value ?? new Prisma.Decimal(0);
+          cost = consumptionLiters.times(fuelPrice);
+        }
+
+        const meter = currentSession.meter;
+        const litersPerCm = new Prisma.Decimal(meter.tank_volume_liters!).div(
+          meter.tank_height_cm!
+        );
+        remainingStockLiters = currentHeight.times(litersPerCm);
+
+        fuelData.push({
+          date: currentSession.reading_date,
+          consumption: consumptionLiters.toNumber(),
+          cost: cost.toNumber(),
+
+          pax: null,
+          wbp: null,
+          lwbp: null,
+          classification: null,
+          target: null,
+          avg_temp: null,
+          max_temp: null,
+          is_workday: false,
+          remaining_stock: remainingStockLiters.toNumber(),
+        });
+      }
+
+      const fuelSummary = this._calculateSummary(fuelData, 'Fuel');
+      return { data: fuelData, meta: fuelSummary };
+    }
 
     return this._handleCrudOperation(async () => {
-      // LANGKAH 1: Buat klausa 'where' yang dinamis dan ambil data relevan secara paralel
       const whereClause: Prisma.DailySummaryWhereInput = {
         meter: {
           energy_type: { type_name: energyType },
-          // Filter meterId sekarang diterapkan jika ada
+
           ...(meterId && { meter_id: meterId }),
         },
         summary_date: { gte: startDate, lte: endDate },
       };
 
-      // DIUBAH: Tambahkan pengambilan data EfficiencyTarget
-      // Target hanya diambil jika meterId spesifik disediakan
       const fetchTargetsPromise = meterId
         ? this._prisma.efficiencyTarget.findMany({
             where: {
               meter_id: meterId,
-              // Ambil target yang periodenya bersinggungan dengan rentang tanggal query
+
               period_start: { lte: endDate },
               period_end: { gte: startDate },
             },
           })
-        : Promise.resolve([]); // Jika tidak ada meterId, kembalikan array kosong
+        : Promise.resolve([]);
 
-      const [summaries, paxData, efficiencyTargets] = await Promise.all([
+      const fecthPredictPromise = meterId
+        ? this._prisma.consumptionPrediction.findMany({
+            where: {
+              meter_id: meterId,
+              prediction_date: { gte: startDate, lte: endDate },
+            },
+          })
+        : Promise.resolve([]);
+
+      const [
+        summaries,
+        paxData,
+        efficiencyTargets,
+        weatherHistories,
+        predictions,
+      ] = await Promise.all([
         this._prisma.dailySummary.findMany({
           where: whereClause,
-          // PERBAIKAN: Gunakan 'select' untuk mengambil kolom skalar dan relasi
+
           select: {
             summary_date: true,
             total_cost: true,
-            total_consumption: true, // Ambil total konsumsi langsung
+            total_consumption: true,
             meter: {
-              include: {
+              // PERBAIKAN: Ganti 'include' menjadi 'select' untuk bisa memilih field spesifik
+              select: {
+                meter_id: true, // Diperlukan untuk pemetaan nanti
+                meter_code: true,
                 tariff_group: {
                   include: {
                     price_schemes: {
@@ -81,63 +385,11 @@ export class RecapService extends BaseService {
           where: { data_date: { gte: startDate, lte: endDate } },
         }),
         fetchTargetsPromise,
+        this._prisma.weatherHistory.findMany({
+          where: { data_date: { gte: startDate, lte: endDate } },
+        }),
+        fecthPredictPromise,
       ]);
-
-      // LANGKAH 2: Agregasi semua summary berdasarkan tanggal. Ini penting jika ada >1 meter.
-      const aggregatedSummaries = new Map<string, AggregatedDailyData>();
-      for (const summary of summaries) {
-        const dateString = summary.summary_date.toISOString().split('T')[0];
-        const currentData = aggregatedSummaries.get(dateString) ?? {
-          costBeforeTax: 0,
-          costWithTax: 0,
-          wbp: 0,
-          lwbp: 0,
-          consumption: 0,
-        };
-
-        // PERBAIKAN: Hitung biaya termasuk pajak untuk rekap
-        const costBeforeTax = summary.total_cost?.toNumber() ?? 0;
-
-        // Cari skema harga yang relevan untuk tanggal summary
-        const relevantPriceScheme =
-          summary.meter.tariff_group.price_schemes.find(
-            (ps) => ps.effective_date <= summary.summary_date && ps.is_active
-          );
-
-        // Hitung total rate pajak dari skema tersebut
-        const totalTaxRate =
-          relevantPriceScheme?.taxes.reduce(
-            (acc, taxOnScheme) => acc + (taxOnScheme.tax.rate.toNumber() ?? 0),
-            0
-          ) ?? 0;
-
-        const taxAmount = costBeforeTax * totalTaxRate;
-        const costWithTax = costBeforeTax + taxAmount;
-
-        currentData.costBeforeTax += costBeforeTax;
-        currentData.costWithTax += costWithTax;
-
-        // PERBAIKAN TOTAL: Logika agregasi konsumsi yang benar.
-        if (energyType === 'Electricity') {
-          // Untuk Listrik, kita perlu menjumlahkan WBP dan LWBP dari detailnya.
-          const wbpDetail = summary.details.find(
-            (d) => d.metric_name === 'Pemakaian WBP'
-          );
-          const lwbpDetail = summary.details.find(
-            (d) => d.metric_name === 'Pemakaian LWBP'
-          );
-
-          currentData.wbp += wbpDetail?.consumption_value.toNumber() ?? 0;
-          currentData.lwbp += lwbpDetail?.consumption_value.toNumber() ?? 0;
-          // Konsumsi total untuk listrik adalah jumlah dari WBP dan LWBP.
-          currentData.consumption = currentData.wbp + currentData.lwbp;
-        } else {
-          // Untuk jenis energi lain, kita bisa langsung menggunakan total_consumption.
-          currentData.consumption += summary.total_consumption?.toNumber() ?? 0;
-        }
-
-        aggregatedSummaries.set(dateString, currentData);
-      }
 
       const paxDataMap = new Map(
         paxData.map((p) => [
@@ -146,7 +398,20 @@ export class RecapService extends BaseService {
         ])
       );
 
-      // LANGKAH 3: Buat kerangka laporan dengan mengisi hari yang kosong dan mencari target
+      const weatherDataMap = new Map(
+        weatherHistories.map((w) => [
+          w.data_date.toISOString().split('T')[0],
+          { avg_temp: w.avg_temp, max_temp: w.max_temp },
+        ])
+      );
+
+      const predictionsMap = new Map(
+        predictions.map((p) => [
+          p.prediction_date.toISOString().split('T')[0],
+          p.predicted_value.toNumber(),
+        ])
+      );
+
       const data: RecapDataRow[] = [];
       for (
         let d = new Date(startDate);
@@ -155,10 +420,10 @@ export class RecapService extends BaseService {
       ) {
         const currentDate = new Date(d);
         const dateString = currentDate.toISOString().split('T')[0];
-        const summaryForDay = aggregatedSummaries.get(dateString);
         const paxForDay = paxDataMap.get(dateString) ?? null;
+        const weatherForDay = weatherDataMap.get(dateString);
+        const predictionForDay = predictionsMap.get(dateString) ?? null;
 
-        // DIUBAH: Cari target yang berlaku untuk tanggal saat ini
         const targetRecord = efficiencyTargets.find(
           (t) => currentDate >= t.period_start && currentDate <= t.period_end
         );
@@ -166,26 +431,56 @@ export class RecapService extends BaseService {
           ? targetRecord.target_value.toNumber()
           : null;
 
-        // PERBAIKAN: Temukan summary yang sesuai untuk tanggal saat ini dari array `summaries`
-        const summaryForDate = summaries.find(
+        // PERBAIKAN: Ambil data langsung dari `summaries` yang sudah difilter per tanggal.
+        const summaryForDate = summaries.filter(
           (s) => s.summary_date.toISOString().split('T')[0] === dateString
         );
 
+        const dayOfWeek = currentDate.getDay();
+        const isWorkday = dayOfWeek >= 1 && dayOfWeek <= 5;
+
+        // Kalkulasi WBP, LWBP, dan konsumsi dari detail yang sudah ada.
+        const wbp =
+          summaryForDate
+            .flatMap((s) => s.details)
+            .find((d) => d.metric_name === 'Pemakaian WBP')
+            ?.consumption_value?.toNumber() ?? null;
+        const lwbp =
+          summaryForDate
+            .flatMap((s) => s.details)
+            .find((d) => d.metric_name === 'Pemakaian LWBP')
+            ?.consumption_value?.toNumber() ?? null;
+        const consumption =
+          summaryForDate.reduce(
+            (sum, s) => sum + (s.total_consumption?.toNumber() ?? 0),
+            0
+          ) || null;
+        const cost =
+          summaryForDate.reduce(
+            (sum, s) => sum + (s.total_cost?.toNumber() ?? 0),
+            0
+          ) || null;
+
         data.push({
           date: currentDate,
-          wbp: summaryForDay?.wbp ?? null,
-          lwbp: summaryForDay?.lwbp ?? null,
-          consumption: summaryForDay?.consumption ?? null,
+          wbp,
+          lwbp,
+          consumption,
           classification:
-            summaryForDate?.classification?.classification ?? null,
-          target: targetForDay, // DIUBAH: Mengisi nilai target harian
+            summaryForDate[0]?.classification?.classification ?? null,
+          confidence_score:
+            summaryForDate[0]?.classification?.confidence_score ?? null,
+          target: targetForDay,
+          prediction: predictionForDay,
           pax: paxForDay,
-          // PERBAIKAN: Tampilkan biaya harian SEBELUM pajak
-          cost: summaryForDay?.costBeforeTax ?? null,
+          cost,
+
+          avg_temp: weatherForDay?.avg_temp?.toNumber() ?? null,
+          max_temp: weatherForDay?.max_temp?.toNumber() ?? null,
+          is_workday: isWorkday,
         });
       }
 
-      // LANGKAH 4: Lakukan pengurutan (sorting) jika diminta
       if (sortBy) {
         data.sort((a, b) => {
           const valA = sortBy === 'date' ? a.date.getTime() : (a[sortBy] ?? -1);
@@ -195,12 +490,7 @@ export class RecapService extends BaseService {
         });
       }
 
-      // LANGKAH 5: Hitung total agregat dari data yang sudah diproses
-      const summary = this._calculateSummary(
-        data,
-        aggregatedSummaries,
-        energyType
-      );
+      const summary = this._calculateSummary(data, energyType);
 
       return { data, meta: summary };
     });
@@ -211,37 +501,32 @@ export class RecapService extends BaseService {
    */
   private _calculateSummary(
     data: RecapDataRow[],
-    aggregatedData: Map<string, AggregatedDailyData>,
     energyType: 'Electricity' | 'Water' | 'Fuel'
   ): RecapSummary {
-    // PERBAIKAN: Gunakan data yang sudah diagregasi untuk mendapatkan total biaya
-    // sebelum dan sesudah pajak secara akurat tanpa menghitung ulang.
-    let totalCost = 0;
-    let totalCostBeforeTax = 0;
     let totalWbp = 0;
     let totalLwbp = 0;
-    let totalConsumption = 0;
-    let totalPax = 0;
-    let totalTarget = 0;
 
-    for (const row of data) {
-      const summary = aggregatedData.get(row.date.toISOString().split('T')[0]);
-      totalCost += summary?.costWithTax ?? 0;
-      totalCostBeforeTax += summary?.costBeforeTax ?? 0;
-      totalWbp += row.wbp ?? 0;
-      totalLwbp += row.lwbp ?? 0;
-      // PERBAIKAN: Sederhanakan kalkulasi. `row.consumption` sekarang selalu benar.
-      totalConsumption += row.consumption ?? 0;
-      totalPax += row.pax ?? 0;
-      totalTarget += row.target ?? 0;
+    const totalCost = data.reduce((sum, row) => sum + (row.cost ?? 0), 0);
+    const totalConsumption = data.reduce(
+      (sum, row) => sum + (row.consumption ?? 0),
+      0
+    );
+    const totalPax = data.reduce((sum, row) => sum + (row.pax ?? 0), 0);
+
+    if (energyType === 'Electricity') {
+      if (energyType === 'Electricity') {
+        totalWbp = data.reduce((sum, row) => sum + (row.wbp ?? 0), 0);
+        totalLwbp = data.reduce((sum, row) => sum + (row.lwbp ?? 0), 0);
+      }
     }
 
     return {
       totalCost,
-      totalCostBeforeTax,
-      totalTarget, // DIUBAH: Sekarang dihitung dari data
+      // PERBAIKAN: Gunakan `totalCost` karena ini adalah biaya sebelum pajak dari DailySummary.
+      totalCostBeforeTax: totalCost,
+      totalTarget: data.reduce((sum, row) => sum + (row.target ?? 0), 0),
       totalConsumption,
-      totalWbp,
+      totalWbp: totalWbp,
       totalLwbp,
       totalPax,
     };
@@ -258,10 +543,8 @@ export class RecapService extends BaseService {
     startDate: Date,
     endDate: Date,
     meterId?: number,
-    userId?: number // PERBAIKAN: Terima userId untuk notifikasi
+    userId?: number
   ): Promise<void> {
-    // PERBAIKAN: Fungsi ini sekarang berjalan di latar belakang.
-    // Error handling harus dilakukan di dalam fungsi ini, tidak lagi dilempar ke controller.
     const jobDescription = `recalculate-${meterId || 'all'}-${Date.now()}`;
     console.log(
       `[BACKGROUND JOB - ${jobDescription}] Memulai kalkulasi ulang dari ${startDate.toISOString()} hingga ${endDate.toISOString()}`
@@ -269,57 +552,80 @@ export class RecapService extends BaseService {
 
     const notifyUser = (event: string, data: unknown) => {
       if (userId) {
-        socketServer.io.to(String(userId)).emit(event, data);
+        SocketServer.instance.io.to(String(userId)).emit(event, data);
       }
     };
 
     try {
-      const where: Prisma.ReadingSessionWhereInput = {
-        reading_date: { gte: startDate, lte: endDate },
+      // PERBAIKAN: Logika diubah untuk mencari DailySummary, bukan ReadingSession.
+      // Ini memungkinkan klasifikasi ulang untuk data historis yang tidak memiliki sesi.
+      const where: Prisma.DailySummaryWhereInput = {
+        summary_date: { gte: startDate, lte: endDate },
         ...(meterId && { meter_id: meterId }),
       };
 
-      const sessionsToRecalculate = await this._prisma.readingSession.findMany({
+      const summariesToReclassify = await this._prisma.dailySummary.findMany({
         where,
+        include: {
+          meter: {
+            include: {
+              energy_type: true,
+              category: true,
+              tariff_group: {
+                include: {
+                  price_schemes: {
+                    include: {
+                      rates: { include: { reading_type: true } },
+                      taxes: { include: { tax: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       });
 
-      if (sessionsToRecalculate.length === 0) {
+      if (summariesToReclassify.length === 0) {
         console.log(
           `[BACKGROUND JOB - ${jobDescription}] Tidak ada sesi untuk dihitung ulang.`
         );
         notifyUser('recalculation:success', {
-          message: 'Tidak ada data yang perlu dihitung ulang.',
+          message: 'Tidak ada data ringkasan yang perlu diklasifikasi ulang.',
           processed: 0,
           total: 0,
         });
         return;
       }
 
-      const totalSessions = sessionsToRecalculate.length;
+      const totalSummaries = summariesToReclassify.length;
       console.log(
-        `[BACKGROUND JOB - ${jobDescription}] Ditemukan ${totalSessions} sesi untuk dihitung ulang.`
+        `[BACKGROUND JOB - ${jobDescription}] Ditemukan ${totalSummaries} ringkasan untuk diklasifikasi ulang.`
       );
 
-      for (let i = 0; i < totalSessions; i++) {
-        const session = sessionsToRecalculate[i];
-        const progress = { processed: i + 1, total: totalSessions };
+      // PERBAIKAN: Impor ReadingService sekali di luar loop.
+      const { ReadingService } = await import('./metering/reading.service.js');
+      const readingService = new ReadingService();
 
-        // Kirim progres ke client
+      for (let i = 0; i < totalSummaries; i++) {
+        const summary = summariesToReclassify[i];
+        const progress = { processed: i + 1, total: totalSummaries };
+
         notifyUser('recalculation:progress', progress);
 
-        await readingService.processAndSummarizeReading(
-          session.meter_id,
-          session.reading_date
-        );
+        // PERBAIKAN: Panggil langsung fungsi klasifikasi.
+        // Kita tidak perlu `processAndSummarizeReading` lagi karena summary sudah ada.
+        // @ts-ignore - Memanggil metode privat untuk tujuan ini.
+        await readingService._classifyDailyUsage(summary, summary.meter);
       }
 
       console.log(
         `[BACKGROUND JOB - ${jobDescription}] Kalkulasi ulang selesai dengan sukses.`
       );
       notifyUser('recalculation:success', {
-        message: `Kalkulasi ulang berhasil untuk ${totalSessions} data.`,
-        processed: totalSessions,
-        total: totalSessions,
+        message: `Klasifikasi ulang berhasil untuk ${totalSummaries} data.`,
+        processed: totalSummaries,
+        total: totalSummaries,
       });
     } catch (error) {
       const errorMessage =
@@ -329,9 +635,23 @@ export class RecapService extends BaseService {
         errorMessage
       );
       notifyUser('recalculation:error', { message: errorMessage });
-      // Di sini Anda bisa menambahkan logging ke file atau sistem monitoring lain.
+
+      const superAdmins = await this._prisma.user.findMany({
+        where: {
+          role: { role_name: 'SuperAdmin' },
+          is_active: true,
+        },
+        select: { user_id: true },
+      });
+
+      for (const admin of superAdmins) {
+        await notificationService.create({
+          user_id: admin.user_id,
+          title: 'Error: Kalkulasi Ulang Gagal',
+          message: `Proses kalkulasi ulang data gagal. Error: ${errorMessage}`,
+        });
+      }
     }
   }
 }
 export const recapService = new RecapService();
-//

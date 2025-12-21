@@ -1,9 +1,9 @@
 import type { Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
 
-import { MeterCategoryService } from '../../../services/meterCategory.service.js';
-import { MeterCategoryController } from '../../../controllers/meterCategory.controller.js';
-import { meterCategorySchema } from '../../../validations/meterCategory.validation.js';
+import { MeterCategoryService } from '../../../services/metering/meterCategory.service.js';
+import { MeterCategoryController } from '../../../controllers/metering/meterCategory.controller.js';
+import { meterCategorySchema } from '../../../validations/metering/meterCategory.validation.js';
 
 export default (router: Router) => {
   const meterCategoryRouter = createCrudRouter('/meters-category', {

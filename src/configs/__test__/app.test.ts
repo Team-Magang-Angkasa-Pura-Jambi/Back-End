@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { app } from '../app.js';
+import prisma from '../db.js';
 
 describe('API Endpoint Tests', () => {
   describe('GET Root', () => {
@@ -33,10 +34,14 @@ describe('API Endpoint Tests', () => {
       expect(response.body).toEqual({
         status: {
           code: 404,
-          message: 'Resource not found!',
+          message: 'Resource not found at GET /path-yang-pasti-tidak-ada',
         },
-        data: null,
+        errors: 'NotFoundError',
       });
     });
   });
+});
+
+afterAll(async () => {
+  await prisma.$disconnect();
 });

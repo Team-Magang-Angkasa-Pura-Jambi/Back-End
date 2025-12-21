@@ -5,7 +5,7 @@ import {
 } from '../../../validations/energy.validation.js';
 
 import { createCrudRouter } from '../../../utils/routerFactory.js';
-import { EnergyTypeService } from '../../../services/energy.service.js';
+import { EnergyTypeService } from '../../../services/metering/energy.service.js';
 import { EnergyTypeController } from '../../../controllers/energy.controller.js';
 import { ConsumptionPredictionService } from '../../../services/ConsumptionPrediction.service.js';
 import { ConsumptionPredictionController } from '../../../controllers/consumptionPrediction.controller.js';

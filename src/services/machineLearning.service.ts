@@ -1,104 +1,274 @@
-// src/services/machineLearning.service.ts
+import axios, { isAxiosError } from 'axios';
+import { weatherService } from './weather.service.js';
 
-import axios from 'axios';
-import type { UsageCategory } from '../generated/prisma/index.js';
+// PERBAIKAN: Tipe disesuaikan dengan kontrak API baru
+type EvaluationInput = {
+  pax: number;
+  suhu_rata: number;
+  suhu_max: number;
+  is_hari_kerja: number;
+  aktual_kwh_terminal: number;
+  aktual_kwh_kantor: number;
+};
 
-// --- Tipe Data untuk Interaksi dengan ML API ---
+type EvaluationResult = {
+  kinerja_terminal: string;
+  deviasi_persen_terminal: number;
+  kinerja_kantor: string;
+  deviasi_persen_kantor: number;
+};
 
-interface PredictionPayload {
-  tanggal: string; // YYYY-MM-DD
-}
+// BARU: Tipe input untuk evaluasi spesifik per meter
+type EvaluationInputTerminal = {
+  pax: number;
+  suhu_rata: number;
+  suhu_max: number;
+  aktual_kwh_terminal: number;
+};
 
-export interface PredictionResult {
-  tanggal_prediksi: string;
-  prediksi_listrik_kwh: number;
-  prediksi_pax: number;
-  prediksi_air_m3: number;
-}
+type EvaluationInputKantor = {
+  suhu_rata: number;
+  suhu_max: number;
+  is_hari_kerja: number;
+  aktual_kwh_kantor: number;
+};
 
-interface ClassificationPayload {
-  kwh_today: number;
-  kwh_yesterday: number;
-  pax_today: number;
-  pax_yesterday: number;
-}
+type TerminalEvaluationResult = {
+  kinerja_terminal: string;
+  deviasi_persen_terminal: number;
+};
 
-export interface ClassificationResult {
-  klasifikasi: UsageCategory;
-  input_data: {
-    perubahan_listrik_kwh: number;
-    perubahan_pax: number;
-  };
-}
+type KantorEvaluationResult = {
+  kinerja_kantor: string;
+  deviasi_persen_kantor: number;
+};
 
-// URL tempat Python API Anda berjalan (sebaiknya dari .env)
-const ML_API_BASE_URL = process.env.ML_API_URL || 'http://127.0.0.1:8000';
+type PredictionResult = {
+  prediksi_pax: number; // BARU: API sekarang mengembalikan prediksi pax juga
+  prediksi_kwh_terminal: number;
+  prediksi_kwh_kantor: number; // Nama properti ini mungkin perlu disesuaikan
+};
 
-/**
- * Service untuk berinteraksi dengan API Machine Learning eksternal (Python).
- */
-export class MachineLearningService {
+// BARU: Tipe untuk hasil prediksi spesifik
+type TerminalPredictionResult = {
+  prediksi_kwh_terminal: number;
+};
+
+// BARU: Tipe untuk hasil prediksi spesifik
+type KantorPredictionResult = {
+  prediksi_kwh_kantor: number;
+};
+
+class MachineLearningService {
+  private baseURL: string;
+
+  constructor() {
+    this.baseURL = process.env.ML_API_BASE_URL || 'http://127.0.0.1:8000';
+  }
+
   /**
-   * Memanggil endpoint /predict untuk mendapatkan prediksi konsumsi harian.
-   * @param date - Tanggal dalam format YYYY-MM-DD.
+   * Memanggil endpoint /evaluate pada API Python.
+   */
+  public async evaluateDailyUsage(
+    data: EvaluationInput
+  ): Promise<EvaluationResult> {
+    try {
+      const response = await axios.post<EvaluationResult>(
+        `${this.baseURL}/evaluate`,
+        data
+      );
+      return response.data;
+    } catch (error) {
+      // PERBAIKAN: Tangani error Axios dan buat pesan yang lebih informatif.
+      if (isAxiosError(error)) {
+        const status = error.response?.status || 'N/A';
+        const responseData = error.response?.data;
+        let detailMessage = 'Tidak ada detail tambahan.';
+
+        // FastAPI 422 error biasanya memiliki detail di `response.data.detail`
+        if (responseData && responseData.detail) {
+          detailMessage = JSON.stringify(responseData.detail);
+        } else if (responseData) {
+          detailMessage = JSON.stringify(responseData);
+        }
+        throw new Error(
+          `Gagal memanggil API evaluasi ML. Status: ${status}. Detail: ${detailMessage}`
+        );
+      }
+      throw error; // Lempar kembali error lain yang tidak terduga
+    }
+  }
+
+  /**
+   * BARU: Memanggil endpoint /evaluate/terminal pada API Python.
+   */
+  public async evaluateTerminalUsage(
+    data: EvaluationInputTerminal
+  ): Promise<TerminalEvaluationResult> {
+    try {
+      const response = await axios.post<TerminalEvaluationResult>(
+        `${this.baseURL}/evaluate/terminal`,
+        data
+      );
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error)) {
+        const status = error.response?.status || 'N/A';
+        const responseData = error.response?.data;
+        throw new Error(
+          `Gagal memanggil API evaluasi terminal. Status: ${status}. Detail: ${JSON.stringify(
+            responseData
+          )}`
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * BARU: Memanggil endpoint /evaluate/kantor pada API Python.
+   */
+  public async evaluateKantorUsage(
+    data: EvaluationInputKantor
+  ): Promise<KantorEvaluationResult> {
+    try {
+      const response = await axios.post<KantorEvaluationResult>(
+        `${this.baseURL}/evaluate/kantor`,
+        data
+      );
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error)) {
+        const status = error.response?.status || 'N/A';
+        const responseData = error.response?.data;
+        throw new Error(
+          `Gagal memanggil API evaluasi kantor. Status: ${status}. Detail: ${JSON.stringify(
+            responseData
+          )}`
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Memanggil endpoint /predict pada API Python dengan data cuaca dari OpenWeatherMap.
+   * @param date - Tanggal prediksi (objek Date).
+   * @param weatherData - (Opsional) Data cuaca yang sudah ada untuk menghindari panggilan API baru.
    */
   public async getDailyPrediction(
-    date: string
-  ): Promise<PredictionResult | null> {
-    console.log(`[ML Service] Meminta prediksi untuk tanggal: ${date}...`);
+    date: Date,
+    weatherData?: { suhu_rata: number; suhu_max: number }
+  ): Promise<PredictionResult> {
     try {
+      // PERBAIKAN: Panggil weatherService jika data cuaca tidak disediakan.
+      let finalWeatherData = weatherData;
+      if (!finalWeatherData) {
+        // Panggil API cuaca untuk mendapatkan data prakiraan.
+        finalWeatherData = await weatherService.getForecast(date);
+      }
+
+      // Gunakan data cuaca yang didapat, atau fallback ke nilai default jika API gagal.
+      const suhu_rata = finalWeatherData?.suhu_rata ?? 28.0; // Nilai default jika null
+      const suhu_max = finalWeatherData?.suhu_max ?? 32.0; // Nilai default jika null
+
+      // Kirim 'tanggal' dalam format YYYY-MM-DD, bukan 'pax'.
+      const dateString = date.toISOString().split('T')[0];
+
       const response = await axios.post<PredictionResult>(
-        `${ML_API_BASE_URL}/predict`,
-        { tanggal: date }
+        `${this.baseURL}/predict`,
+        {
+          tanggal: dateString,
+          suhu_rata: suhu_rata,
+          suhu_max: suhu_max,
+        }
       );
-      console.log('[ML Service] Prediksi berhasil diterima.');
       return response.data;
     } catch (error) {
-      this.handleError(error, 'getDailyPrediction');
-      return null;
+      // PERBAIKAN: Tangani error Axios juga untuk endpoint prediksi.
+      if (isAxiosError(error)) {
+        const status = error.response?.status || 'N/A';
+        const responseData = error.response?.data;
+        let detailMessage = 'Tidak ada detail tambahan.';
+
+        if (responseData && responseData.detail) {
+          detailMessage = JSON.stringify(responseData.detail);
+        } else if (responseData) {
+          detailMessage = JSON.stringify(responseData);
+        }
+        throw new Error(
+          `Gagal memanggil API prediksi ML. Status: ${status}. Detail: ${detailMessage}`
+        );
+      }
+      throw error; // Lempar kembali error lain yang tidak terduga
     }
   }
 
   /**
-   * Memanggil endpoint /classify untuk mendapatkan klasifikasi pemakaian.
+   * BARU: Memanggil endpoint /predict/terminal pada API Python.
+   * @param date - Tanggal prediksi (objek Date).
    */
-  public async classifyDailyUsage(
-    payload: ClassificationPayload
-  ): Promise<ClassificationResult | null> {
-    console.log('[ML Service] Meminta klasifikasi pemakaian...', payload);
+  public async getTerminalPrediction(
+    date: Date,
+    weatherData: { suhu_rata: number; suhu_max: number }
+  ): Promise<TerminalPredictionResult> {
     try {
-      // PERBAIKAN: Gunakan tipe `any` untuk menangani respons error dari Python.
-      const response = await axios.post<
-        ClassificationResult | { error: string }
-      >(`${ML_API_BASE_URL}/classify`, payload);
+      const dateString = date.toISOString().split('T')[0];
 
-      // PERBAIKAN: Cek apakah respons dari ML API berisi error.
-      if ('error' in response.data) {
-        this.handleError(response.data.error, 'classifyDailyUsage');
-        return null;
-      }
-
-      console.log(
-        `[ML Service] Klasifikasi diterima: ${response.data.klasifikasi}`
+      const response = await axios.post<TerminalPredictionResult>(
+        `${this.baseURL}/predict/terminal`,
+        {
+          tanggal: dateString,
+          suhu_rata: weatherData.suhu_rata,
+          suhu_max: weatherData.suhu_max,
+        }
       );
       return response.data;
     } catch (error) {
-      this.handleError(error, 'classifyDailyUsage');
-      return null;
+      if (isAxiosError(error)) {
+        const status = error.response?.status || 'N/A';
+        const responseData = error.response?.data;
+        throw new Error(
+          `Gagal memanggil API prediksi terminal. Status: ${status}. Detail: ${JSON.stringify(
+            responseData
+          )}`
+        );
+      }
+      throw error;
     }
   }
 
-  private handleError(error: unknown, context: string) {
-    if (axios.isAxiosError(error)) {
-      console.error(
-        `[ML Service - ${context}] Error saat memanggil ML API:`,
-        error.response?.data || error.message
+  /**
+   * BARU: Memanggil endpoint /predict/kantor pada API Python.
+   * @param date - Tanggal prediksi (objek Date).
+   */
+  public async getKantorPrediction(
+    date: Date,
+    weatherData: { suhu_rata: number; suhu_max: number }
+  ): Promise<KantorPredictionResult> {
+    try {
+      const dateString = date.toISOString().split('T')[0];
+
+      const response = await axios.post<KantorPredictionResult>(
+        `${this.baseURL}/predict/kantor`,
+        {
+          tanggal: dateString,
+          suhu_rata: weatherData.suhu_rata,
+          suhu_max: weatherData.suhu_max,
+        }
       );
-    } else {
-      console.error(
-        `[ML Service - ${context}] Terjadi error yang tidak terduga:`,
-        error
-      );
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error)) {
+        const status = error.response?.status || 'N/A';
+        const responseData = error.response?.data;
+        throw new Error(
+          `Gagal memanggil API prediksi kantor. Status: ${status}. Detail: ${JSON.stringify(
+            responseData
+          )}`
+        );
+      }
+      throw error;
     }
   }
 }
