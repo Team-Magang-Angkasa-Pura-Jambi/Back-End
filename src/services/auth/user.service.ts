@@ -1,14 +1,14 @@
 import bcrypt from 'bcrypt';
-import prisma from '../configs/db.js';
-import { Prisma, RoleName, User } from '../generated/prisma/index.js';
+import prisma from '../../configs/db.js';
+import { Prisma, RoleName, User } from '../../generated/prisma/index.js';
 import type {
   CreateUserBody,
   GetUsersQuery,
   UpdateUserBody,
-} from '../types/user.type.js';
-import { Error404, Error409 } from '../utils/customError.js';
-import { GenericBaseService } from '../utils/GenericBaseService.js';
-import { notificationService } from './notification.service.js';
+} from '../../types/auth/user.type.js';
+import { Error409 } from '../../utils/customError.js';
+import { GenericBaseService } from '../../utils/GenericBaseService.js';
+import { notificationService } from '../notification.service.js';
 
 export class UserService extends GenericBaseService<
   typeof prisma.user,
@@ -40,12 +40,11 @@ export class UserService extends GenericBaseService<
           `[UserService] Pengguna tidak aktif '${data.username}' ditemukan. Mengaktifkan kembali dengan data baru.`
         );
         const hashedPassword = await bcrypt.hash(data.password, 10);
-        // const { password } = data; 
+        // const { password } = data;
         const restoredUser = await this._model.update({
           where: { user_id: existingUser.user_id },
           data: {
-            
-            is_active: true, 
+            is_active: true,
             role: { connect: { role_id: data.role_id } },
             password_hash: hashedPassword,
           },
@@ -54,9 +53,8 @@ export class UserService extends GenericBaseService<
         return restoredUser as User;
       }
 
-      
       const hashedPassword = await bcrypt.hash(data.password, 10);
-      const { password, ...restData } = data; 
+      const { password, ...restData } = data;
       const newUser = await this._model.create({
         data: {
           ...restData,
@@ -67,7 +65,6 @@ export class UserService extends GenericBaseService<
         },
       });
 
-      
       const admins = await this._prisma.user.findMany({
         where: {
           role: { role_name: { in: [RoleName.Admin, RoleName.SuperAdmin] } },
@@ -85,7 +82,7 @@ export class UserService extends GenericBaseService<
           user_id: admin.user_id,
           title: 'Pengguna Baru Dibuat',
           message,
-          link: `/management/users/${newUser.user_id}`, 
+          link: `/management/users/${newUser.user_id}`,
         });
       }
 
@@ -99,18 +96,15 @@ export class UserService extends GenericBaseService<
    * @param args - Argumen query dari Prisma, seperti `where`, `orderBy`, dll.
    * @returns Daftar pengguna yang aktif.
    */
-  
 
-  public override async findAll(
-    query?: any
-  ): Promise<User[]> {
+  public override async findAll(query?: any): Promise<User[]> {
     const typedQuery: GetUsersQuery = query || {};
     const { roleName, isActive, search } = typedQuery;
 
     const findArgs: Prisma.UserFindManyArgs = {
       where: {
         ...(roleName && { role: { role_name: roleName } }),
-        is_active: isActive ?? true, 
+        is_active: isActive ?? true,
         ...(search && {
           username: { contains: search, mode: 'insensitive' },
         }),
@@ -118,8 +112,7 @@ export class UserService extends GenericBaseService<
       include: { role: true },
     };
 
-    
-    return super.findAll(findArgs);
+    return this._handleCrudOperation(() => this._model.findMany(findArgs));
   }
 
   public override async update(
@@ -127,7 +120,6 @@ export class UserService extends GenericBaseService<
     data: UpdateUserBody
   ): Promise<User> {
     return this._handleCrudOperation(async () => {
-      
       const { role_id, password, ...restData } = data;
       const updateData: Prisma.UserUpdateInput = { ...restData };
 
@@ -182,37 +174,34 @@ export class UserService extends GenericBaseService<
    */
 
   public async getActivityHistory(userId: number) {
-    
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    
     const userWithRelations = await this._model.findUniqueOrThrow({
       where: { user_id: userId },
-      
+
       include: {
-        
         reading_sessions: {
           where: {
-            created_at: { gte: sevenDaysAgo }, 
+            created_at: { gte: sevenDaysAgo },
           },
           include: {
             meter: { select: { meter_code: true, energy_type: true } },
           },
           orderBy: { created_at: 'desc' },
         },
-        
+
         price_schemes_set: {
           where: {
-            effective_date: { gte: sevenDaysAgo }, 
+            effective_date: { gte: sevenDaysAgo },
           },
           include: { tariff_group: { select: { group_name: true } } },
           orderBy: { effective_date: 'desc' },
         },
-        
+
         efficiency_targets_set: {
           where: {
-            period_start: { gte: sevenDaysAgo }, 
+            period_start: { gte: sevenDaysAgo },
           },
           include: { meter: { select: { meter_code: true } } },
           orderBy: { period_start: 'desc' },
@@ -220,7 +209,6 @@ export class UserService extends GenericBaseService<
       },
     });
 
-    
     const readingHistory = userWithRelations.reading_sessions.map(
       (session) => ({
         type: 'Pencatatan Meter',
@@ -241,23 +229,20 @@ export class UserService extends GenericBaseService<
       })
     );
 
-    
     const efficiencyTargetHistory =
       userWithRelations.efficiency_targets_set.map((target) => ({
         type: 'Pengaturan Target',
-        timestamp: target.period_start, 
+        timestamp: target.period_start,
         description: `Mengatur target "${target.kpi_name}" untuk meter ${target.meter.meter_code}.`,
         details: target,
       }));
 
-    
     const fullHistory = [
       ...readingHistory,
       ...priceSchemeHistory,
-      ...efficiencyTargetHistory, 
+      ...efficiencyTargetHistory,
     ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
-    
     const {
       reading_sessions,
       price_schemes_set,

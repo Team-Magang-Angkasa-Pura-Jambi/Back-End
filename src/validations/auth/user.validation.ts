@@ -1,12 +1,7 @@
 import { z } from 'zod';
-import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
-import {
-  optionalString,
-  positiveInt,
-  requiredString,
-  zodString,
-} from '../utils/schmeHelper.js';
-import { RoleName } from '../generated/prisma/index.js';
+import { CrudSchemaBuilder } from '../../utils/shemaHandler.js';
+import { positiveInt, zodString } from '../../utils/schmeHelper.js';
+import { RoleName } from '../../generated/prisma/index.js';
 
 const userIdSchema = positiveInt('User ID');
 const passwordRules = zodString('Password');

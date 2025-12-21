@@ -1,11 +1,11 @@
 // src/services/auth.service.ts
-import { Error401, Error500 } from '../utils/customError.js';
+import { Error401, Error500 } from '../../utils/customError.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { BaseService } from '../utils/baseService.js';
+import { BaseService } from '../../utils/baseService.js';
 import { userService, UserService } from './user.service.js';
-import type { LoginBody } from '../types/auth.type.js';
-import prisma from '../configs/db.js';
+import type { LoginBody } from '../../types/auth/auth.type.js';
+import prisma from '../../configs/db.js';
 
 export interface IJwtPayload {
   id: number;

@@ -3,7 +3,7 @@ import type { MeterCategory, Prisma } from '../../generated/prisma/index.js';
 import type {
   CreateMeterCategoryBody,
   UpdateMeterCategoryBody,
-} from '../../types/meterCategory.type.js';
+} from '../../types/metering/meterCategory.type.js';
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
 
 export class MeterCategoryService extends GenericBaseService<

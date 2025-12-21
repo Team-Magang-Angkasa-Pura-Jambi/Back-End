@@ -1,8 +1,8 @@
 import type { Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
-import { UserService } from '../../../services/user.service.js';
-import { UserController } from '../../../controllers/user.controller.js';
-import { userSchemas } from '../../../validations/user.validation.js';
+import { UserService } from '../../../services/auth/user.service.js';
+import { UserController } from '../../../controllers/auth/user.controller.js';
+import { userSchemas } from '../../../validations/auth/user.validation.js';
 import { SchemeRateService } from '../../../services/SchemeRate.service.js';
 import { SchemeRateController } from '../../../controllers/SchemeRate.controller.js';
 import { schemaRateSchemas } from '../../../validations/SchemeRate.validation.js';

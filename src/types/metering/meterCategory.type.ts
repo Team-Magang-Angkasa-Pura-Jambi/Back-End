@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { meterCategorySchema } from '../validations/metering/meterCategory.validation.js';
+import type { meterCategorySchema } from '../../validations/metering/meterCategory.validation.js';
 
 export type CreateMeterCategoryBody = z.infer<
   typeof meterCategorySchema.create

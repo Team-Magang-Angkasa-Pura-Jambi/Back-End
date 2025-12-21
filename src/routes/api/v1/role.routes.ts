@@ -1,8 +1,8 @@
 import type { Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
-import { roleSchemas } from '../../../validations/role.validation.js';
-import { RoleService } from '../../../services/role.service.js';
-import { RoleController } from '../../../controllers/role.controller.js';
+import { roleSchemas } from '../../../validations/auth/role.validation.js';
+import { RoleService } from '../../../services/auth/role.service.js';
+import { RoleController } from '../../../controllers/auth/role.controller.js';
 
 export const roleRoutes = (router: Router) => {
   const roleRouter = createCrudRouter('/roles', {

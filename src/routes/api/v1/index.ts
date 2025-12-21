@@ -11,7 +11,6 @@ import priceSchemeRoute from './priceScheme.route.js';
 import userRoute from './user.route.js';
 import efficencyTargetRoute from './efficencyTarget.route.js';
 import paxRoutes from './pax.routes.js';
-import eventsLogBookRoutes from './eventsLogBook.routes.js';
 import dailySummaryRoute from './dailySummary.route.js';
 import summaryDetailRoute from './summaryDetail.route.js';
 import analysisRoute from './analysis.route.js';
@@ -50,7 +49,6 @@ export default (app: any) => {
   efficencyTargetRoute(router);
   SchemeRateRoute(router);
   paxRoutes(router);
-  eventsLogBookRoutes(router);
   dailySummaryRoute(router);
   summaryDetailRoute(router);
   analysisRoute(router);
