@@ -4,7 +4,7 @@ import type {
   CreateReadingTypeBody,
   GetReadingTypesQuery,
   UpdateReadingTypeBody,
-} from '../../types/readingType.type.js';
+} from '../../types/metering/readingType.type.js';
 import type { ReadingType } from '../../generated/prisma/index.js';
 
 

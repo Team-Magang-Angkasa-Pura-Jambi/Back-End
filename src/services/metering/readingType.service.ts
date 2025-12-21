@@ -5,7 +5,7 @@ import type {
   CreateReadingTypeBody,
   GetReadingTypesQuery,
   UpdateReadingTypeBody,
-} from '../../types/readingType.type.js';
+} from '../../types/metering/readingType.type.js';
 
 type ReadingTypeWithEnergyType = Prisma.ReadingTypeGetPayload<{
   include: { energy_type: true };
