@@ -9,7 +9,7 @@ import {
   getMonthlyReportSchema,
   querySchema,
   summaryScheme,
-} from '../../../validations/dailySummary.validation.js';
+} from '../../../validations/reports/dailySummary.validation.js';
 import { authorize } from '../../../middleware/auth.middleware.js';
 import { validate } from '../../../utils/validate.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';

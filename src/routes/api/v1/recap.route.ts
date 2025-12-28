@@ -3,7 +3,7 @@ import { recapController } from '../../../controllers/report/recap.controller.js
 import {
   getRecapSchema,
   recalculateRecapSchema,
-} from '../../../validations/recap.validation.js';
+} from '../../../validations/reports/recap.validation.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { validate } from '../../../utils/validate.js';
 import { authorize } from '../../../middleware/auth.middleware.js';
