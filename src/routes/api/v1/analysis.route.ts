@@ -6,9 +6,9 @@ import {
 } from '../../../middleware/auth.middleware.js';
 import { validate } from '../../../utils/validate.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
-import { analysisController } from '../../../controllers/analysis.controller.js';
-import { bulkPredictionSchema } from '../../../validations/analysis.validation.js';
-import { recapController } from '../../../controllers/recap.controller.js';
+import { analysisController } from '../../../controllers/report/analysis.controller.js';
+import { bulkPredictionSchema } from '../../../validations/reports/analysis.validation.js';
+import { recapController } from '../../../controllers/report/recap.controller.js';
 
 const analysisQuerySchema = z.object({
   query: z.object({

@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
-import { AnalysisService } from '../services/analysis.service.js';
-import { res200 } from '../utils/response.js';
-import { Error401 } from '../utils/customError.js';
+import { AnalysisService } from '../../services/reports/analysis.service.js';
+import { res200 } from '../../utils/response.js';
+import { Error401 } from '../../utils/customError.js';
 
 class AnalysisController {
   private analysisService = new AnalysisService();

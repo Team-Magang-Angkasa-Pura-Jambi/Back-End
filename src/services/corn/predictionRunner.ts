@@ -1,7 +1,7 @@
 // src/services/cron/predictionRunner.ts
 
 import { schedule } from 'node-cron';
-import { AnalysisService } from '../analysis.service.js';
+import { AnalysisService } from '../reports/analysis.service.js';
 
 async function runPredictionForTomorrow() {
   console.log(

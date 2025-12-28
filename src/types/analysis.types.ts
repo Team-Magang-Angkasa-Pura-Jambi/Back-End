@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getAnalysisSchema } from '../validations/analysis.validation.js';
+import { getAnalysisSchema } from '../validations/reports/analysis.validation.js';
 
 export type GetAnalysisQuery = z.infer<typeof getAnalysisSchema>['query'];
 

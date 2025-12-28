@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { recapController } from '../../../controllers/recap.controller.js';
+import { recapController } from '../../../controllers/report/recap.controller.js';
 import {
   getRecapSchema,
   recalculateRecapSchema,

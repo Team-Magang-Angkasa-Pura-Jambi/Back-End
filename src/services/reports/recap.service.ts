@@ -1,15 +1,15 @@
-import prisma from '../configs/db.js';
+import prisma from '../../configs/db.js';
 
-import { Prisma } from '../generated/prisma/index.js';
+import { Prisma } from '../../generated/prisma/index.js';
 import type {
   GetRecapQuery,
   RecapApiResponse,
   RecapDataRow,
   RecapSummary,
-} from '../types/recap.types.js';
-import { notificationService } from './notification.service.js';
-import { BaseService } from '../utils/baseService.js';
-import { SocketServer } from '../configs/socket.js';
+} from '../../types/recap.types.js';
+import { notificationService } from '../notification.service.js';
+import { BaseService } from '../../utils/baseService.js';
+import { SocketServer } from '../../configs/socket.js';
 
 type AggregatedDailyData = {
   costBeforeTax: number;
@@ -604,7 +604,7 @@ export class RecapService extends BaseService {
       );
 
       // PERBAIKAN: Impor ReadingService sekali di luar loop.
-      const { ReadingService } = await import('./metering/reading.service.js');
+      const { ReadingService } = await import('../metering/reading.service.js');
       const readingService = new ReadingService();
 
       for (let i = 0; i < totalSummaries; i++) {

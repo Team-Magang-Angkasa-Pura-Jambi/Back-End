@@ -3,8 +3,8 @@ import {
   positiveInt,
   positiveNumber,
   requiredString,
-} from '../utils/schmeHelper.js';
-import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
+} from '../../utils/schmeHelper.js';
+import { CrudSchemaBuilder } from '../../utils/shemaHandler.js';
 
 const defaultScheme = z.object({
   metric_name: requiredString('matric name'),

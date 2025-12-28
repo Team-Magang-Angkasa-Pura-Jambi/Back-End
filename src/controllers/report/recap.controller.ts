@@ -1,9 +1,7 @@
-// src/controllers/recap.controller.ts
-
 import type { Request, Response, NextFunction } from 'express';
-import { Error401 } from '../utils/customError.js';
-import { res200 } from '../utils/response.js';
-import { recapService } from '../services/recap.service.js';
+import { Error401 } from '../../utils/customError.js';
+import { res200 } from '../../utils/response.js';
+import { recapService } from '../../services/reports/recap.service.js';
 
 class RecapController {
   public getRecap = async (req: Request, res: Response, next: NextFunction) => {
@@ -36,9 +34,7 @@ class RecapController {
     next: NextFunction
   ) => {
     try {
-      // PERBAIKAN: Ambil user dari req.user dan tambahkan validasi.
-      // `req.user` diisi oleh middleware `authMiddleware` atau `authorize`.
-      const user = (req as any).user; // The user payload is attached by auth middleware
+      const user = (req as any).user;
       if (!user || !user.id) {
         throw new Error401(
           'Data pengguna tidak ditemukan. Sesi mungkin tidak valid.'
@@ -46,12 +42,11 @@ class RecapController {
       }
       const { startDate, endDate, meterId } = res.locals.validatedData.body;
 
-      // PERBAIKAN: Jangan `await`. Jalankan proses di latar belakang.
       recapService.recalculateSummaries(
         new Date(startDate),
         new Date(endDate),
         meterId,
-        Number(user.id) // Ensure userId is a number
+        Number(user.id)
       );
 
       res200({
