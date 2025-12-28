@@ -1,12 +1,12 @@
-import prisma from '../configs/db.js';
-import { Prisma, type AnnualBudget } from '../generated/prisma/index.js';
+import prisma from '../../configs/db.js';
+import { Prisma, type AnnualBudget } from '../../generated/prisma/index.js';
 import type {
   AllocationData,
   CreateAnnualBudgetBody,
   UpdateAnnualBudgetBody,
-} from '../types/annualBudget.types.js';
-import { GenericBaseService } from '../utils/GenericBaseService.js';
-import { Error400 } from '../utils/customError.js';
+} from '../../types/finance/annualBudget.types.js';
+import { GenericBaseService } from '../../utils/GenericBaseService.js';
+import { Error400 } from '../../utils/customError.js';
 
 export class AnnualBudgetService extends GenericBaseService<
   typeof prisma.annualBudget,
@@ -110,7 +110,7 @@ export class AnnualBudgetService extends GenericBaseService<
     const { allocations, ...budgetData } = data;
 
     return this._handleCrudOperation(async () => {
-      return this._prisma.$transaction(async (tx) => {
+      return this._prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         // Jika ada data alokasi baru, hapus yang lama terlebih dahulu.
         if (allocations && allocations.length > 0) {
           await tx.budgetAllocation.deleteMany({
@@ -126,7 +126,7 @@ export class AnnualBudgetService extends GenericBaseService<
             ...(allocations && {
               allocations: { createMany: { data: allocations } },
             }),
-          },
+          } as any,
           // PERBAIKAN: Sertakan relasi lengkap untuk respons yang konsisten.
           include: {
             allocations: true,
@@ -191,7 +191,7 @@ export class AnnualBudgetService extends GenericBaseService<
         const budgetPerDay =
           periodDays > 0 ? total_budget.div(periodDays) : new Prisma.Decimal(0);
 
-        const meterIds = allocations.map((alloc) => alloc.meter_id);
+        const meterIds = allocations.map((alloc: any) => alloc.meter_id);
         const monthlyRealisations: { month: number; total_cost: number }[] =
           await this._prisma.$queryRaw`
               SELECT EXTRACT(MONTH FROM summary_date)::int as month, SUM(total_cost) as total_cost
@@ -260,7 +260,7 @@ export class AnnualBudgetService extends GenericBaseService<
       }
 
       // --- 2. Kalkulasi Realisasi per Meter (Hanya untuk anggaran anak) ---
-      const meterIds = allocations.map((alloc) => alloc.meter_id);
+      const meterIds = allocations.map((alloc: any) => alloc.meter_id);
       const meterRealisations = await this._prisma.dailySummary.groupBy({
         by: ['meter_id'],
         where: {
@@ -270,13 +270,13 @@ export class AnnualBudgetService extends GenericBaseService<
         _sum: { total_cost: true },
       });
       const meterRealizationMap = new Map(
-        meterRealisations.map((r) => [r.meter_id, r._sum.total_cost ?? 0])
+        meterRealisations.map((r: any) => [r.meter_id, r._sum.total_cost ?? 0])
       );
 
-      const detailedAllocations = allocations.map((alloc) => {
+      const detailedAllocations = allocations.map((alloc: any) => {
         const allocatedBudget = total_budget.times(alloc.weight);
         const totalRealization = new Prisma.Decimal(
-          meterRealizationMap.get(alloc.meter_id) ?? 0
+          meterRealizationMap.get(alloc.meter_id) ?? (0 as any)
         );
         const remainingBudget = allocatedBudget.minus(totalRealization);
         const realizationPercentage = allocatedBudget.isZero()
@@ -376,7 +376,7 @@ export class AnnualBudgetService extends GenericBaseService<
 
       // 2. Panggil getDetailedBudgetById untuk setiap ID secara paralel.
       const detailedBudgets = await Promise.all(
-        budgets.map((b) => this.getDetailedBudgetById(b.budget_id))
+        budgets.map((b: any) => this.getDetailedBudgetById(b.budget_id))
       );
 
       return detailedBudgets;
@@ -415,7 +415,7 @@ export class AnnualBudgetService extends GenericBaseService<
 
       // 2. Proses setiap anggaran induk untuk menambahkan kalkulasi realisasi
       const detailedParentBudgetsPromises = parentBudgets.map(
-        async (budget) => {
+        async (budget: any) => {
           const { total_budget } = budget;
 
           // Kalkulasi realisasi untuk anggaran induk

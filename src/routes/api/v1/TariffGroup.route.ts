@@ -1,14 +1,14 @@
 import type { Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
-import { TariffGroupService } from '../../../services/TariffGroup.service.js';
+import { TariffGroupService } from '../../../services/finance/TariffGroup.service.js';
 import {
   tariffGroupController,
   TariffGroupController,
-} from '../../../controllers/TariffGroup.controller.js';
+} from '../../../controllers/finance/TariffGroup.controller.js';
 import {
   paramsTariffGroup,
   tariffGroupSchemas,
-} from '../../../validations/TariffGroup.validation.js';
+} from '../../../validations/finance/TariffGroup.validation.js';
 import { validate } from '../../../utils/validate.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 

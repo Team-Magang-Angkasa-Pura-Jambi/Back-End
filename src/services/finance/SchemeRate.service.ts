@@ -1,10 +1,10 @@
-import prisma from '../configs/db.js';
-import type { Prisma, SchemeRate } from '../generated/prisma/index.js';
+import prisma from '../../configs/db.js';
+import type { Prisma, SchemeRate } from '../../generated/prisma/index.js';
 import type {
   CreateSchemeRateBody,
   UpdateSchemeRateBody,
-} from '../types/SchemeRate.type.js';
-import { GenericBaseService } from '../utils/GenericBaseService.js';
+} from '../../types/finance/SchemeRate.type.js';
+import { GenericBaseService } from '../../utils/GenericBaseService.js';
 
 export class SchemeRateService extends GenericBaseService<
   typeof prisma.schemeRate,

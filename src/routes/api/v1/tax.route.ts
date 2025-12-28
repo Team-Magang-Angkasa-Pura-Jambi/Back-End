@@ -1,8 +1,8 @@
 import type { Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
-import { TaxService } from '../../../services/tax.service.js';
-import { TaxController } from '../../../controllers/tax.controller.js';
-import { taxSchema } from '../../../validations/tax.validation.js';
+import { TaxService } from '../../../services/finance/tax.service.js';
+import { TaxController } from '../../../controllers/finance/tax.controller.js';
+import { taxSchema } from '../../../validations/finance/tax.validation.js';
 
 export default (router: Router) => {
   const taxRouter = createCrudRouter('/tax', {

@@ -1,10 +1,6 @@
 import { z } from 'zod';
-import {
-  positiveInt,
-  positiveNumber,
-  requiredString,
-} from '../utils/schmeHelper.js';
-import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
+import { positiveInt, requiredString } from '../../utils/schmeHelper.js';
+import { CrudSchemaBuilder } from '../../utils/shemaHandler.js';
 
 const Schema = z.object({
   scheme_name: requiredString('schema name'),

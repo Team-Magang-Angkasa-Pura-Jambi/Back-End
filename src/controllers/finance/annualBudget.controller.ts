@@ -2,15 +2,15 @@ import { type Request, type Response } from 'express';
 import {
   annualBudgetService,
   AnnualBudgetService,
-} from '../services/annualBudget.service.js';
+} from '../../services/finance/annualBudget.service.js';
 import type {
   CreateAnnualBudgetBody,
   GetAnnualBudgetQuery,
   UpdateAnnualBudgetBody,
-} from '../types/annualBudget.types.js';
-import { BaseController } from '../utils/baseController.js';
-import { AnnualBudget, Prisma } from '../generated/prisma/index.js';
-import { res200 } from '../utils/response.js';
+} from '../../types/finance/annualBudget.types.js';
+import { BaseController } from '../../utils/baseController.js';
+import { AnnualBudget, Prisma } from '../../generated/prisma/index.js';
+import { res200 } from '../../utils/response.js';
 
 export class AnnualBudgetController extends BaseController<
   AnnualBudget,

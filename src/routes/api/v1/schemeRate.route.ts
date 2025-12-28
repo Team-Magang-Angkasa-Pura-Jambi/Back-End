@@ -3,9 +3,9 @@ import { createCrudRouter } from '../../../utils/routerFactory.js';
 import { UserService } from '../../../services/auth/user.service.js';
 import { UserController } from '../../../controllers/auth/user.controller.js';
 import { userSchemas } from '../../../validations/auth/user.validation.js';
-import { SchemeRateService } from '../../../services/SchemeRate.service.js';
-import { SchemeRateController } from '../../../controllers/SchemeRate.controller.js';
-import { schemaRateSchemas } from '../../../validations/SchemeRate.validation.js';
+import { SchemeRateService } from '../../../services/finance/SchemeRate.service.js';
+import { SchemeRateController } from '../../../controllers/finance/SchemeRate.controller.js';
+import { schemaRateSchemas } from '../../../validations/finance/SchemeRate.validation.js';
 
 export default (router: Router) => {
   const schemeRateRouter = createCrudRouter('/scheme-rate', {

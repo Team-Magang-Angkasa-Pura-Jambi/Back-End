@@ -44,7 +44,7 @@ export const errorHandler = (
       },
       errors: {
         formErrors: structuredErrors.formErrors,
-        fieldErrors: structuredErrors.fieldErrors,
+        fieldErrors: structuredErrors.fieldErrors,  
       },
     });
   }

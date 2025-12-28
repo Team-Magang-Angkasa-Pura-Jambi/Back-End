@@ -1,14 +1,14 @@
 import { Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
-import { AnnualBudgetService } from '../../../services/annualBudget.service.js';
+import { AnnualBudgetService } from '../../../services/finance/annualBudget.service.js';
 import {
   annualBudgetController,
   AnnualBudgetController,
-} from '../../../controllers/annualBudget.controller.js';
+} from '../../../controllers/finance/annualBudget.controller.js';
 import {
   annualBudgetSchema,
   queryAnnualBudget,
-} from '../../../validations/annualBudget.validation.js';
+} from '../../../validations/finance/annualBudget.validation.js';
 import { RoleName } from '../../../generated/prisma/index.js';
 import { validate } from '../../../utils/validate.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';

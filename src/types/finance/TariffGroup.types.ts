@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type {
   paramsTariffGroup,
   tariffGroupSchemas,
-} from '../validations/TariffGroup.validation.js';
+} from '../../validations/finance/TariffGroup.validation.js';
 
 export type CreateTariffGroupBody = z.infer<typeof tariffGroupSchemas.body>;
 

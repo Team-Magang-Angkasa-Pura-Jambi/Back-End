@@ -1,16 +1,16 @@
 import type { NextFunction, Response } from 'express';
-import type { TariffGroup } from '../generated/prisma/index.js';
+import type { TariffGroup } from '../../generated/prisma/index.js';
 import {
   tariffGroupService,
   TariffGroupService,
-} from '../services/TariffGroup.service.js';
+} from '../../services/finance/TariffGroup.service.js';
 import type {
   CreateTariffGroupBody,
   GetTariffGroupQuery,
   UpdateTariffGroupBody,
-} from '../types/TariffGroup.types.js';
-import { BaseController } from '../utils/baseController.js';
-import { res200 } from '../utils/response.js';
+} from '../../types/finance/TariffGroup.types.js';
+import { BaseController } from '../../utils/baseController.js';
+import { res200 } from '../../utils/response.js';
 
 export class TariffGroupController extends BaseController<
   TariffGroup,

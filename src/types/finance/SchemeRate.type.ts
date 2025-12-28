@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { schemaRateSchemas } from '../validations/SchemeRate.validation.js';
+import type { schemaRateSchemas } from '../../validations/finance/SchemeRate.validation.js';
 
 export type CreateSchemeRateBody = z.infer<typeof schemaRateSchemas.body>;
 

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type {
   priceSchema,
   queryPriceSchema,
-} from '../validations/priceSchema.validation.js';
+} from '../../validations/finance/priceSchema.validation.js';
 
 export type CreatePriceSchemaBody = z.infer<typeof priceSchema.body>;
 

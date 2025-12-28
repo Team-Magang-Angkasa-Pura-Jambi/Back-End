@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { positiveInt, positiveNumber } from '../utils/schmeHelper.js';
-import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
+import { positiveInt, positiveNumber } from '../../utils/schmeHelper.js';
+import { CrudSchemaBuilder } from '../../utils/shemaHandler.js';
 
 export const annualBudgetParamsSchema = z.object({
   budgetId: positiveInt('Budget ID'),

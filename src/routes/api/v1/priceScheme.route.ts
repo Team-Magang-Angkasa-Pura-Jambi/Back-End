@@ -2,12 +2,12 @@
 
 import { Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
-import { PriceSchemeService } from '../../../services/priceShcema.service.js';
+import { PriceSchemeService } from '../../../services/finance/priceShcema.service.js';
 import {
   priceSchema,
   queryPriceSchema,
-} from '../../../validations/priceSchema.validation.js';
-import { PriceSchemeController } from '../../../controllers/priceSchme.controller.js';
+} from '../../../validations/finance/priceSchema.validation.js';
+import { PriceSchemeController } from '../../../controllers/finance/priceSchme.controller.js';
 
 export default (router: Router) => {
   const priceSchemeRouter = createCrudRouter('/price-schemes', {
@@ -27,7 +27,7 @@ export default (router: Router) => {
       getById: ['Admin', 'SuperAdmin'],
       create: ['SuperAdmin', 'Admin'],
       update: ['Admin', 'SuperAdmin'],
-      delete: ['SuperAdmin','Admin'],
+      delete: ['SuperAdmin', 'Admin'],
     },
   });
 

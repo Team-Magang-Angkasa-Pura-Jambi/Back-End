@@ -1,12 +1,12 @@
-import prisma from '../configs/db.js';
-import type { Prisma, TariffGroup } from '../generated/prisma/index.js';
-import type { DefaultArgs } from '../generated/prisma/runtime/library.js';
+import prisma from '../../configs/db.js';
+import type { Prisma, TariffGroup } from '../../generated/prisma/index.js';
+import type { DefaultArgs } from '../../generated/prisma/runtime/library.js';
 import type {
   CreateTariffGroupBody,
   UpdateTariffGroupBody,
-} from '../types/TariffGroup.types.js';
-import type { CustomErrorMessages } from '../utils/baseService.js';
-import { GenericBaseService } from '../utils/GenericBaseService.js';
+} from '../../types/finance/TariffGroup.types.js';
+import type { CustomErrorMessages } from '../../utils/baseService.js';
+import { GenericBaseService } from '../../utils/GenericBaseService.js';
 
 export class TariffGroupService extends GenericBaseService<
   typeof prisma.tariffGroup,
@@ -24,8 +24,7 @@ export class TariffGroupService extends GenericBaseService<
   }
 
   public override async findAll(
-    args?: Prisma.TariffGroupFindManyArgs<DefaultArgs> | undefined,
-    customMessages?: CustomErrorMessages
+    args?: Prisma.TariffGroupFindManyArgs<DefaultArgs> | undefined
   ): Promise<TariffGroup[]> {
     const queryArgs = {
       ...args,
@@ -44,10 +43,10 @@ export class TariffGroupService extends GenericBaseService<
         where: {
           meters: { some: { energy_type_id: typeId } },
         },
-        select: {
-          price_schemes: {
-            include: { rates: true },
-          },
+        include: {
+          price_schemes: { include: { rates: true, _count: true } },
+          meters: { include: { energy_type: true, _count: true } },
+          _count: true,
         },
       })
     );
