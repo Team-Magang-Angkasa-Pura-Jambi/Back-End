@@ -1,19 +1,19 @@
 // src/controllers/priceScheme.controller.ts
 
 import type { Request, Response } from 'express';
-import type { PriceScheme } from '../generated/prisma/index.js';
+import type { PriceScheme } from '../../generated/prisma/index.js';
 import {
   priceSchemeService,
   PriceSchemeService,
-} from '../services/priceShcema.service.js';
+} from '../../services/finance/priceShcema.service.js';
 import type {
   CreatePriceSchemaBody,
   GetPriceSchemasQuery,
   UpdatePriceSchemaBody,
-} from '../types/priceSchema.types.js';
+} from '../../types/finance/priceSchema.types.js';
 // 1. Perbaiki typo pada nama file service
-import { BaseController } from '../utils/baseController.js';
-import { res200 } from '../utils/response.js';
+import { BaseController } from '../../utils/baseController.js';
+import { res200 } from '../../utils/response.js';
 
 export class PriceSchemeController extends BaseController<
   PriceScheme,

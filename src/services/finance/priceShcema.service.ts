@@ -1,12 +1,12 @@
-import prisma from '../configs/db.js';
-import type { PriceScheme, Prisma } from '../generated/prisma/index.js';
+import prisma from '../../configs/db.js';
+import type { PriceScheme, Prisma } from '../../generated/prisma/index.js';
 import type {
   CreatePriceSchemaBody,
   GetPriceSchemasQuery,
   UpdatePriceSchemaBody,
-} from '../types/priceSchema.types.js';
-import { GenericBaseService } from '../utils/GenericBaseService.js';
-import { Error400 } from '../utils/customError.js';
+} from '../../types/finance/priceSchema.types.js';
+import { GenericBaseService } from '../../utils/GenericBaseService.js';
+import { Error400 } from '../../utils/customError.js';
 
 type PriceSchemeWithRates = Prisma.PriceSchemeGetPayload<{
   include: { rates: true };
@@ -32,13 +32,13 @@ export class PriceSchemeService extends GenericBaseService<
   }
 
   public override async findAll(
-    query: GetPriceSchemasQuery
+    query?: GetPriceSchemasQuery
   ): Promise<PriceSchemeWithRates[]> {
-    const { tariffGroupId } = query;
-    const where: Prisma.PriceSchemeWhereInput = {};
+    const { tarifGroupId } = query || {};
+    const where: Prisma.PriceSchemeScalarWhereInput = {};
 
-    if (tariffGroupId) {
-      where.tariff_group_id = tariffGroupId;
+    if (tarifGroupId) {
+      where.tariff_group_id = tarifGroupId;
     }
 
     const findArgs: Prisma.PriceSchemeFindManyArgs = {
@@ -46,10 +46,13 @@ export class PriceSchemeService extends GenericBaseService<
       include: {
         rates: true,
         tariff_group: true,
-        taxes: { include: { tax: true } }, // Menambahkan ini untuk menyertakan data TariffGroup
+        taxes: true,
       },
     };
-    return this._handleCrudOperation(() => this._model.findMany(findArgs));
+
+    return this._handleCrudOperation(() =>
+      this._model.findMany(findArgs)
+    ) as any as PriceSchemeWithRates[];
   }
 
   public override async create(
@@ -58,7 +61,6 @@ export class PriceSchemeService extends GenericBaseService<
     const { tariff_group_id, set_by_user_id, rates, tax_ids, ...restOfData } =
       data;
 
-    // Validate that the tariff group exists
     const tariffGroupExists = await this._prisma.tariffGroup.findUnique({
       where: { tariff_group_id },
     });
@@ -84,7 +86,6 @@ export class PriceSchemeService extends GenericBaseService<
     };
 
     if (tax_ids && tax_ids.length > 0) {
-      // VALIDATION: Ensure all provided tax IDs exist.
       const taxCount = await this._prisma.tax.count({
         where: { tax_id: { in: tax_ids } },
       });
@@ -109,21 +110,17 @@ export class PriceSchemeService extends GenericBaseService<
     const { rates, tax_ids, ...restOfData } = data;
 
     return this._handleCrudOperation(async () => {
-      // Use a transaction to ensure atomicity
-      return this._prisma.$transaction(async (tx) => {
+      return this._prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const updateData: Prisma.PriceSchemeUpdateInput = { ...restOfData };
 
-        // If rates are provided, replace them
         if (rates) {
           updateData.rates = {
-            deleteMany: {}, // Delete all existing rates for this scheme
-            create: rates, // Create the new ones
+            deleteMany: {},
+            create: rates,
           };
         }
 
-        // If tax_ids are provided, replace them
         if (tax_ids) {
-          // VALIDATION: Ensure all provided tax IDs exist.
           if (tax_ids.length > 0) {
             const taxCount = await tx.tax.count({
               where: { tax_id: { in: tax_ids } },
@@ -134,14 +131,13 @@ export class PriceSchemeService extends GenericBaseService<
           }
 
           updateData.taxes = {
-            deleteMany: {}, // Delete all existing tax associations
+            deleteMany: {},
             create: tax_ids.map((taxId) => ({
               tax: { connect: { tax_id: taxId } },
             })),
           };
         }
 
-        // Perform the update
         const updatedScheme = await tx.priceScheme.update({
           where: { scheme_id: schemeId },
           data: updateData,

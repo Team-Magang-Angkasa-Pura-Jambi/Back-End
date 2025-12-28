@@ -1,10 +1,12 @@
-import prisma from '../configs/db.js';
-import type { Prisma, Tax } from '../generated/prisma/index.js';
-import type { DefaultArgs } from '../generated/prisma/runtime/library.js';
-import type { CreateTaxBody, UpdateTaxBody } from '../types/tax.type.js';
-import type { CustomErrorMessages } from '../utils/baseService.js';
-import { GenericBaseService } from '../utils/GenericBaseService.js';
-import { Error400 } from '../utils/customError.js';
+import prisma from '../../configs/db.js';
+import type { Prisma, Tax } from '../../generated/prisma/index.js';
+import type { DefaultArgs } from '../../generated/prisma/runtime/library.js';
+import type {
+  CreateTaxBody,
+  UpdateTaxBody,
+} from '../../types/finance/tax.type.js';
+import type { CustomErrorMessages } from '../../utils/baseService.js';
+import { GenericBaseService } from '../../utils/GenericBaseService.js';
 
 export class TaxService extends GenericBaseService<
   typeof prisma.tax,

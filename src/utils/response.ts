@@ -10,9 +10,9 @@ interface SuccessResponseParams<T> extends ResponseParams {
   data?: T;
 }
 
-interface ErrorResponseParams extends ResponseParams {
-  error?: Error | HttpError;
-}
+  interface ErrorResponseParams extends ResponseParams {
+    error?: Error | HttpError;
+  }
 
 /**
  * Mengirim respons sukses 200 OK.
