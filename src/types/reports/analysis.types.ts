@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { getAnalysisSchema } from '../validations/reports/analysis.validation.js';
-import { UsageCategory } from '../generated/prisma/index.js';
+import { getAnalysisSchema } from '../../validations/reports/analysis.validation.js';
+import { UsageCategory } from '../../generated/prisma/index.js';
 
 export type GetAnalysisQuery = z.infer<typeof getAnalysisSchema>['query'];
 

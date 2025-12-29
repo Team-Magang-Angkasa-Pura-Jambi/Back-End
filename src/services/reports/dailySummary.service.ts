@@ -5,7 +5,7 @@ import type {
   CreateSummaryBody,
   GetSummaryQuery,
   UpdateSummaryBody,
-} from '../../types/dailySummary.type.js';
+} from '../../types/reports/dailySummary.type.js';
 import type { CustomErrorMessages } from '../../utils/baseService.js';
 
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
@@ -373,8 +373,6 @@ export class DailySummaryService extends GenericBaseService<
     const change = ((current - previous) / previous) * 100;
     return parseFloat(change.toFixed(2)); // Bulatkan ke 2 desimal
   }
-
-  
 }
 
 export const dailySummaryService = new DailySummaryService();

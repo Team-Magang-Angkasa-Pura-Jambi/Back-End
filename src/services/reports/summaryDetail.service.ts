@@ -5,7 +5,7 @@ import type {
   CreateSummaryDetailBody,
   GetSummaryDetailQuery,
   UpdateSummaryDetailBody,
-} from '../../types/summaryDetail.type.js';
+} from '../../types/reports/summaryDetail.type.js';
 
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
 

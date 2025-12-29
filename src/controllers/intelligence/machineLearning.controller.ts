@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
-import { machineLearningService } from '../services/machineLearning.service.js';
-import { res200 } from '../utils/response.js';
-import prisma from '../configs/db.js';
+import { res200 } from '../../utils/response.js';
+import prisma from '../../configs/db.js';
+import { machineLearningService } from '../../services/intelligence/machineLearning.service.js';
 
 class MachineLearningController {
   /**
@@ -13,13 +13,11 @@ class MachineLearningController {
     next: NextFunction
   ) => {
     try {
-      const { date } = req.body; // date dalam format YYYY-MM-DD
+      const { date } = req.body;
 
       const prediction = await machineLearningService.getDailyPrediction(date);
 
       if (prediction) {
-        // Asumsi prediksi listrik untuk meteran utama (misal, meterId: 9)
-        // Di aplikasi nyata, ini harus lebih dinamis.
         const METER_ID_LISTRIK = 9;
 
         await prisma.consumptionPrediction.upsert({
@@ -27,7 +25,7 @@ class MachineLearningController {
             prediction_date_meter_id_model_version: {
               prediction_date: new Date(prediction.tanggal_prediksi),
               meter_id: METER_ID_LISTRIK,
-              model_version: '1.1.0-pred', // Ganti dengan versi model Anda
+              model_version: '1.1.0-pred',
             },
           },
           update: { predicted_value: prediction.prediksi_listrik_kwh },

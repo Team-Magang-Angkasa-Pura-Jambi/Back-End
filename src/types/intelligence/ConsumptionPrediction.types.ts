@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ConsumptionPredictionSchema } from '../validations/ConsumptionPrediction.validation.js';
+import type { ConsumptionPredictionSchema } from '../../validations/intelligence/ConsumptionPrediction.validation.js';
 
 export type CreateConsumptionPredictionBody = z.infer<
   typeof ConsumptionPredictionSchema.body

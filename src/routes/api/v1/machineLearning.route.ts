@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { machineLearningController } from '../../../controllers/machineLearning.controller.js';
+import { machineLearningController } from '../../../controllers/intelligence/machineLearning.controller.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { authorize } from '../../../middleware/auth.middleware.js';
 import { validate } from '../../../utils/validate.js';

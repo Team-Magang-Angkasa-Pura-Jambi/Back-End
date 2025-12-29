@@ -1,18 +1,15 @@
-
-import { BaseController } from '../utils/baseController.js';
-import type {
-  ConsumptionPrediction,
-} from '../generated/prisma/index.js';
+import { BaseController } from '../../utils/baseController.js';
+import type { ConsumptionPrediction } from '../../generated/prisma/index.js';
 import type {
   CreateConsumptionPredictionBody,
   GetConsumptionPredictionSchemaQuery,
   UpdateConsumptionPredictionSchemaBody,
-} from '../types/ConsumptionPrediction.types.js';
-import { ConsumptionPredictionService } from '../services/ConsumptionPrediction.service.js';
+} from '../../types/intelligence/ConsumptionPrediction.types.js';
+import { ConsumptionPredictionService } from '../../services/intelligence/ConsumptionPrediction.service.js';
 import axios from 'axios';
 import type { Request, Response } from 'express';
-import { res201 } from '../utils/response.js';
-import { Error404 } from '../utils/customError.js';
+import { res201 } from '../../utils/response.js';
+import { Error404 } from '../../utils/customError.js';
 
 interface PredictionResult {
   tanggal_prediksi: string;
@@ -36,11 +33,10 @@ export class ConsumptionPredictionController extends BaseController<
     tanggal: string
   ): Promise<PredictionResult | null> {
     try {
-      // Mengirim request POST ke ML API dengan menyertakan tanggal
       const response = await axios.post<PredictionResult>(ML_API_URL, {
         tanggal: tanggal,
       });
-      return response.data; // Mengembalikan objek JSON berisi angka-angka prediksi
+      return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
         console.error(

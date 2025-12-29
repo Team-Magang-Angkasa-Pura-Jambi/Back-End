@@ -4,8 +4,10 @@ import prisma from '../configs/db.js';
 import { weatherConfig } from '../configs/weather.js';
 
 type WeatherData = {
-  suhu_rata: number;
-  suhu_max: number;
+  suhu_rata?: number;
+  suhu_max?: number;
+  avg_temp?: number;
+  max_temp?: number;
 };
 
 class WeatherService {
@@ -72,9 +74,6 @@ class WeatherService {
 
         return null;
       }
-      
-
-      
 
       let tempSum = 0;
       let maxTemp = -Infinity;
