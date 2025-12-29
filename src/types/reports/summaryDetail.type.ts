@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { summaryDetailScheme } from '../validations/reports/summaryDetail.validation.js';
+import type { summaryDetailScheme } from '../../validations/reports/summaryDetail.validation.js';
 
 export type CreateSummaryDetailBody = z.infer<typeof summaryDetailScheme.body>;
 

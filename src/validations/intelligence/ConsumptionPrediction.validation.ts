@@ -1,6 +1,6 @@
 import z from 'zod';
-import { positiveInt, positiveNumber } from '../utils/schmeHelper.js';
-import { CrudSchemaBuilder } from '../utils/shemaHandler.js';
+import { positiveInt, positiveNumber } from '../../utils/schmeHelper.js';
+import { CrudSchemaBuilder } from '../../utils/shemaHandler.js';
 
 const defaultScheme = z.object({
   prediction_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, {

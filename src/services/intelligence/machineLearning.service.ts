@@ -1,7 +1,6 @@
 import axios, { isAxiosError } from 'axios';
-import { weatherService } from './weather.service.js';
+import { weatherService } from '../weather.service.js';
 
-// PERBAIKAN: Tipe disesuaikan dengan kontrak API baru
 type EvaluationInput = {
   pax: number;
   suhu_rata: number;
@@ -18,7 +17,6 @@ type EvaluationResult = {
   deviasi_persen_kantor: number;
 };
 
-// BARU: Tipe input untuk evaluasi spesifik per meter
 type EvaluationInputTerminal = {
   pax: number;
   suhu_rata: number;
@@ -44,17 +42,17 @@ type KantorEvaluationResult = {
 };
 
 type PredictionResult = {
-  prediksi_pax: number; // BARU: API sekarang mengembalikan prediksi pax juga
+  prediksi_pax: number;
   prediksi_kwh_terminal: number;
-  prediksi_kwh_kantor: number; // Nama properti ini mungkin perlu disesuaikan
+  prediksi_kwh_kantor: number;
+  tanggal_prediksi: string;
+  prediksi_listrik_kwh: number;
 };
 
-// BARU: Tipe untuk hasil prediksi spesifik
 type TerminalPredictionResult = {
   prediksi_kwh_terminal: number;
 };
 
-// BARU: Tipe untuk hasil prediksi spesifik
 type KantorPredictionResult = {
   prediksi_kwh_kantor: number;
 };
@@ -79,13 +77,11 @@ class MachineLearningService {
       );
       return response.data;
     } catch (error) {
-      // PERBAIKAN: Tangani error Axios dan buat pesan yang lebih informatif.
       if (isAxiosError(error)) {
         const status = error.response?.status || 'N/A';
         const responseData = error.response?.data;
         let detailMessage = 'Tidak ada detail tambahan.';
 
-        // FastAPI 422 error biasanya memiliki detail di `response.data.detail`
         if (responseData && responseData.detail) {
           detailMessage = JSON.stringify(responseData.detail);
         } else if (responseData) {
@@ -95,7 +91,7 @@ class MachineLearningService {
           `Gagal memanggil API evaluasi ML. Status: ${status}. Detail: ${detailMessage}`
         );
       }
-      throw error; // Lempar kembali error lain yang tidak terduga
+      throw error;
     }
   }
 
@@ -161,31 +157,33 @@ class MachineLearningService {
     weatherData?: { suhu_rata: number; suhu_max: number }
   ): Promise<PredictionResult> {
     try {
-      // PERBAIKAN: Panggil weatherService jika data cuaca tidak disediakan.
-      let finalWeatherData = weatherData;
-      if (!finalWeatherData) {
-        // Panggil API cuaca untuk mendapatkan data prakiraan.
-        finalWeatherData = await weatherService.getForecast(date);
+      let suhu_rata = weatherData?.suhu_rata;
+      let suhu_max = weatherData?.suhu_max;
+
+      if (suhu_rata === undefined || suhu_max === undefined) {
+        const serviceForecast = await weatherService.getForecast(date);
+
+        if (serviceForecast) {
+          suhu_rata = serviceForecast.avg_temp ?? 28.0;
+          suhu_max = serviceForecast.max_temp ?? 32.0;
+        }
       }
 
-      // Gunakan data cuaca yang didapat, atau fallback ke nilai default jika API gagal.
-      const suhu_rata = finalWeatherData?.suhu_rata ?? 28.0; // Nilai default jika null
-      const suhu_max = finalWeatherData?.suhu_max ?? 32.0; // Nilai default jika null
+      const finalSuhuRata = suhu_rata ?? 28.0;
+      const finalSuhuMax = suhu_max ?? 32.0;
 
-      // Kirim 'tanggal' dalam format YYYY-MM-DD, bukan 'pax'.
       const dateString = date.toISOString().split('T')[0];
 
       const response = await axios.post<PredictionResult>(
         `${this.baseURL}/predict`,
         {
           tanggal: dateString,
-          suhu_rata: suhu_rata,
-          suhu_max: suhu_max,
+          suhu_rata: finalSuhuRata,
+          suhu_max: finalSuhuMax,
         }
       );
       return response.data;
     } catch (error) {
-      // PERBAIKAN: Tangani error Axios juga untuk endpoint prediksi.
       if (isAxiosError(error)) {
         const status = error.response?.status || 'N/A';
         const responseData = error.response?.data;
@@ -200,7 +198,7 @@ class MachineLearningService {
           `Gagal memanggil API prediksi ML. Status: ${status}. Detail: ${detailMessage}`
         );
       }
-      throw error; // Lempar kembali error lain yang tidak terduga
+      throw error;
     }
   }
 

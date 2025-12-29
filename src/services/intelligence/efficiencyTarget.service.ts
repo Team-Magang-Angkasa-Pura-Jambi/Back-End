@@ -1,12 +1,11 @@
-import prisma from '../configs/db.js';
-import { GenericBaseService } from '../utils/GenericBaseService.js';
-import type { EfficiencyTarget, Prisma } from '../generated/prisma/index.js';
+import prisma from '../../configs/db.js';
+import { GenericBaseService } from '../../utils/GenericBaseService.js';
+import type { EfficiencyTarget, Prisma } from '../../generated/prisma/index.js';
 import type {
   CreateEfficiencyBody,
   UpdateEfficiencyBody,
-} from '../types/efficiencyTarget.type.js';
-import type { DefaultArgs } from '../generated/prisma/runtime/library.js';
-import type { CustomErrorMessages } from '../utils/baseService.js';
+} from '../../types/intelligence/efficiencyTarget.type.js';
+import type { DefaultArgs } from '../../generated/prisma/runtime/library.js';
 type CreateEfficiencyInternal = CreateEfficiencyBody & {
   set_by_user_id: number;
 };

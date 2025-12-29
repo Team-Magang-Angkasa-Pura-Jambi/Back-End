@@ -7,9 +7,9 @@ import {
 import { createCrudRouter } from '../../../utils/routerFactory.js';
 import { EnergyTypeService } from '../../../services/metering/energy.service.js';
 import { EnergyTypeController } from '../../../controllers/energy.controller.js';
-import { ConsumptionPredictionService } from '../../../services/ConsumptionPrediction.service.js';
-import { ConsumptionPredictionController } from '../../../controllers/consumptionPrediction.controller.js';
-import { ConsumptionPredictionSchema } from '../../../validations/ConsumptionPrediction.validation.js';
+import { ConsumptionPredictionService } from '../../../services/intelligence/ConsumptionPrediction.service.js';
+import { ConsumptionPredictionController } from '../../../controllers/intelligence/consumptionPrediction.controller.js';
+import { ConsumptionPredictionSchema } from '../../../validations/intelligence/ConsumptionPrediction.validation.js';
 
 export const ConsumptionPredictionRoutes = (router: Router) => {
   const ConsumptionPredictionRouter = createCrudRouter(

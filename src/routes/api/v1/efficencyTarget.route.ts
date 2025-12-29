@@ -3,9 +3,9 @@
 import { Router } from 'express';
 
 import { createCrudRouter } from '../../../utils/routerFactory.js';
-import { EfficiencyTargetService } from '../../../services/efficiencyTarget.service.js';
-import { EfficiencyTargetController } from '../../../controllers/efficiencyTarget.controller.js';
-import { efficiencyScheme } from '../../../validations/efficiencyTargets.validation.js';
+import { EfficiencyTargetService } from '../../../services/intelligence/efficiencyTarget.service.js';
+import { EfficiencyTargetController } from '../../../controllers/intelligence/efficiencyTarget.controller.js';
+import { efficiencyScheme } from '../../../validations/intelligence/efficiencyTargets.validation.js';
 
 export default (router: Router) => {
   // Gunakan pabrik untuk membuat semua rute CRUD secara otomatis

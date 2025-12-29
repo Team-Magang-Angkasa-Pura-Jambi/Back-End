@@ -12,7 +12,7 @@ import type {
   RecapApiResponse,
   RecapDataRow,
   RecapSummary,
-} from '../../types/recap.types.js';
+} from '../../types/reports/recap.types.js';
 import { notificationService } from '../notification.service.js';
 import { BaseService } from '../../utils/baseService.js';
 import { SocketServer } from '../../configs/socket.js';

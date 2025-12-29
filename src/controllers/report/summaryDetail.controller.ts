@@ -8,7 +8,7 @@ import type {
   CreateSummaryDetailBody,
   SummaryDetailParams,
   UpdateSummaryDetailBody,
-} from '../../types/summaryDetail.type.js';
+} from '../../types/reports/summaryDetail.type.js';
 import { BaseController } from '../../utils/baseController.js';
 
 export class SummaryDetailController extends BaseController<

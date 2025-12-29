@@ -10,7 +10,7 @@ import type {
   DailyLogbook,
   GetLogbooksQuery,
   UpdateDailyLogbookBody,
-} from '../../types/dailyLogbook.type.js';
+} from '../../types/operations/dailyLogbook.type.js';
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
 
 type SummaryWithRelations = Prisma.DailySummaryGetPayload<{

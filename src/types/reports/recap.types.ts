@@ -1,27 +1,25 @@
 import { z } from 'zod';
-import type { UsageCategory } from '../generated/prisma/index.js';
-import { getRecapSchema } from '../validations/reports/recap.validation.js';
+import type { UsageCategory } from '../../generated/prisma/index.js';
+import { getRecapSchema } from '../../validations/reports/recap.validation.js';
 
-// Tipe untuk query yang sudah divalidasi
 export type GetRecapQuery = z.infer<typeof getRecapSchema>['query'];
 
-// Tipe untuk setiap baris data di dalam tabel
 export interface RecapDataRow {
   date: Date;
   target: number | null;
   wbp: number | null;
   lwbp: number | null;
-  consumption: number | null; // PERBAIKAN: Tambahkan properti consumption
+  consumption: number | null;
   classification: UsageCategory | null;
-  confidence_score?: number | null; // BARU: Tambahkan confidence score dari klasifikasi
-  prediction?: number | {} | null; // BARU: Tambahkan data prediksi
+  confidence_score?: number | null;
+  prediction?: number | {} | null;
   pax: number | {} | null;
   cost: number | null;
-  // BARU: Tambahkan properti untuk data suhu dan hari kerja
+
   avg_temp?: number | null;
   max_temp?: number | null;
   is_workday?: boolean;
-  // BARU: Tambahkan properti untuk sisa stok BBM
+
   remaining_stock?: number | null;
 }
 
@@ -45,7 +43,7 @@ export interface RecapSummary {
   totalLwbp: number;
   totalPax: number;
 }
-// Tipe untuk keseluruhan respons API
+
 export interface RecapApiResponse {
   data: RecapDataRow[];
   meta: RecapSummary;

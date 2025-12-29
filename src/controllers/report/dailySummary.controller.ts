@@ -8,7 +8,7 @@ import type {
   CreateSummaryBody,
   SummaryParams,
   UpdateSummaryBody,
-} from '../../types/dailySummary.type.js';
+} from '../../types/reports/dailySummary.type.js';
 import { BaseController } from '../../utils/baseController.js';
 import { res200 } from '../../utils/response.js';
 

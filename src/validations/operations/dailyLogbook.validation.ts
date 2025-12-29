@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { date, z } from 'zod';
 import { isoDate, positiveInt } from '../../utils/schmeHelper.js';
 
 export const getLogbooksSchema = z.object({
@@ -7,6 +7,7 @@ export const getLogbooksSchema = z.object({
     limit: z.coerce.number().int().positive().max(100).default(10),
     startDate: isoDate('Tanggal Mulai').optional(),
     endDate: isoDate('Tanggal Selesai').optional(),
+    date: isoDate('Tanggal').optional(),
   }),
 });
 

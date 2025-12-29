@@ -4,7 +4,7 @@ import { machineLearningService } from '../machineLearning.service.js';
 import type {
   GetAnalysisQuery,
   DailyAnalysisRecord,
-} from '../../types/analysis.types.js';
+} from '../../types/reports/analysis.types.js';
 import { Error400, Error404 } from '../../utils/customError.js';
 import { BaseService } from '../../utils/baseService.js';
 import { weatherService } from '../weather.service.js';

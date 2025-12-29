@@ -7,7 +7,7 @@ import type {
   CreatePaxParamsBody,
   GetPaxParamsQuery,
   UpdatePaxParamsBody,
-} from '../../types/pax.type.js';
+} from '../../types/operations/pax.type.js';
 import { BaseController } from '../../utils/baseController.js';
 
 export class PaxController extends BaseController<
