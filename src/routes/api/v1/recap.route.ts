@@ -12,7 +12,6 @@ import { RoleName } from '../../../generated/prisma/index.js';
 export default (router: Router) => {
   const prefix = '/recap';
 
-  // Endpoint untuk rekap umum (Listrik, Air, BBM)
   router.get(
     prefix,
     authorize(RoleName.Admin, RoleName.SuperAdmin, RoleName.Technician),
@@ -20,7 +19,6 @@ export default (router: Router) => {
     asyncHandler(recapController.getRecap)
   );
 
-  // Endpoint untuk memicu kalkulasi ulang data rekap
   router.post(
     prefix + '/recalculate',
     authorize(RoleName.Admin, RoleName.SuperAdmin),

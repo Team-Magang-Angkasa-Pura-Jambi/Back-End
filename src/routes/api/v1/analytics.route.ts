@@ -22,7 +22,7 @@ import {
 import { recapController } from '../../../controllers/report/recap.controller.js';
 
 export default (router: Router) => {
-  const prefix = '/analysis';
+  const prefix = '/analytics';
 
   router.use(prefix, authMiddleware);
   // data untuk line chart
@@ -74,14 +74,14 @@ export default (router: Router) => {
     asyncHandler(analysisController.getBudgetSummary)
   );
 
-   router.get(
-     `${prefix}/prepare-budget/:parentBudgetId`,
-     authorize('Admin', 'SuperAdmin'),
-     validate(prepareBudgetSchema),
-     asyncHandler(analysisController.prepareNextPeriodBudget)
-   );
+  router.get(
+    `${prefix}/prepare-budget/:parentBudgetId`,
+    authorize('Admin', 'SuperAdmin'),
+    validate(prepareBudgetSchema),
+    asyncHandler(analysisController.prepareNextPeriodBudget)
+  );
 
-// predict
+  // predict
   router.post(
     `${prefix}/run-single-prediction`,
     authorize('SuperAdmin', 'Admin', 'Technician'),
@@ -95,27 +95,18 @@ export default (router: Router) => {
     validate(bulkPredictionSchema),
     asyncHandler(analysisController.runBulkPredictions)
   );
-// classifation
+  // classifation
   router.post(
     `${prefix}/run-single-classification`,
     authorize('Admin', 'SuperAdmin'),
     validate(singlePredictionSchema),
     asyncHandler(analysisController.runSingleClassification)
   );
-// efficiency
+  // efficiency
   router.post(
     `${prefix}/efficiency-target-preview`,
     authorize('Admin', 'SuperAdmin'),
     validate(efficiencyTargetPreviewSchema),
     asyncHandler(analysisController.getEfficiencyTargetPreview)
-  );
-
- 
-// recap
-  router.get(
-    `${prefix}/monthly-recap`,
-    authorize('Admin', 'SuperAdmin'),
-    validate(monthlyRecapSchema),
-    asyncHandler(recapController.getMonthlyRecap)
   );
 };

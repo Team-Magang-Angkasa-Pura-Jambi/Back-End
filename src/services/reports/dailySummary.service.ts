@@ -374,29 +374,7 @@ export class DailySummaryService extends GenericBaseService<
     return parseFloat(change.toFixed(2)); // Bulatkan ke 2 desimal
   }
 
-  // HELPER LAMA: Diperbarui agar sesuai dengan struktur data baru
-  private buildEmptyReport(
-    year: number,
-    month: number,
-    startDate: Date,
-    endDate: Date
-  ): MonthlyComparisonReport {
-    return {
-      reportPeriod: {
-        year,
-        month,
-        monthName: new Intl.DateTimeFormat('id-ID', { month: 'long' }).format(
-          startDate
-        ),
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      },
-      totalPax: { currentValue: 0, previousValue: 0, percentageChange: 0 },
-      summary: [],
-    };
-  }
-
-  // Pastikan Anda memiliki metode helper ini
+  
 }
 
 export const dailySummaryService = new DailySummaryService();

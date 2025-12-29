@@ -9,6 +9,7 @@ import { Error400, Error404 } from '../../utils/customError.js';
 import { BaseService } from '../../utils/baseService.js';
 import { weatherService } from '../weather.service.js';
 import { differenceInDays } from 'date-fns';
+import { _classifyDailyUsage } from '../metering/helpers/forecast-calculator.js';
 
 export type ClassificationSummary = {
   [key in UsageCategory]?: number;
@@ -80,6 +81,11 @@ type TodaySummaryResponse = {
       classification: { select: { classification: true } };
     };
   }>[];
+};
+type bodyRunBulkPrediction = {
+  startDate: Date;
+  endDate: Date;
+  userId: number;
 };
 
 export class AnalysisService extends BaseService {
@@ -478,7 +484,8 @@ export class AnalysisService extends BaseService {
    * Ini berjalan sebagai background job dan memberikan notifikasi via socket.
    * @param body - Berisi startDate, endDate, dan userId untuk notifikasi.
    */
-  public async runBulkPredictions(body): Promise<void> {
+
+  public async runBulkPredictions(body: bodyRunBulkPrediction): Promise<void> {
     const { startDate, endDate, userId } = body;
     const jobDescription = `bulk-predict-${userId}-${Date.now()}`;
 
@@ -589,7 +596,7 @@ export class AnalysisService extends BaseService {
       };
 
       console.log(
-        `[Prediction]  Menjalankan prediksi untuk ${predictionDateStr}...`
+        `[Prediction] Menjalankan prediksi untuk ${predictionDateStr}...`
       );
 
       const predictionsToRun = [];
@@ -1205,10 +1212,7 @@ export class AnalysisService extends BaseService {
         );
       }
 
-      const { ReadingService } = await import('../metering/reading.service.js');
-      const readingService = new ReadingService();
-
-      await readingService._classifyDailyUsage(summary, summary.meter);
+      await _classifyDailyUsage(summary, summary.meter);
     });
   }
 
@@ -1265,10 +1269,10 @@ export class AnalysisService extends BaseService {
       let avgPricePerUnit: Prisma.Decimal;
       if (meter.energy_type.type_name === 'Electricity') {
         const wbpRate = activePriceScheme.rates.find(
-          (r) => r.reading_type.type_name === 'WBP'
+          (r: any) => r.reading_type.type_name === 'WBP'
         )?.value;
         const lwbpRate = activePriceScheme.rates.find(
-          (r) => r.reading_type.type_name === 'LWBP'
+          (r: any) => r.reading_type.type_name === 'LWBP'
         )?.value;
 
         if (!wbpRate || !lwbpRate) {

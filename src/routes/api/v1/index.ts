@@ -13,7 +13,7 @@ import efficencyTargetRoute from './efficencyTarget.route.js';
 import paxRoutes from './pax.routes.js';
 import dailySummaryRoute from './dailySummary.route.js';
 import summaryDetailRoute from './summaryDetail.route.js';
-import analysisRoute from './analysis.route.js';
+import analysisRoute from './analytics.route.js';
 import SchemeRateRoute from './schemeRate.route.js';
 import recapRoute from './recap.route.js';
 import meterCategoryRoute from './meterCategory.route.js';
