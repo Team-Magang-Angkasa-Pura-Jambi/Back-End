@@ -6,7 +6,7 @@ import bcrypt from 'bcrypt';
 // Imports
 import { userService } from '../auth/user.service.js';
 import prisma from '../../configs/db.js';
-import { notificationService } from '../notification.service.js';
+import { notificationService } from '../notifications/notification.service.js';
 import { Error409 } from '../../utils/customError.js';
 // import { RoleName } from '../../generated/prisma/index.js'; // Gunakan jika perlu enum
 

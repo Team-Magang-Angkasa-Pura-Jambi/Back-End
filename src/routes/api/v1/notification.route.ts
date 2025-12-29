@@ -10,8 +10,8 @@ import {
   getNotificationsSchema,
   emptySchema,
   markAsReadSchema,
-} from '../../../validations/notification.validation.js';
-import { NotificationController } from '../../../controllers/notification.controller.js';
+} from '../../../validations/notifications/notification.validation.js';
+import { NotificationController } from '../../../controllers/notifications/notification.controller.js';
 
 export default (router: Router) => {
   const prefix = '/notifications';

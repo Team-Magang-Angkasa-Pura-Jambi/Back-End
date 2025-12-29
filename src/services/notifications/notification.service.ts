@@ -1,15 +1,15 @@
 // src/services/notification.service.ts
 
-import prisma from '../configs/db.js';
-import type { Prisma } from '../generated/prisma/index.js';
+import prisma from '../../configs/db.js';
+import type { Prisma } from '../../generated/prisma/index.js';
 // import { socketServer } from '../socket-instance.js';
-import type { GetNotificationSchemaQuery } from '../types/notification.types.js';
-import { GenericBaseService } from '../utils/GenericBaseService.js';
+import type { GetNotificationSchemaQuery } from '../../types/operations/notification.types.js';
+import { GenericBaseService } from '../../utils/GenericBaseService.js';
 import type {
   NotificationSchemaBody,
   UpdateNotificationSchemaBody,
-} from '../types/notification.types.js';
-import { SocketServer } from '../configs/socket.js';
+} from '../../types/operations/notification.types.js';
+import { SocketServer } from '../../configs/socket.js';
 
 type CreateNotificationInput = {
   user_id: number;
@@ -21,7 +21,7 @@ type CreateNotificationInput = {
 export class NotificationService extends GenericBaseService<
   typeof prisma.notification,
   Prisma.NotificationGetPayload<{}>,
-  NotificationSchemaBody,
+  CreateNotificationInput,
   UpdateNotificationSchemaBody,
   Prisma.NotificationFindManyArgs,
   Prisma.NotificationFindUniqueArgs,
@@ -37,12 +37,12 @@ export class NotificationService extends GenericBaseService<
    * Membuat notifikasi di database dan mengirim sinyal real-time ke pengguna.
    * @param data - Data notifikasi yang akan dibuat.
    */
-  public async create(data: CreateNotificationInput) {
+  public async create(data: CreateNotificationInput): Promise<any> {
     return this._handleCrudOperation(async () => {
       // 1. Simpan notifikasi ke database
-      const newNotification = await this._prisma.notification.create({
-        data,
-      });
+      const newNotification = this._handleCrudOperation(() =>
+        prisma.notification.create({ data })
+      );
 
       // 2. Kirim sinyal ke client melalui WebSocket bahwa ada notifikasi baru.
       //    Client kemudian bisa melakukan fetch untuk mendapatkan notifikasi terbaru.
@@ -55,7 +55,9 @@ export class NotificationService extends GenericBaseService<
     });
   }
 
-  public async findAllWithQuery(query: GetNotificationSchemaQuery) {
+  public async findAllWithQuery(
+    query: GetNotificationSchemaQuery & { userId: number }
+  ) {
     return this._handleCrudOperation(async () => {
       const { limit = 10, page = 1, userId, isRead } = query;
       const where: Prisma.NotificationWhereInput = {

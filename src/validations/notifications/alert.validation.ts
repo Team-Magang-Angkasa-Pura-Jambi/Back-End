@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { isoDate, positiveInt } from '../utils/schmeHelper.js';
-import { AlertStatus, InsightSeverity } from '../generated/prisma/index.js';
+import { isoDate, positiveInt } from '../../utils/schmeHelper.js';
+import { AlertStatus, InsightSeverity } from '../../generated/prisma/index.js';
 
 export const getAlertsSchema = z.object({
   query: z.object({

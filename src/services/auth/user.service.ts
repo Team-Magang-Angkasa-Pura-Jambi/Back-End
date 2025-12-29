@@ -8,7 +8,7 @@ import type {
 } from '../../types/auth/user.type.js';
 import { Error409 } from '../../utils/customError.js';
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
-import { notificationService } from '../notification.service.js';
+import { notificationService } from '../notifications/notification.service.js';
 import { DefaultArgs } from '../../generated/prisma/runtime/library.js';
 import { CustomErrorMessages } from '../../utils/baseService.js';
 

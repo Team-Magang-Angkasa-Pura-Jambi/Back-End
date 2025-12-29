@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { validate } from '../../../utils/validate.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { authorize } from '../../../middleware/auth.middleware.js';
-import { alertController } from '../../../controllers/alert.controller.js';
+import { alertController } from '../../../controllers/notifications/alert.controller.js';
 import {
   alertIdParamSchema,
   emptySchema,
@@ -11,7 +11,7 @@ import {
   getAlertsSchema,
   getLatestAlertsSchema,
   updateAlertStatusSchema,
-} from '../../../validations/alert.validation.js';
+} from '../../../validations/notifications/alert.validation.js';
 
 export default (router: Router) => {
   const prefix = '/alerts';

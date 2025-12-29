@@ -13,7 +13,7 @@ import type {
   RecapDataRow,
   RecapSummary,
 } from '../../types/reports/recap.types.js';
-import { notificationService } from '../notification.service.js';
+import { notificationService } from '../notifications/notification.service.js';
 import { BaseService } from '../../utils/baseService.js';
 import { SocketServer } from '../../configs/socket.js';
 import { Decimal } from '@prisma/client/runtime/library';

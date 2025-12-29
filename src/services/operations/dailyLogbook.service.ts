@@ -90,7 +90,7 @@ export class DailyLogbookService extends GenericBaseService<
   typeof prisma.dailyLogbook,
   DailyLogbook,
   CreateDailyLogbookBody,
-  UpdateDailyLogbookBody,
+  UpdateDailyLogbookBody & { edited_by_user_id: number },
   Prisma.DailyLogbookFindManyArgs,
   Prisma.DailyLogbookFindUniqueArgs,
   Prisma.DailyLogbookCreateArgs,

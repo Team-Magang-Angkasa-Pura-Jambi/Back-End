@@ -6,8 +6,8 @@ import {
 } from '../../../generated/prisma/index.js';
 import { MeterWithRelations } from '../../../types/metering/meter.types-temp.js';
 import { Error400, Error404, Error500 } from '../../../utils/customError.js';
-import { alertService } from '../../alert.service.js';
-import { notificationService } from '../../notification.service.js';
+import { alertService } from '../../notifications/alert.service.js';
+import { notificationService } from '../../notifications/notification.service.js';
 import {
   _createOrUpdateDistributedSummary,
   _createSingleSummaryFromDetails,

@@ -1,5 +1,5 @@
 import { schedule } from 'node-cron';
-import { notificationService } from '../notification.service.js';
+import { notificationService } from '../notifications/notification.service.js';
 
 /**
  * Menjalankan tugas terjadwal untuk membersihkan notifikasi lama.
