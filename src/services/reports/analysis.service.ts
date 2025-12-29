@@ -1,6 +1,5 @@
 import prisma from '../../configs/db.js';
 import { Prisma, UsageCategory } from '../../generated/prisma/index.js';
-import { machineLearningService } from '../machineLearning.service.js';
 import type {
   GetAnalysisQuery,
   DailyAnalysisRecord,
@@ -10,6 +9,7 @@ import { BaseService } from '../../utils/baseService.js';
 import { weatherService } from '../weather.service.js';
 import { differenceInDays } from 'date-fns';
 import { _classifyDailyUsage } from '../metering/helpers/forecast-calculator.js';
+import { machineLearningService } from '../intelligence/machineLearning.service.js';
 
 export type ClassificationSummary = {
   [key in UsageCategory]?: number;

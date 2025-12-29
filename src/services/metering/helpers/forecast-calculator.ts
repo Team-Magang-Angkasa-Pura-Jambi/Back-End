@@ -1,7 +1,7 @@
 import prisma from '../../../configs/db.js';
 import { Prisma, UsageCategory } from '../../../generated/prisma/index.js';
 import { MeterWithRelations } from '../../../types/metering/meter.types-temp.js';
-import { machineLearningService } from '../../machineLearning.service.js';
+import { machineLearningService } from '../../intelligence/machineLearning.service.js';
 
 /**
  * Memetakan hasil string dari model ML ke tipe enum UsageCategory.
