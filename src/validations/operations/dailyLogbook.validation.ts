@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isoDate, positiveInt } from '../utils/schmeHelper.js';
+import { isoDate, positiveInt } from '../../utils/schmeHelper.js';
 
 export const getLogbooksSchema = z.object({
   query: z.object({

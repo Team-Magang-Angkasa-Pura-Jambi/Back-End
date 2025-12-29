@@ -1,33 +1,35 @@
-import { Prisma } from '../generated/prisma/index.js';
-import prisma from '../configs/db.js';
+import {
+  DailySummary,
+  EfficiencyTarget,
+  Prisma,
+  SummaryDetail,
+} from '../../generated/prisma/index.js';
+import prisma from '../../configs/db.js';
 import type {
-  RoleName,
   CreateDailyLogbookBody,
   DailyLogbook,
   GetLogbooksQuery,
   UpdateDailyLogbookBody,
-} from '../types/dailyLogbook.type.js';
-import { GenericBaseService } from '../utils/GenericBaseService.js';
-import { notificationService } from './notification.service.js';
+} from '../../types/dailyLogbook.type.js';
+import { GenericBaseService } from '../../utils/GenericBaseService.js';
 
-// Tipe data internal untuk mempermudah passing data antar metode
 type SummaryWithRelations = Prisma.DailySummaryGetPayload<{
   select: {
     summary_id: true;
     total_consumption: true;
     total_cost: true;
     meter: {
-      // Tambahkan relasi yang dibutuhkan
       select: {
         meter_id: true;
         meter_code: true;
         energy_type: { select: { type_name: true; unit_of_measurement: true } };
       };
     };
-    classification: {
-      // BARU: Sertakan data klasifikasi
-      select: { classification: true };
-    } | null;
+    classification:
+      | {
+          select: { classification: true };
+        }
+      | undefined;
   };
 }>;
 
@@ -39,8 +41,6 @@ type SummaryWithRelations = Prisma.DailySummaryGetPayload<{
  */
 function calculatePercentageChange(current: number, previous: number): number {
   if (previous === 0) {
-    // Jika nilai sebelumnya 0, anggap tidak ada perubahan atau perubahan tak terhingga.
-    // Mengembalikan 0 untuk menghindari error pembagian.
     return current > 0 ? 100.0 : 0.0;
   }
   return ((current - previous) / previous) * 100;
@@ -70,7 +70,7 @@ function formatChange(change: number, metricName: string): string {
  */
 function normalizeToJakartaDate(date: Date | string): Date {
   const d = new Date(date);
-  // Buat tanggal baru dengan komponen dari zona waktu Jakarta
+
   const year = d.toLocaleString('en-US', {
     year: 'numeric',
     timeZone: 'Asia/Jakarta',
@@ -104,30 +104,24 @@ export class DailyLogbookService extends GenericBaseService<
   /**
    * Mengambil semua logbook harian dengan paginasi dan filter tanggal.
    */
-  public async findAll(
+
+  public async findAllPaginated(
     query: GetLogbooksQuery
   ): Promise<{ data: DailyLogbook[]; meta: any }> {
     const { limit, page, startDate, endDate, date } = query;
 
     const where: Prisma.DailyLogbookWhereInput = {};
 
-    // PERBAIKAN: Prioritaskan filter 'date' jika ada, jika tidak, gunakan rentang tanggal.
     if (date) {
       const targetDate = new Date(date);
       targetDate.setUTCHours(0, 0, 0, 0);
       where.log_date = targetDate;
     } else if (startDate && endDate) {
-      // PERBAIKAN: Normalisasi tanggal untuk memastikan query mencakup seluruh hari.
       const start = new Date(startDate);
-      start.setUTCHours(0, 0, 0, 0); // Set ke awal hari
-
+      start.setUTCHours(0, 0, 0, 0);
       const end = new Date(endDate);
-      end.setUTCHours(23, 59, 59, 999); // Set ke akhir hari
-
-      where.log_date = {
-        gte: start,
-        lte: end,
-      };
+      end.setUTCHours(23, 59, 59, 999);
+      where.log_date = { gte: start, lte: end };
     }
 
     const findArgs: Prisma.DailyLogbookFindManyArgs = {
@@ -141,9 +135,7 @@ export class DailyLogbookService extends GenericBaseService<
       },
       skip: (page - 1) * limit,
       take: limit,
-      orderBy: {
-        log_date: 'desc',
-      },
+      orderBy: { log_date: 'desc' },
     };
 
     const [total, data] = await this._prisma.$transaction([
@@ -153,7 +145,8 @@ export class DailyLogbookService extends GenericBaseService<
 
     return {
       data,
-      meta: { total, page, limit, last_page: Math.ceil(total / limit) },
+
+      meta: { total, page, limit, last_page: Math.ceil(total / (limit || 1)) },
     };
   }
 
@@ -173,7 +166,6 @@ export class DailyLogbookService extends GenericBaseService<
         `[DailyLog] Generating log for ${targetDate.toISOString()} by comparing with ${previousDate.toISOString()}`
       );
 
-      // LANGKAH 1: Ambil semua data yang dibutuhkan
       const { todaySummaries, yesterdaySummaries, efficiencyTargets } =
         await this._fetchDataForLogGeneration(targetDate, previousDate);
 
@@ -184,17 +176,15 @@ export class DailyLogbookService extends GenericBaseService<
         return [];
       }
 
-      // LANGKAH 2: Lakukan iterasi untuk setiap summary dan buat logbook-nya masing-masing
       const createdLogs = [];
       for (const summary of todaySummaries) {
         const previousSummary = yesterdaySummaries.find(
-          (s) => s.meter.meter_id === summary.meter.meter_id
+          (s: any) => s.meter.meter_id === summary.meter.meter_id
         );
         const target = efficiencyTargets.find(
-          (t) => t.meter_id === summary.meter.meter_id
+          (t: EfficiencyTarget) => t.meter_id === summary.meter.meter_id
         );
 
-        // LANGKAH 3: Analisis data dan buat data logbook
         const finalLogData = this._analyzeSingleSummary(
           targetDate,
           summary,
@@ -234,7 +224,7 @@ export class DailyLogbookService extends GenericBaseService<
       await Promise.all([
         this._prisma.dailySummary.findMany({
           where: { summary_date: targetDate },
-          // PERBAIKAN: Gunakan 'include' untuk mengambil relasi, bukan 'select' dan argumen top-level.
+
           include: {
             meter: {
               select: {
@@ -254,7 +244,7 @@ export class DailyLogbookService extends GenericBaseService<
         }),
         this._prisma.dailySummary.findMany({
           where: { summary_date: previousDate },
-          // PERBAIKAN: Sertakan relasi yang sama seperti di atas untuk konsistensi tipe
+
           select: {
             summary_id: true,
             total_consumption: true,
@@ -293,7 +283,6 @@ export class DailyLogbookService extends GenericBaseService<
     const { logData, savingsSummary, targetDeviationPercent } =
       this._calculateSavingsAndOverage(summary, previousSummary, target);
 
-    // BARU: Tambahkan informasi klasifikasi ke dalam catatan
     let classificationNote = '';
     if (summary.classification) {
       classificationNote = ` Perilaku pemakaian diklasifikasikan sebagai **${summary.classification.classification}**.`;
@@ -337,7 +326,6 @@ export class DailyLogbookService extends GenericBaseService<
       const actualCost = summary.total_cost?.toNumber() ?? 0;
       let estimatedTargetCost: number;
 
-      // Hitung persentase deviasi dari target
       if (targetValue > 0) {
         targetDeviationPercent =
           ((consumption - targetValue) / targetValue) * 100;

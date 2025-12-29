@@ -1,14 +1,14 @@
 import type { Request, Response, NextFunction } from 'express';
-import { dailyLogbookService } from '../services/dailyLogbook.service.js';
-import { res200, res201 } from '../utils/response.js';
-import { Error401 } from '../utils/customError.js';
+import { res200, res201 } from '../../utils/response.js';
+import { Error401 } from '../../utils/customError.js';
+import { dailyLogbookService } from '../../services/operations/dailyLogbook.service.js';
 
 class DailyLogbookController {
   public getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const query = res.locals.validatedData.query;
 
-      const { data } = await dailyLogbookService.findAll(query);
+      const { data } = await dailyLogbookService.findAllPaginated(query);
       res200({ res, data, message: 'Logbook ditemukan' });
     } catch (error) {
       next(error);
