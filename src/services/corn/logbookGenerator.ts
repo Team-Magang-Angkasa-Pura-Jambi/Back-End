@@ -1,6 +1,6 @@
 import { schedule } from 'node-cron';
 import prisma from '../../configs/db.js';
-import { dailyLogbookService } from '../dailyLogbook.service.js';
+import { dailyLogbookService } from '../operations/dailyLogbook.service.js';
 import { RoleName } from '../../generated/prisma/index.js';
 import { notificationService } from '../notification.service.js';
 import { alertService } from '../alert.service.js';

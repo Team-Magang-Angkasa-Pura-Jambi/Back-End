@@ -84,10 +84,10 @@ export const efficiencyTargetPreviewSchema = z.object({
       .positive('Target value must be greater than 0'),
     meter_id: z.coerce.number().int().positive('Invalid Meter ID'),
     period_start: z.coerce.date({
-      errorMap: () => ({ message: 'Format tanggal mulai tidak valid' }),
+      error: () => ({ message: 'Format tanggal mulai tidak valid' }),
     }),
     period_end: z.coerce.date({
-      errorMap: () => ({ message: 'Format tanggal akhir tidak valid' }),
+      error: () => ({ message: 'Format tanggal akhir tidak valid' }),
     }),
   }),
 });

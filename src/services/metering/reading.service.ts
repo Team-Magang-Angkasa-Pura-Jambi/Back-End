@@ -13,7 +13,7 @@ import type {
   UpdateReadingSessionBody,
 } from '../../types/metering/reading.types.js';
 import { Error400 } from '../../utils/customError.js';
-import { dailyLogbookService } from '../dailyLogbook.service.js';
+import { dailyLogbookService } from '../operations/dailyLogbook.service.js';
 import { AnalysisService } from '../reports/analysis.service.js';
 import {
   _checkAndResolveMissingDataAlert,

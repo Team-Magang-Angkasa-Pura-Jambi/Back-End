@@ -3,7 +3,7 @@ import type { DailyLogbook as DailyLogbookPrisma } from '../generated/prisma/ind
 import {
   getLogbooksQuerySchema,
   logbookSchemas,
-} from '../validations/dailyLogbook.validation.js';
+} from '../validations/operations/dailyLogbook.validation.js';
 
 export type GetLogbooksQuery = z.infer<typeof getLogbooksQuerySchema>['query'];
 export type LogbookParams = z.infer<typeof logbookSchemas.params>;

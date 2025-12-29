@@ -5,14 +5,14 @@ import {
 } from '../../../middleware/auth.middleware.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { validate } from '../../../utils/validate.js';
-import { dailyLogbookController } from '../../../controllers/dailyLogbook.controller.js';
+import { dailyLogbookController } from '../../../controllers/operations/dailyLogbook.controller.js';
 import {
   deleteLogbookSchema,
   generateLogbookSchema,
   getLogbookByIdSchema,
   getLogbooksSchema,
   updateLogbookSchema,
-} from '../../../validations/dailyLogbook.validation.js';
+} from '../../../validations/operations/dailyLogbook.validation.js';
 
 export default (router: Router) => {
   const prefix = '/logbooks';
