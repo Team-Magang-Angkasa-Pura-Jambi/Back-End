@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { budgetController } from '../../../controllers/budget.controller.js';
+import { budgetController } from '../../../controllers/finance/budget.controller.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { authorize } from '../../../middleware/auth.middleware.js';
 import { z } from 'zod';

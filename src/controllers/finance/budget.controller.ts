@@ -1,5 +1,5 @@
 import { type Request, type Response } from 'express';
-import { budgetService } from '../services/budget.service.js';
+import { budgetService } from '../../services/finance/budget.service.js';
 
 export class BudgetController {
   async processBudget(req: Request, res: Response) {

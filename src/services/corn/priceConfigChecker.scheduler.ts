@@ -1,7 +1,7 @@
 import { schedule } from 'node-cron';
 import prisma from '../../configs/db.js';
 import { RoleName } from '../../generated/prisma/index.js';
-import { alertService } from '../alert.service.js';
+import { alertService } from '../notifications/alert.service.js';
 
 /**
  * Memeriksa semua skema harga yang aktif untuk memastikan konfigurasinya lengkap.

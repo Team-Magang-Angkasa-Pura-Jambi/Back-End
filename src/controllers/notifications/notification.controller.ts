@@ -1,27 +1,27 @@
 import type { Request, Response } from 'express';
-import type { Notification } from '../generated/prisma/index.js';
+import type { Notification } from '../../generated/prisma/index.js';
 import {
   notificationService,
   NotificationService,
-} from '../services/notification.service.js';
+} from '../../services/notifications/notification.service.js';
 import type {
+  CreateNotificationInput,
   GetNotificationSchemaQuery,
   NotificationSchemaBody,
   UpdateNotificationSchemaBody,
-} from '../types/notification.types.js';
-import { BaseController } from '../utils/baseController.js';
-import { Error401 } from '../utils/customError.js';
-import { res200 } from '../utils/response.js';
+} from '../../types/operations/notification.types.js';
+import { BaseController } from '../../utils/baseController.js';
+import { Error401 } from '../../utils/customError.js';
+import { res200 } from '../../utils/response.js';
 
 export class NotificationController extends BaseController<
   Notification,
-  NotificationSchemaBody,
+  CreateNotificationInput,
   UpdateNotificationSchemaBody,
   GetNotificationSchemaQuery,
   NotificationService
 > {
   constructor() {
-    // PERBAIKAN: Gunakan instance singleton agar konsisten.
     super(new NotificationService(), 'notificationId');
   }
 
@@ -34,7 +34,7 @@ export class NotificationController extends BaseController<
     if (!userId) {
       throw new Error401('User not authenticated.');
     }
-    // Pastikan userId diambil dari user yang terautentikasi untuk keamanan
+
     validatedQuery.userId = userId;
 
     const data = await this.service.findAllWithQuery(validatedQuery);
@@ -120,5 +120,3 @@ export class NotificationController extends BaseController<
     });
   };
 }
-
-// export const notificationController = new NotificationController();

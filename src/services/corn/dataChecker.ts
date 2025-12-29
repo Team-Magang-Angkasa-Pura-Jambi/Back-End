@@ -3,7 +3,7 @@
 import { schedule } from 'node-cron';
 import prisma from '../../configs/db.js';
 import { MeterStatus } from '../../generated/prisma/index.js';
-import { alertService } from '../alert.service.js';
+import { alertService } from '../notifications/alert.service.js';
 
 export function startDataCheckCron() {
   console.log('⏰ Cron job untuk pengecekan data diaktifkan.');

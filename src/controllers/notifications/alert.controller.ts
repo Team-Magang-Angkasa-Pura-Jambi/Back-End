@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
-import { alertService } from '../services/alert.service.js';
-import { res200 } from '../utils/response.js';
-import { Error401 } from '../utils/customError.js';
+import { alertService } from '../../services/notifications/alert.service.js';
+import { res200 } from '../../utils/response.js';
+import { Error401 } from '../../utils/customError.js';
 
 class AlertController {
   public getAll = async (req: Request, res: Response, next: NextFunction) => {

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { positiveInt } from '../utils/schmeHelper.js';
+import { positiveInt } from '../../utils/schmeHelper.js';
 
 export const getNotificationsSchema = z.object({
   query: z.object({
@@ -12,6 +12,7 @@ export const getNotificationsSchema = z.object({
       )
       .optional(),
   }),
+  
 });
 
 export const markAsReadSchema = z.object({
@@ -29,3 +30,15 @@ export const bulkDeleteNotificationsSchema = z.object({
       .min(1, 'Setidaknya satu ID notifikasi diperlukan.'),
   }),
 });
+
+// Tambahkan ini
+export const createNotificationSchema = z.object({
+  body: z.object({
+    user_id: positiveInt('User ID'),
+    title: z.string().min(1, 'Title wajib diisi'),
+    message: z.string().min(1, 'Message wajib diisi'),
+    link: z.string().optional(),
+    // is_read tidak perlu karena default false di database
+  }),
+});
+

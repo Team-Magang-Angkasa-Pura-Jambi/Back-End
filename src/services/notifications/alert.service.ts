@@ -1,12 +1,12 @@
-import { Prisma, AlertStatus } from '../generated/prisma/index.js';
-import prisma from '../configs/db.js';
-import { GenericBaseService } from '../utils/GenericBaseService.js';
+import { Prisma, AlertStatus } from '../../generated/prisma/index.js';
+import prisma from '../../configs/db.js';
+import { GenericBaseService } from '../../utils/GenericBaseService.js';
 import type {
   Alert,
   PrismaAlert,
   GetAlertsQuery,
   UpdateAlertBody,
-} from '../types/alert.types.js';
+} from '../../types/notifications/alert.types.js';
 
 export class AlertService extends GenericBaseService<
   typeof prisma.alert,
@@ -34,7 +34,6 @@ export class AlertService extends GenericBaseService<
 
     const where: Prisma.AlertWhereInput = {};
 
-    // BARU: Tambahkan filter berdasarkan scope
     if (scope === 'system') {
       where.meter_id = null;
     } else if (scope === 'meters') {
@@ -58,8 +57,6 @@ export class AlertService extends GenericBaseService<
 
     if (search) {
       where.OR = [
-        // { title: { contains: search, mode: 'insensitive' } },
-        // { description: { contains: search, mode: 'insensitive' } },
         {
           meter: { meter_code: { contains: search, mode: 'insensitive' } },
         },
@@ -84,13 +81,8 @@ export class AlertService extends GenericBaseService<
       },
     };
 
-    // The `count` operation in Prisma does not support filtering on relations
-    // in the same way `findMany` does, especially with `OR` conditions on relations.
-    // We create a separate `where` for count that excludes the relational search filter.
     const countWhere: Prisma.AlertWhereInput = { ...where };
     if (search) {
-      // Exclude the relational search from the count for simplicity.
-      // A more complex solution might be needed for exact search counts with pagination.
       delete countWhere.OR;
     }
 
@@ -119,7 +111,7 @@ export class AlertService extends GenericBaseService<
   public async acknowledge(alertId: number, userId: number): Promise<Alert> {
     return this._handleCrudOperation(async () => {
       const updatedAlert = await this._model.update({
-        where: { [this._idField]: alertId },
+        where: { alert_id: alertId },
         data: {
           status: AlertStatus.READ,
           acknowledged_by_user_id: userId,
@@ -165,19 +157,17 @@ export class AlertService extends GenericBaseService<
     return this._handleCrudOperation(async () => {
       const data: Prisma.AlertUpdateInput = { status };
 
-      // Jika status diubah menjadi READ dan belum ada yg acknowledge, catat user ID
-      // Ini mirip dengan fungsi acknowledge, tapi lebih generik.
       if (status === AlertStatus.READ) {
         const currentAlert = await this._model.findUnique({
           where: { alert_id: alertId },
         });
         if (currentAlert && !currentAlert.acknowledged_by_user_id) {
-          data.acknowledged_by_user_id = userId;
+          data.acknowledged_by = { connect: { user_id: userId } };
         }
       }
 
       const updatedAlert = await this._model.update({
-        where: { [this._idField]: alertId },
+        where: { alert_id: alertId },
         data,
       });
       return updatedAlert as Alert;
@@ -193,24 +183,20 @@ export class AlertService extends GenericBaseService<
   public async getLatest(
     scope?: 'system' | 'meters',
     limit = 5,
-    status?: AlertStatus // BARU: Tambahkan parameter status
+    status?: AlertStatus
   ): Promise<Alert[]> {
     return this._handleCrudOperation(async () => {
       const where: Prisma.AlertWhereInput = {};
 
-      // Filter berdasarkan scope (system/meters)
       if (scope === 'system') {
         where.meter_id = null;
       } else if (scope === 'meters') {
         where.meter_id = { not: null };
       }
 
-      // PERBAIKAN: Logika filter status yang lebih baik.
       if (status) {
-        // Jika status spesifik diminta (misal: 'NEW'), gunakan itu.
         where.status = status;
       } else {
-        // Jika tidak ada status yang diminta, secara default tampilkan semua yang BELUM ditangani.
         where.status = { not: AlertStatus.HANDLED };
       }
 

@@ -1,9 +1,9 @@
 import { schedule } from 'node-cron';
 import prisma from '../../configs/db.js';
 import { MeterStatus, RoleName } from '../../generated/prisma/index.js';
-import { notificationService } from '../notification.service.js';
+import { notificationService } from '../notifications/notification.service.js';
 import { Prisma } from '../../generated/prisma/index.js';
-import { alertService } from '../alert.service.js';
+import { alertService } from '../notifications/alert.service.js';
 
 const EFFICIENCY_IMPROVEMENT_PERCENTAGE = 0.05; // Target efisiensi 5% lebih baik
 

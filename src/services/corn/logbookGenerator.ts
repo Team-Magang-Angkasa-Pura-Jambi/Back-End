@@ -2,8 +2,8 @@ import { schedule } from 'node-cron';
 import prisma from '../../configs/db.js';
 import { dailyLogbookService } from '../operations/dailyLogbook.service.js';
 import { RoleName } from '../../generated/prisma/index.js';
-import { notificationService } from '../notification.service.js';
-import { alertService } from '../alert.service.js';
+import { notificationService } from '../notifications/notification.service.js';
+import { alertService } from '../notifications/alert.service.js';
 
 /**
  * Fungsi ini memeriksa apakah logbook untuk hari kemarin sudah ada.

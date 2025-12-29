@@ -1,6 +1,6 @@
 import { schedule } from 'node-cron';
 import prisma from '../../configs/db.js';
-import { alertService } from '../alert.service.js';
+import { alertService } from '../notifications/alert.service.js';
 
 /**
  * Cron job untuk membuat ringkasan laporan harian sistem.

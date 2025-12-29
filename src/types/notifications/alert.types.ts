@@ -2,8 +2,9 @@ import type {
   Prisma,
   InsightSeverity,
   InsightStatus,
-} from '../generated/prisma/index.js';
-import type { Alert as PrismaAlert } from '../generated/prisma/index.js';
+  AlertStatus,
+} from '../../generated/prisma/index.js';
+import type { Alert as PrismaAlert } from '../../generated/prisma/index.js';
 
 export type GetAlertsQuery = {
   page: number;
@@ -11,7 +12,7 @@ export type GetAlertsQuery = {
   startDate?: string;
   endDate?: string;
   severity?: InsightSeverity;
-  status?: InsightStatus;
+  status?: AlertStatus;
   meterId?: number;
   search?: string;
 };
