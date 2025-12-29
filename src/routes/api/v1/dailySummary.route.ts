@@ -1,15 +1,15 @@
 import type { Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
-import { DailySummaryService } from '../../../services/dailySummary.service.js';
+import { DailySummaryService } from '../../../services/reports/dailySummary.service.js';
 import {
   dailySummaryController,
   DailySummaryController,
-} from '../../../controllers/dailySummary.controller.js';
+} from '../../../controllers/report/dailySummary.controller.js';
 import {
   getMonthlyReportSchema,
   querySchema,
   summaryScheme,
-} from '../../../validations/dailySummary.validation.js';
+} from '../../../validations/reports/dailySummary.validation.js';
 import { authorize } from '../../../middleware/auth.middleware.js';
 import { validate } from '../../../utils/validate.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';

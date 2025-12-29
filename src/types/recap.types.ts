@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { getRecapSchema } from '../validations/recap.validation.js';
 import type { UsageCategory } from '../generated/prisma/index.js';
+import { getRecapSchema } from '../validations/reports/recap.validation.js';
 
 // Tipe untuk query yang sudah divalidasi
 export type GetRecapQuery = z.infer<typeof getRecapSchema>['query'];
@@ -14,8 +14,8 @@ export interface RecapDataRow {
   consumption: number | null; // PERBAIKAN: Tambahkan properti consumption
   classification: UsageCategory | null;
   confidence_score?: number | null; // BARU: Tambahkan confidence score dari klasifikasi
-  prediction?: number | null; // BARU: Tambahkan data prediksi
-  pax: number | null;
+  prediction?: number | {} | null; // BARU: Tambahkan data prediksi
+  pax: number | {} | null;
   cost: number | null;
   // BARU: Tambahkan properti untuk data suhu dan hari kerja
   avg_temp?: number | null;

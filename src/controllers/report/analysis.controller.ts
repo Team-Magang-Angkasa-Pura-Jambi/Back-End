@@ -1,10 +1,11 @@
 import type { Request, Response, NextFunction } from 'express';
-import { AnalysisService } from '../services/analysis.service.js';
-import { res200 } from '../utils/response.js';
-import { Error401 } from '../utils/customError.js';
+import { AnalysisService } from '../../services/reports/analysis.service.js';
+import { res200 } from '../../utils/response.js';
+import { Error401 } from '../../utils/customError.js';
 
 class AnalysisController {
   private analysisService = new AnalysisService();
+  // data untuk line chart
 
   public getMonthlyAnalysis = async (
     req: Request,
@@ -43,6 +44,7 @@ class AnalysisController {
     }
   };
 
+  // budget
   public getBudgetAllocation = async (
     req: Request,
     res: Response,
@@ -62,23 +64,6 @@ class AnalysisController {
       next(error);
     }
   };
-  public getClassificationSummary = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const query = res.locals.validatedData.query;
-      const result = await this.analysisService.getClassificationSummary(query);
-      res200({
-        res,
-        data: result,
-        message: 'Ringkasan klasifikasi berhasil diambil.',
-      });
-    } catch (error) {
-      next(error);
-    }
-  };
 
   public getBudgetPreview = async (
     req: Request,
@@ -86,7 +71,6 @@ class AnalysisController {
     next: NextFunction
   ) => {
     try {
-      // Ambil data anggaran sementara dari body request
       const budgetData = res.locals.validatedData.body;
       const result =
         await this.analysisService.getBudgetAllocationPreview(budgetData);
@@ -135,6 +119,7 @@ class AnalysisController {
       next(error);
     }
   };
+  // summary
   public getTodaySummary = async (
     req: Request,
     res: Response,
@@ -145,7 +130,7 @@ class AnalysisController {
       const result = await this.analysisService.getTodaySummary(energyType);
       res200({
         res,
-        data: result, // PERBAIKAN: Gunakan spread operator untuk memisahkan 'meta' dan 'data'
+        data: result,
         message: 'Ringkasan konsumsi hari ini berhasil diambil.',
       });
     } catch (error) {
@@ -153,6 +138,7 @@ class AnalysisController {
     }
   };
 
+  // prediction
   public runSinglePrediction = async (
     req: Request,
     res: Response,
@@ -162,8 +148,6 @@ class AnalysisController {
       const { date, meterId } = res.locals.validatedData.body;
       const baseDate = new Date(date);
 
-      // Panggil service untuk menjalankan prediksi dan tunggu hingga selesai.
-      // PERBAIKAN: Kirim meterId ke service
       await this.analysisService.runPredictionForDate(baseDate, meterId);
 
       res200({
@@ -190,7 +174,6 @@ class AnalysisController {
 
       const { startDate, endDate } = res.locals.validatedData.body;
 
-      // Jalankan di latar belakang, jangan ditunggu (no await)
       this.analysisService.runBulkPredictions({
         startDate: new Date(startDate),
         endDate: new Date(endDate),
@@ -200,6 +183,25 @@ class AnalysisController {
       res200({
         res,
         message: 'Proses prediksi massal telah dimulai di latar belakang.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // classificatin
+  public getClassificationSummary = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const query = res.locals.validatedData.query;
+      const result = await this.analysisService.getClassificationSummary(query);
+      res200({
+        res,
+        data: result,
+        message: 'Ringkasan klasifikasi berhasil diambil.',
       });
     } catch (error) {
       next(error);
@@ -229,6 +231,7 @@ class AnalysisController {
     }
   };
 
+  // efficient
   public getEfficiencyTargetPreview = async (
     req: Request,
     res: Response,

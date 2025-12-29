@@ -1,15 +1,15 @@
-import prisma from '../configs/db.js';
-import type { DailySummary, Prisma } from '../generated/prisma/index.js';
-import type { DefaultArgs } from '../generated/prisma/runtime/library.js';
+import prisma from '../../configs/db.js';
+import type { DailySummary, Prisma } from '../../generated/prisma/index.js';
+import type { DefaultArgs } from '../../generated/prisma/runtime/library.js';
 import type {
   CreateSummaryBody,
   GetSummaryQuery,
   UpdateSummaryBody,
-} from '../types/dailySummary.type.js';
-import type { CustomErrorMessages } from '../utils/baseService.js';
+} from '../../types/dailySummary.type.js';
+import type { CustomErrorMessages } from '../../utils/baseService.js';
 
-import { GenericBaseService } from '../utils/GenericBaseService.js';
-import { weatherService } from './weather.service.js';
+import { GenericBaseService } from '../../utils/GenericBaseService.js';
+import { weatherService } from '../weather.service.js';
 
 // PERBAIKAN: Definisi tipe yang lebih jelas dan konsisten untuk laporan perbandingan.
 type ComparisonValue = {
@@ -374,29 +374,7 @@ export class DailySummaryService extends GenericBaseService<
     return parseFloat(change.toFixed(2)); // Bulatkan ke 2 desimal
   }
 
-  // HELPER LAMA: Diperbarui agar sesuai dengan struktur data baru
-  private buildEmptyReport(
-    year: number,
-    month: number,
-    startDate: Date,
-    endDate: Date
-  ): MonthlyComparisonReport {
-    return {
-      reportPeriod: {
-        year,
-        month,
-        monthName: new Intl.DateTimeFormat('id-ID', { month: 'long' }).format(
-          startDate
-        ),
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      },
-      totalPax: { currentValue: 0, previousValue: 0, percentageChange: 0 },
-      summary: [],
-    };
-  }
-
-  // Pastikan Anda memiliki metode helper ini
+  
 }
 
 export const dailySummaryService = new DailySummaryService();
