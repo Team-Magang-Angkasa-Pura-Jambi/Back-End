@@ -58,7 +58,24 @@ export class RecapService extends BaseService {
       ] = await Promise.all([
         this._prisma.dailySummary.findMany({
           where: whereClause,
-          include: { details: true, classification: true, meter: true },
+          include: {
+            details: true,
+            classification: true,
+            meter: {
+              include: {
+                tariff_group: {
+                  include: {
+                    price_schemes: {
+                      where: { is_active: true },
+                      include: {
+                        taxes: { include: { tax: true } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
         }),
         this._prisma.paxData.findMany({
           where: { data_date: { gte: startDate, lte: endDate } },
@@ -102,6 +119,17 @@ export class RecapService extends BaseService {
           p.predicted_value.toNumber(),
         ])
       );
+
+      // Hitung tarif pajak dinamis dari skema yang aktif
+      let taxRate = 0;
+      const sampleWithScheme = summaries.find(
+        (s: any) => s.meter?.tariff_group?.price_schemes?.length > 0
+      );
+
+      if (sampleWithScheme) {
+        // Menggunakan helper untuk menghitung total pajak (bisa 1, 2, atau lebih)
+        taxRate = this._getTaxRateFromMeter((sampleWithScheme as any).meter);
+      }
 
       const data: RecapDataRow[] = [];
       for (
@@ -179,7 +207,7 @@ export class RecapService extends BaseService {
         });
       }
 
-      return { data, meta: this._calculateSummary(data, energyType) };
+      return { data, meta: this._calculateSummary(data, energyType, taxRate) };
     });
   }
 
@@ -200,7 +228,10 @@ export class RecapService extends BaseService {
             tariff_group: {
               include: {
                 price_schemes: {
-                  include: { rates: true },
+                  include: {
+                    rates: true,
+                    taxes: { include: { tax: true } },
+                  },
                   where: { is_active: true },
                 },
               },
@@ -210,6 +241,15 @@ export class RecapService extends BaseService {
       },
       orderBy: { reading_date: 'asc' },
     });
+
+    // Hitung tarif pajak dinamis untuk BBM
+    let taxRate = 0;
+    const sampleSession = fuelSessions.find(
+      (s: any) => s.meter?.tariff_group?.price_schemes?.length > 0
+    );
+    if (sampleSession) {
+      taxRate = this._getTaxRateFromMeter((sampleSession as any).meter);
+    }
 
     const fuelData: RecapDataRow[] = fuelSessions.map(
       (session: any, i: number) => {
@@ -247,27 +287,50 @@ export class RecapService extends BaseService {
       }
     );
 
-    return { data: fuelData, meta: this._calculateSummary(fuelData, 'Fuel') };
+    return {
+      data: fuelData,
+      meta: this._calculateSummary(fuelData, 'Fuel', taxRate),
+    };
+  }
+
+  /**
+   * Helper untuk menghitung total persentase pajak dari meter.
+   * Menghitung pajak secara kumulatif dari DPP yang sama (misal: Cost * (PPN + PPJ)).
+   */
+  private _getTaxRateFromMeter(meter: any): number {
+    const scheme = meter?.tariff_group?.price_schemes?.[0];
+    if (scheme?.taxes?.length > 0) {
+      return scheme.taxes.reduce(
+        (acc: number, curr: any) => acc + (curr.tax?.rate?.toNumber() ?? 0),
+        0
+      );
+    }
+    return 0;
   }
 
   private _calculateSummary(
     data: RecapDataRow[],
-    energyType: string
+    energyType: string,
+    taxRate: number = 0
   ): RecapSummary {
-    const totalCost = data.reduce((sum, row) => sum + (row.cost ?? 0), 0);
-    const totalBeforeTax = data.reduce(
-      (sum, row) => sum + ((row as any).cost_before_tax ?? row.cost ?? 0),
-      0
-    );
+    const totalSumCost = data.reduce((sum, row) => sum + (row.cost ?? 0), 0);
     const totalConsumption = data.reduce(
       (sum, row) => sum + (row.consumption ?? 0),
       0
     );
     const totalPax = data.reduce((sum, row) => sum + (Number(row.pax) || 0), 0);
 
+    let totalCost = totalSumCost;
+    let totalCostBeforeTax = totalSumCost;
+
+    // Terapkan pajak jika ada (totalCost = preTax * (1 + taxRate))
+    if (taxRate > 0) {
+      totalCost = totalSumCost * (1 + taxRate);
+    }
+
     return {
       totalCost,
-      totalCostBeforeTax: totalBeforeTax, // Masih sama karena data pajak belum diproses terpisah
+      totalCostBeforeTax,
       totalTarget: data.reduce((sum, row) => sum + (row.target ?? 0), 0),
       totalConsumption,
       totalWbp:
