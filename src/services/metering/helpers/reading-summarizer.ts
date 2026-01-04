@@ -308,9 +308,7 @@ export const _buildWhereClause = (
   }
 
   if (meterId) {
-    where.meter = {
-      meter_id: meterId,
-    };
+    where.meter_id = meterId;
   }
 
   if (Object.keys(meterFilter).length > 0) {

@@ -15,31 +15,23 @@ export interface RecapDataRow {
   prediction?: number | {} | null;
   pax: number | {} | null;
   cost: number | null;
-
   avg_temp?: number | null;
   max_temp?: number | null;
   is_workday?: boolean;
-
   remaining_stock?: number | null;
 }
 
 export interface RecapSummary {
-  /** The total financial cost for the entire period. */
   totalCost: number;
 
-  /** The total financial cost for the entire period before tax. */
   totalCostBeforeTax: number;
 
-  /** The prorated efficiency target for the selected period. */
   totalTarget: number;
 
-  /** The total energy consumption (WBP + LWBP for electricity, or total for others). */
   totalConsumption: number;
 
-  /** The total WBP consumption (specifically for electricity). */
   totalWbp: number;
 
-  /** The total LWBP consumption (specifically for electricity). */
   totalLwbp: number;
   totalPax: number;
 }

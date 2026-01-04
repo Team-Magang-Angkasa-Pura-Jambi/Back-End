@@ -381,7 +381,7 @@ export class ReadingService extends GenericBaseService<
       where: {
         reading_type_id: readingTypeId,
         session: { meter_id: meterId },
-        },
+      },
       orderBy: { session: { reading_date: 'desc' } },
       select: {
         value: true,
@@ -443,7 +443,6 @@ export class ReadingService extends GenericBaseService<
   public async getHistory(
     query: GetReadingSessionsQuery
   ): Promise<GetHistoryResponse> {
-    
     const { energyTypeName, startDate, endDate, meterId, sortBy, sortOrder } =
       query;
 
@@ -462,34 +461,38 @@ export class ReadingService extends GenericBaseService<
       const [readingSessions, paxData] = await Promise.all([
         this._prisma.readingSession.findMany({
           where: whereClause,
-          include: {
+          orderBy: orderByClause,
+          select: {
+            session_id: true,
+            reading_date: true,
+
             meter: {
-              include: {
-                energy_type: true,
-                daily_logbooks: {
-                  where: {
-                    // Pastikan logic ini benar, kadang whereClause.reading_date
-                    // bisa undefined jika user pakai range (startDate/endDate)
-                    log_date: whereClause.reading_date,
-                  },
-                },
+              select: {
+                meter_id: true,
+                meter_code: true,
               },
             },
+
             user: {
-              select: { username: true },
+              select: {
+                username: true,
+              },
             },
+
             details: {
-              include: {
-                reading_type: { select: { type_name: true } },
+              select: {
+                detail_id: true,
+                value: true,
+                reading_type: {
+                  select: { type_name: true, reading_type_id: true },
+                },
               },
               orderBy: { reading_type_id: 'asc' },
             },
           },
-          orderBy: orderByClause,
         }),
         this._prisma.paxData.findMany({
           where: {
-            // Hati-hati: Pastikan logic filter tanggal ini konsisten dengan readingSession
             data_date: whereClause.reading_date,
           },
         }),
@@ -513,8 +516,10 @@ export class ReadingService extends GenericBaseService<
 
           return {
             ...session,
-            pax: paxInfo?.total_pax ?? null,
-            pax_id: paxInfo?.pax_id ?? null,
+            paxData: {
+              pax: paxInfo?.total_pax ?? null,
+              pax_id: paxInfo?.pax_id ?? null,
+            },
           };
         }
       ) as ReadingHistoryItem[];
