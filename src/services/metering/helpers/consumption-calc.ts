@@ -76,7 +76,6 @@ export const _calculateElectricitySummary = async (
     );
   }
 
-  // PERBAIKAN: Ambil tipe bacaan WBP dan LWBP langsung dari DB untuk keandalan.
   const wbpType = await tx.readingType.findUnique({
     where: { type_name: 'WBP' },
   });
@@ -85,7 +84,6 @@ export const _calculateElectricitySummary = async (
   });
 
   if (!wbpType || !lwbpType) {
-    // Error ini sekarang mengindikasikan masalah pada data master, bukan skema harga.
     throw new Error500(
       'Konfigurasi sistem error: Tipe bacaan WBP atau LWBP tidak ditemukan di database.'
     );
@@ -113,14 +111,12 @@ export const _calculateElectricitySummary = async (
   const HARGA_LWBP = new Prisma.Decimal(rateLwbp.value);
 
   const wbpConsumption = _calculateSafeConsumption(
-    // PERBAIKAN: Gunakan _calculateSafeConsumption
     getDetailValue(currentSession, wbpType.reading_type_id),
     getDetailValue(previousSession, wbpType.reading_type_id),
     meter.rollover_limit
   );
 
   const lwbpConsumption = _calculateSafeConsumption(
-    // PERBAIKAN: Gunakan _calculateSafeConsumption
     getDetailValue(currentSession, lwbpType.reading_type_id),
     getDetailValue(previousSession, lwbpType.reading_type_id),
     meter.rollover_limit
@@ -166,8 +162,8 @@ export const _calculateElectricitySummary = async (
     energy_type: { connect: { energy_type_id: meter.energy_type_id } },
     current_reading: new Prisma.Decimal(0),
     previous_reading: new Prisma.Decimal(0),
-    consumption_value: wbpConsumption.plus(lwbpConsumption), // Total konsumsi adalah jumlah WBP dan LWBP sebelum dikali faktor kali.
-    consumption_cost: wbpCost.plus(lwbpCost), // Total biaya dari WBP dan LWBP
+    consumption_value: wbpConsumption.plus(lwbpConsumption),
+    consumption_cost: wbpCost.plus(lwbpCost),
   });
 
   return summaryDetails;
@@ -235,10 +231,8 @@ export const _calculateFuelSummary = async (
   let consumptionInLiters: Prisma.Decimal;
 
   if (heightDifference.isNegative()) {
-    // Jika ketinggian naik, berarti ada pengisian. Konsumsi dianggap 0.
     consumptionInLiters = new Prisma.Decimal(0);
 
-    // Selesaikan (resolve) alert "Stok BBM Menipis" yang ada untuk meter ini.
     const lowFuelAlertTitle = `Peringatan: Stok BBM Menipis`;
     const alertsToResolve = await tx.alert.findMany({
       where: {
@@ -264,7 +258,6 @@ export const _calculateFuelSummary = async (
       );
     }
 
-    // Kirim notifikasi jika tangki diisi penuh (currentHeight sama dengan tinggi maksimal tangki).
     if (meter.tank_height_cm && currentHeight.equals(meter.tank_height_cm)) {
       const admins = await tx.user.findMany({
         where: {
@@ -295,12 +288,10 @@ export const _calculateFuelSummary = async (
   } else {
     consumptionInLiters = heightDifference.times(litersPerCm);
 
-    // Cek apakah level BBM menipis dan kirim notifikasi/alert.
-    // PERBAIKAN: Pindahkan threshold ke variabel yang jelas
     const LOW_FUEL_THRESHOLD_CM = new Prisma.Decimal(20);
 
     if (
-      currentHeight.lessThan(LOW_FUEL_THRESHOLD_CM) && // Ketinggian saat ini di bawah batas
+      currentHeight.lessThan(LOW_FUEL_THRESHOLD_CM) &&
       previousHeight.greaterThanOrEqualTo(LOW_FUEL_THRESHOLD_CM)
     ) {
       const title = `Peringatan: Stok BBM Menipis`;
@@ -337,22 +328,17 @@ export const _calculateFuelSummary = async (
     }
   }
 
-  // BARU: Hitung sisa stok dalam liter berdasarkan ketinggian saat ini.
   const remainingStockLiters = currentHeight.times(litersPerCm);
 
   return [
     {
       metric_name: `Pemakaian Harian (${meter.energy_type.type_name})`,
-      energy_type: {
-        connect: {
-          type_name: meter.energy_type.type_name,
-        },
-      },
+      energy_type: { connect: { energy_type_id: meter.energy_type_id } },
       current_reading: currentHeight,
       previous_reading: previousHeight,
-      consumption_value: consumptionInLiters, // Catat konsumsi dalam liter
+      consumption_value: consumptionInLiters,
       consumption_cost: consumptionInLiters.times(HARGA_SATUAN),
-      // BARU: Sertakan sisa stok dalam hasil kalkulasi
+
       remaining_stock: remainingStockLiters,
     },
   ];
@@ -405,11 +391,7 @@ export const _calculateWaterSummary = async (
   return [
     {
       metric_name: `Pemakaian Harian (${meter.energy_type.type_name})`,
-      energy_type: {
-        connect: {
-          type_name: meter.energy_type.type_name,
-        },
-      },
+      energy_type: { connect: { energy_type_id: meter.energy_type_id } },
       current_reading:
         getDetailValue(currentSession, mainType.reading_type_id) ??
         new Prisma.Decimal(0),
@@ -435,21 +417,16 @@ export const _calculateSafeConsumption = (
   const previous = previousValue ?? new Prisma.Decimal(0);
 
   if (current.lessThan(previous)) {
-    // Jika nilai saat ini lebih kecil, kemungkinan terjadi reset meter (rollover).
-    // Tambahkan kondisi cerdas: rollover hanya valid jika nilai sebelumnya > 90% dari limit
-    // dan nilai saat ini < 10% dari limit.
     if (
       rolloverLimit &&
       !rolloverLimit.isZero() &&
       previous.greaterThan(rolloverLimit.times(0.9)) &&
       current.lessThan(rolloverLimit.times(0.1))
     ) {
-      // Rumus konsumsi saat rollover: (batas_limit - nilai_sebelumnya) + nilai_sekarang
       const consumptionBeforeReset = rolloverLimit.minus(previous);
       const consumptionAfterReset = current;
       return consumptionBeforeReset.plus(consumptionAfterReset);
     } else {
-      // Jika tidak memenuhi kriteria rollover, ini adalah input yang salah.
       throw new Error400(
         `Nilai baru (${current}) tidak boleh lebih kecil dari nilai sebelumnya (${previous}) untuk meteran yang tidak memiliki batas reset (rollover).`
       );
@@ -481,7 +458,7 @@ export const _calculateAndDistributeFuelSummary = async (
       null,
       priceScheme
     );
-    // PERBAIKAN: Gunakan _createOrUpdateDistributedSummary yang sudah diperbaiki
+
     const summary = await _createOrUpdateDistributedSummary(
       tx,
       meter,
@@ -491,7 +468,16 @@ export const _calculateAndDistributeFuelSummary = async (
     return [summary];
   }
 
-  // Hitung total konsumsi untuk periode ini
+  if (previousSession.reading_date > currentSession.reading_date) {
+    const formattedPrevDate = new Date(
+      previousSession.reading_date
+    ).toLocaleDateString('id-ID');
+
+    throw new Error400(
+      `Kronologi tidak valid. Tanggal input harus setelah tanggal terakhir (${formattedPrevDate}).`
+    );
+  }
+
   const summaryDetails = await _calculateFuelSummary(
     tx,
     meter,
@@ -504,8 +490,6 @@ export const _calculateAndDistributeFuelSummary = async (
     return [];
   }
 
-  // PERBAIKAN: Buat SATU DailySummary pada tanggal pembacaan saat ini
-  // yang berisi TOTAL konsumsi selama periode tersebut.
   const summary = await _createSingleSummaryFromDetails(
     tx,
     meter.meter_id,
@@ -513,8 +497,6 @@ export const _calculateAndDistributeFuelSummary = async (
     summaryDetails
   );
 
-  // PERBAIKAN: Simpan detail kalkulasi (termasuk remaining_stock) ke SummaryDetail.
-  // Ini adalah langkah yang hilang sebelumnya.
   if (summary) {
     await tx.summaryDetail.deleteMany({
       where: { summary_id: summary.summary_id },
@@ -522,12 +504,12 @@ export const _calculateAndDistributeFuelSummary = async (
     await tx.summaryDetail.createMany({
       data: summaryDetails.map((detail) => {
         const { energy_type, ...rest } = detail as any;
-        const energyTypeId = energy_type?.connect?.id;
+        const energyTypeId = energy_type?.connect?.energy_type_id;
 
         return {
           ...rest,
           summary_id: summary.summary_id,
-          energy_type_id: energyTypeId, // Masukkan ID scalar
+          energy_type_id: energyTypeId,
         };
       }),
     });

@@ -1,5 +1,3 @@
-
-
 import express, { json, urlencoded } from 'express';
 import apiV1 from '../routes/api/v1/index.js';
 import morgan from 'morgan';
@@ -13,7 +11,7 @@ const corsOptions = {
   origin: [
     'http://localhost:3000',
     'https://sentinel-angkasa-pura.vercel.app',
-    // 'http://192.168.18.85:3000',
+    'http://192.168.1.9:3000',
     // 'https://patentable-steve-unsuburbed.ngrok-free.dev',
   ],
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
