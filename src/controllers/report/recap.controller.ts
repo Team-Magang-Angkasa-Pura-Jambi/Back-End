@@ -8,13 +8,13 @@ class RecapController {
     try {
       const query = res.locals.validatedData.query;
       const result = await recapService.getRecap(query);
-      res200({ res, data: result, message: 'Rekap berhasil diambil.' });
+      const { data, meta } = result;
+
+      res200({ res, data, meta, message: 'Rekap berhasil diambil.' });
     } catch (error) {
       next(error);
     }
   };
-
-  
 
   public recalculateRecap = async (
     req: Request,

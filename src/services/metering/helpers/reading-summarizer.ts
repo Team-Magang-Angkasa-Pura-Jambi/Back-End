@@ -44,10 +44,8 @@ export const _createOrUpdateDistributedSummary = async (
     where: { summary_id: summary.summary_id },
   });
 
-  // PERBAIKAN: Transformasi data sebelum masuk ke createMany
   await tx.summaryDetail.createMany({
     data: summaryDetails.map((detail) => {
-      // 1. Pisahkan object relation (energy_type) dari sisa data
       const { energy_type, ...rest } = detail;
 
       const energyTypeId = (energy_type as any)?.connect?.energy_type_id;
@@ -57,9 +55,9 @@ export const _createOrUpdateDistributedSummary = async (
       }
 
       return {
-        ...rest, // Spread sisa properti (consumption, reading, dll)
+        ...rest,
         summary_id: summary.summary_id,
-        energy_type_id: energyTypeId, // Masukkan sebagai Raw Foreign Key
+        energy_type_id: energyTypeId,
       };
     }),
   });
@@ -198,13 +196,12 @@ export const _updateDailySummary = async (
     const previousFuelSession = await tx.readingSession.findFirst({
       where: {
         meter_id: meter.meter_id,
-        reading_date: { lt: dateForDb },
+        // reading_date: { lt: dateForDb },
       },
       orderBy: { reading_date: 'desc' },
       include: { details: true },
     });
 
-    // PERBAIKAN: Panggil kalkulator BBM yang sudah diperbaiki
     return _calculateAndDistributeFuelSummary(
       tx,
       meter,
@@ -212,7 +209,6 @@ export const _updateDailySummary = async (
       previousFuelSession
     );
   } else {
-    // Untuk Listrik dan Air, gunakan logika H-1 yang ketat.
     const previousDate = new Date(dateForDb);
     previousDate.setUTCDate(previousDate.getUTCDate() - 1);
 
@@ -235,24 +231,20 @@ export const _updateDailySummary = async (
   );
   if (summaryDetailsToCreate.length === 0) return null;
 
-  // Jumlahkan biaya dari metrik dasar (bukan dari metrik "Total Pemakaian") untuk menghindari penghitungan ganda.
   const finalTotalCost = summaryDetailsToCreate.reduce((sum, detail) => {
     const rawCost = detail.consumption_cost ?? 0;
     const safeCost = new Prisma.Decimal(rawCost as any);
 
-    return detail.metric_name !== 'Total Pemakaian'
-      ? sum.plus(safeCost) // Sekarang aman dijumlahkan
-      : sum;
+    return detail.metric_name !== 'Total Pemakaian' ? sum.plus(safeCost) : sum;
   }, new Prisma.Decimal(0));
 
-  // Hitung total konsumsi dari metrik utama (bukan komponen seperti WBP/LWBP).
   const finalTotalConsumption = summaryDetailsToCreate.reduce((sum, detail) => {
     const rawCost = detail.consumption_cost ?? 0;
     const safeCost = new Prisma.Decimal(rawCost as any);
 
     return !detail.metric_name.includes('WBP') &&
       !detail.metric_name.includes('LWBP')
-      ? sum.plus(new Prisma.Decimal(safeCost)) // Jumlahkan jika bukan komponen
+      ? sum.plus(new Prisma.Decimal(safeCost))
       : sum;
   }, new Prisma.Decimal(0));
 
@@ -281,19 +273,17 @@ export const _updateDailySummary = async (
 
   await tx.summaryDetail.createMany({
     data: summaryDetailsToCreate.map((detail) => {
-      // 1. Pisahkan object relation (energy_type) dari sisa data
       const { energy_type, ...rest } = detail;
 
       const energyTypeId = (energy_type as any)?.connect?.energy_type_id;
-      console.log(energyTypeId);
       if (!energyTypeId) {
         throw new Error('Energy Type ID is missing in summary details');
       }
 
       return {
-        ...rest, // Spread sisa properti (consumption, reading, dll)
+        ...rest,
         summary_id: dailySummary.summary_id,
-        energy_type_id: energyTypeId, // Masukkan sebagai Raw Foreign Key
+        energy_type_id: energyTypeId,
       };
     }),
   });
@@ -318,9 +308,7 @@ export const _buildWhereClause = (
   }
 
   if (meterId) {
-    where.meter = {
-      meter_id: meterId,
-    };
+    where.meter_id = meterId;
   }
 
   if (Object.keys(meterFilter).length > 0) {

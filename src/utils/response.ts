@@ -6,27 +6,28 @@ interface ResponseParams {
   message: string;
 }
 
-interface SuccessResponseParams<T> extends ResponseParams {
+interface SuccessResponseParams<T, M = any> extends ResponseParams {
   data?: T;
+  meta?: M;
 }
 
-  interface ErrorResponseParams extends ResponseParams {
-    error?: Error | HttpError;
-  }
+interface ErrorResponseParams extends ResponseParams {
+  error?: Error | HttpError;
+}
 
-/**
- * Mengirim respons sukses 200 OK.
- * @param res - Objek Response dari Express.
- * @param message - Pesan sukses.
- * @param data - (Opsional) Payload data yang akan dikirim.
- */
-export const res200 = <T>({ res, message, data }: SuccessResponseParams<T>) => {
+export const res200 = <T>({
+  res,
+  message,
+  data,
+  meta,
+}: SuccessResponseParams<T>) => {
   return res.status(200).json({
     status: {
       code: 200,
       message,
     },
     data,
+    meta,
   });
 };
 

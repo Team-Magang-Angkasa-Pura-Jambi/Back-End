@@ -16,7 +16,7 @@ export interface CustomErrorMessages {
   P2002?: string; // Data duplikat
   P2003?: string; // Relasi terhubung
   P2025?: string;
-  message?:string; // Data tidak ditemukan
+  message?: string; // Data tidak ditemukan
   // Tambahkan kode error lain di sini jika perlu
 }
 
@@ -42,11 +42,9 @@ export abstract class BaseService {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       switch (error.code) {
         case 'P2002': {
-          const fields = (error.meta?.target as string[])?.join(', ');
-          // Gunakan pesan kustom jika ada, jika tidak, gunakan pesan default yang dinamis.
           throw new Error409(
             customMessages.P2002 ||
-              `Data dengan nilai yang sama untuk kolom '${fields}' sudah ada.`
+              'Data yang Anda masukkan sudah terdaftar di dalam sistem.'
           );
         }
         case 'P2003': {
