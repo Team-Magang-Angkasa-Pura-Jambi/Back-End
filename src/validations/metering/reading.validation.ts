@@ -38,7 +38,7 @@ export const readingSessionSchemas = new CrudSchemaBuilder({
   paramsSchema: readingSessionParamsSchema,
 });
 
-export const getReadingsSchema = z.object({
+export const  getReadingsSchema = z.object({
   query: PaginationRules.merge(
     QueryIdentifiers.pick({ meterId: true, userId: true })
   ).extend({

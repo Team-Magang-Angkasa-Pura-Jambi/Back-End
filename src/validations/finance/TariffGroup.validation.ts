@@ -9,7 +9,10 @@ import {
 const tariffGroupBodySchema = z.object({
   group_code: requiredString('Group Code'),
   group_name: requiredString('Group Name'),
-  daya_va: positiveInt('Daya VA'),
+  daya_va: z.coerce
+    .number({ error: `Daya VA wajib diisi.` })
+    .int({ message: ` Daya VA harus berupa bilangan bulat.` })
+    .optional(),
   description: optionalString('Description'),
 });
 

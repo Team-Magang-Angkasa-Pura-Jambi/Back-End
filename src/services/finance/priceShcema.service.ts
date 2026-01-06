@@ -46,7 +46,7 @@ export class PriceSchemeService extends GenericBaseService<
       include: {
         rates: true,
         tariff_group: true,
-        taxes: true,
+        taxes: { include: { tax: true } },
       },
     };
 

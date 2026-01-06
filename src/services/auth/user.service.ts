@@ -203,14 +203,25 @@ export class UserService extends GenericBaseService<
 
     const userWithRelations = await this._model.findUniqueOrThrow({
       where: { user_id: userId },
-
+      // Kita tidak menggunakan 'select' di root agar data user tetap terambil semua.
+      // Tapi kita batasi data relasinya.
       include: {
         reading_sessions: {
           where: {
             created_at: { gte: sevenDaysAgo },
           },
-          include: {
-            meter: { select: { meter_code: true, energy_type: true } },
+          // OPTIMISASI 1: Hanya ambil kolom yang dibutuhkan untuk Log
+          select: {
+            session_id: true, // Ambil ID jika nanti butuh link ke detail
+            created_at: true,
+            meter: {
+              select: {
+                meter_code: true,
+                energy_type: {
+                  select: { type_name: true }, // Hanya ambil nama tipe energi
+                },
+              },
+            },
           },
           orderBy: { created_at: 'desc' },
         },
@@ -219,7 +230,14 @@ export class UserService extends GenericBaseService<
           where: {
             effective_date: { gte: sevenDaysAgo },
           },
-          include: { tariff_group: { select: { group_name: true } } },
+          select: {
+            scheme_id: true,
+            effective_date: true,
+            scheme_name: true,
+            tariff_group: {
+              select: { group_name: true },
+            },
+          },
           orderBy: { effective_date: 'desc' },
         },
 
@@ -227,52 +245,61 @@ export class UserService extends GenericBaseService<
           where: {
             period_start: { gte: sevenDaysAgo },
           },
-          include: { meter: { select: { meter_code: true } } },
+          select: {
+            target_id: true,
+            period_start: true,
+            kpi_name: true,
+            meter: {
+              select: { meter_code: true },
+            },
+          },
           orderBy: { period_start: 'desc' },
         },
       },
     });
 
+    // Mapping data menjadi format Activity Log yang ringan
     const readingHistory = userWithRelations.reading_sessions.map(
       (session) => ({
+        id: session.session_id, // Cukup ID saja, bukan seluruh objek
         type: 'Pencatatan Meter',
         timestamp: session.created_at,
-        description: `Melakukan pencatatan untuk meter ${
-          session.meter.meter_code
-        } (${session.meter.energy_type.type_name}).`,
-        details: session,
+        description: `Melakukan pencatatan untuk meter ${session.meter.meter_code} (${session.meter.energy_type.type_name}).`,
       })
     );
 
     const priceSchemeHistory = userWithRelations.price_schemes_set.map(
       (scheme) => ({
+        id: scheme.scheme_id,
         type: 'Pengaturan Harga',
         timestamp: scheme.effective_date,
         description: `Mengatur skema harga baru "${scheme.scheme_name}" untuk golongan tarif ${scheme.tariff_group.group_name}.`,
-        details: scheme,
       })
     );
 
     const efficiencyTargetHistory =
       userWithRelations.efficiency_targets_set.map((target) => ({
+        id: target.target_id,
         type: 'Pengaturan Target',
         timestamp: target.period_start,
         description: `Mengatur target "${target.kpi_name}" untuk meter ${target.meter.meter_code}.`,
-        details: target,
       }));
 
+    // Menggabungkan dan mengurutkan berdasarkan waktu terbaru
     const fullHistory = [
       ...readingHistory,
       ...priceSchemeHistory,
       ...efficiencyTargetHistory,
     ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
+    // Memisahkan data raw relasi agar tidak ikut ter-return di object user
     const {
       reading_sessions,
       price_schemes_set,
       efficiency_targets_set,
       ...user
     } = userWithRelations;
+
     return { ...user, history: fullHistory };
   }
 }
