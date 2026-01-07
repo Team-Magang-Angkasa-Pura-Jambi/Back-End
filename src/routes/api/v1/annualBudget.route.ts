@@ -7,7 +7,7 @@ import {
 } from '../../../controllers/finance/annualBudget.controller.js';
 import {
   annualBudgetSchema,
-  queryAnnualBudget,
+  getAnnualBudgetSchema,
 } from '../../../validations/finance/annualBudget.validation.js';
 import { RoleName } from '../../../generated/prisma/index.js';
 import { validate } from '../../../utils/validate.js';
@@ -23,7 +23,7 @@ export default (router: Router) => {
       create: annualBudgetSchema.create,
       update: annualBudgetSchema.update,
       params: annualBudgetSchema.byId,
-      getAll: queryAnnualBudget,
+      getAll: getAnnualBudgetSchema,
     },
     authorizations: {
       getAll: [RoleName.SuperAdmin, RoleName.Admin],
@@ -38,9 +38,15 @@ export default (router: Router) => {
   router.get(
     '/annual-budgets/parents',
     authorize('Admin', 'SuperAdmin'),
-    validate(queryAnnualBudget),
+    // validate(queryAnnualBudget),
     asyncHandler(annualBudgetController.getAllParents)
   );
 
+  // -----------------------------new-----------------------------
+  router.get(
+    '/annual-budgets/year-options',
+    authorize('Admin', 'SuperAdmin'),
+    asyncHandler(annualBudgetController.getYearsOptions)
+  );
   router.use(annualBudgetRouter);
 };

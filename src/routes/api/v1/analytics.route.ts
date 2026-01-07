@@ -1,8 +1,5 @@
 import { Router } from 'express';
-import {
-  authMiddleware,
-  authorize,
-} from '../../../middleware/auth.middleware.js';
+import { authorize } from '../../../middleware/auth.middleware.js';
 import { validate } from '../../../utils/validate.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { analysisController } from '../../../controllers/report/analysis.controller.js';
@@ -14,18 +11,15 @@ import {
   classificationSummaryQuerySchema,
   efficiencyTargetPreviewSchema,
   fuelStockAnalysisQuerySchema,
-  monthlyRecapSchema,
+  getBudgetSummarySchema,
   prepareBudgetSchema,
   singlePredictionSchema,
   todaySummaryQuerySchema,
 } from '../../../validations/reports/analysis.validation.js';
-import { recapController } from '../../../controllers/report/recap.controller.js';
 
 export default (router: Router) => {
   const prefix = '/analytics';
 
-  router.use(prefix, authMiddleware);
-  // data untuk line chart
   router.get(
     prefix,
     authorize('Admin', 'SuperAdmin', 'Technician'),
@@ -70,7 +64,7 @@ export default (router: Router) => {
   router.get(
     `${prefix}/budget-summary`,
     authorize('Admin', 'SuperAdmin'),
-
+    validate(getBudgetSummarySchema),
     asyncHandler(analysisController.getBudgetSummary)
   );
 

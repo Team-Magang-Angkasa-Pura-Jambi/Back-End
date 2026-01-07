@@ -1008,107 +1008,111 @@ export class AnalysisService extends BaseService {
    * BARU: Mendapatkan ringkasan anggaran (tahunan, periode ini, realisasi)
    * yang dikelompokkan per jenis energi.
    */
-  public async getBudgetSummary(): Promise<BudgetSummaryByEnergy[]> {
-    const today = new Date(
-      Date.UTC(
-        new Date().getUTCFullYear(),
-        new Date().getUTCMonth(),
-        new Date().getUTCDate()
-      )
-    );
-    const currentYear = today.getUTCFullYear();
-    const yearStartDate = new Date(Date.UTC(currentYear, 0, 1));
-    const yearEndDate = new Date(
-      Date.UTC(currentYear, 11, 31, 23, 59, 59, 999)
-    );
+  public async getBudgetSummary(year: number) {
+    // 1. Terima parameter tahun
+    // 2. Tentukan Range Tanggal (1 Jan - 31 Des tahun tersebut)
+    const startDate = new Date(Date.UTC(year, 0, 1));
+    const endDate = new Date(Date.UTC(year, 11, 31, 23, 59, 59));
 
-    const [energyTypes, allBudgetsInYear, allRealisations] = await Promise.all([
-      prisma.energyType.findMany({ where: { is_active: true } }),
-      prisma.annualBudget.findMany({
-        where: {
-          parent_budget_id: null,
-          OR: [
-            {
-              period_start: { lte: yearEndDate },
-              period_end: { gte: yearStartDate },
-            },
-          ],
+    // 3. Ambil Parent Annual Budgets untuk tahun tersebut
+    // Kita include allocations melalui child_budgets untuk tahu meter mana saja yang dipakai
+    const parentBudgets = await prisma.annualBudget.findMany({
+      where: {
+        parent_budget_id: null, // Hanya ambil Parent (Tahunan)
+        period_start: {
+          gte: startDate,
+          lte: endDate,
         },
-      }),
-      prisma.dailySummary.groupBy({
-        by: ['meter_id'],
-        _sum: { total_cost: true },
-        where: { summary_date: { gte: yearStartDate, lt: today } },
-      }),
-    ]);
-
-    const meters = await prisma.meter.findMany({
-      select: { meter_id: true, energy_type_id: true },
+      },
+      include: {
+        energy_type: true,
+        child_budgets: {
+          include: {
+            allocations: {
+              select: { meter_id: true },
+            },
+          },
+        },
+      },
     });
-    const meterToEnergyMap = new Map(
-      meters.map((m) => [m.meter_id, m.energy_type_id])
-    );
 
-    const realisationsByEnergyType = new Map<number, Prisma.Decimal>();
-    for (const real of allRealisations) {
-      const energyTypeId = meterToEnergyMap.get(real.meter_id);
-      if (energyTypeId) {
-        const currentSum =
-          realisationsByEnergyType.get(energyTypeId) ?? new Prisma.Decimal(0);
-        const newSum = currentSum.plus(real._sum.total_cost ?? 0);
-        realisationsByEnergyType.set(energyTypeId, newSum);
-      }
-    }
+    // 4. Optimasi: Kumpulkan semua Meter ID yang terlibat di tahun ini
+    // Agar kita bisa query ke dailySummary sekali jalan (Batching)
+    const allMeterIds = new Set<number>();
+    parentBudgets.forEach((budget) => {
+      budget.child_budgets.forEach((child) => {
+        child.allocations.forEach((alloc) => {
+          if (alloc.meter_id) allMeterIds.add(alloc.meter_id);
+        });
+      });
+    });
 
-    const results: BudgetSummaryByEnergy[] = energyTypes.map((energyType) => {
-      const budgetsForThisEnergy = allBudgetsInYear.filter(
-        (b) => b.energy_type_id === energyType.energy_type_id
-      );
+    // 5. Ambil Data Realisasi (Daily Summary)
+    // Group by meter_id agar mudah dipetakan
+    const rawRealisations = await prisma.dailySummary.groupBy({
+      by: ['meter_id'],
+      _sum: { total_cost: true },
+      where: {
+        meter_id: { in: Array.from(allMeterIds) },
+        summary_date: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+    });
 
-      const budgetThisYear = budgetsForThisEnergy.reduce(
-        (sum, budget) => sum.plus(budget.total_budget),
-        new Prisma.Decimal(0)
-      );
+    // Helper Map: MeterID -> TotalCost (untuk akses O(1))
+    const meterCostMap = new Map<number, number>();
+    rawRealisations.forEach((r) => {
+      meterCostMap.set(r.meter_id, r._sum.total_cost?.toNumber() || 0);
+    });
 
-      const activeBudget = budgetsForThisEnergy.find(
-        (b) => b.period_start <= today && b.period_end >= today
-      );
+    // 6. Mapping Hasil Akhir
+    const results = parentBudgets.map((budget) => {
+      const totalBudget = budget.total_budget.toNumber();
 
-      let currentPeriodSummary: BudgetSummaryByEnergy['currentPeriod'] = null;
-      if (activeBudget) {
-        const totalRealization =
-          realisationsByEnergyType.get(energyType.energy_type_id) ??
-          new Prisma.Decimal(0);
+      // Hitung Realisasi Spesifik untuk Budget ini
+      // Caranya: Ambil semua meter ID milik budget ini, lalu jumlahkan cost-nya dari Map
+      let totalRealization = 0;
 
-        const remainingBudget =
-          activeBudget.total_budget.minus(totalRealization);
-        const realizationPercentage =
-          activeBudget.total_budget.isZero() ||
-          activeBudget.total_budget.isNegative()
-            ? null
-            : parseFloat(
-                totalRealization
-                  .div(activeBudget.total_budget)
-                  .times(100)
-                  .toFixed(2)
-              );
+      // Kumpulkan meter ID unik milik budget ini
+      const budgetMeterIds = new Set<number>();
+      budget.child_budgets.forEach((child) => {
+        child.allocations.forEach((alloc) => {
+          if (alloc.meter_id) budgetMeterIds.add(alloc.meter_id);
+        });
+      });
 
-        currentPeriodSummary = {
-          budgetId: activeBudget.budget_id,
-          periodStart: activeBudget.period_start,
-          periodEnd: activeBudget.period_end,
-          totalBudget: activeBudget.total_budget.toNumber(),
-          totalRealization: totalRealization.toNumber(),
-          remainingBudget: remainingBudget.toNumber(),
-          realizationPercentage,
-        };
-      }
+      // Sum cost dari Map
+      budgetMeterIds.forEach((meterId) => {
+        totalRealization += meterCostMap.get(meterId) || 0;
+      });
 
+      // Hitung Sisa & Persentase
+      const remainingBudget = totalBudget - totalRealization;
+
+      // Hindari pembagian dengan nol
+      const realizationPercentage =
+        totalBudget > 0 ? (totalRealization / totalBudget) * 100 : 0;
+
+      // Tentukan Status untuk UI (Warna)
+      let status: 'SAFE' | 'WARNING' | 'DANGER' = 'SAFE';
+      if (realizationPercentage >= 100) status = 'DANGER';
+      else if (realizationPercentage >= 80) status = 'WARNING';
+
+      // Return Format sesuai kebutuhan UI (BudgetSummaryItem)
       return {
-        energyTypeId: energyType.energy_type_id,
-        energyTypeName: energyType.type_name,
-        budgetThisYear: budgetThisYear.toNumber(),
-        currentPeriod: currentPeriodSummary,
+        energyTypeName: budget.energy_type.type_name,
+        energyTypeId: budget.energy_type_id,
+        currentPeriod: {
+          periodStart: budget.period_start,
+          periodEnd: budget.period_end,
+          totalBudget: totalBudget,
+          totalRealization: totalRealization,
+          remainingBudget: remainingBudget,
+          realizationPercentage: parseFloat(realizationPercentage.toFixed(2)),
+          status: status,
+        },
       };
     });
 

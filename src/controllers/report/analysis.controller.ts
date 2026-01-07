@@ -90,11 +90,16 @@ class AnalysisController {
     next: NextFunction
   ) => {
     try {
-      const result = await this.analysisService.getBudgetSummary();
+      const query = res.locals.validatedData?.query;
+
+      const targetYear = query?.year || new Date().getFullYear();
+
+      const result = await this.analysisService.getBudgetSummary(targetYear);
+
       res200({
         res,
         data: result,
-        message: `Ringkasan anggaran per jenis energi berhasil diambil.`,
+        message: `Ringkasan anggaran tahun ${targetYear} per jenis energi berhasil diambil.`,
       });
     } catch (error) {
       next(error);
@@ -256,6 +261,33 @@ class AnalysisController {
       next(error);
     }
   };
+
+  // budget
+  // public getDashboardSummary = async (
+  //   req: Request,
+  //   res: Response,
+  //   next: NextFunction
+  // ) => {
+  //   try {
+  //     // Ambil tahun dari query param, default ke tahun ini jika kosong
+  //     const yearParam = req.query.year as string;
+  //     const year = yearParam ? parseInt(yearParam) : new Date().getFullYear();
+
+  //     if (isNaN(year)) {
+  //       return res.status(400).json({ message: 'Invalid year parameter' });
+  //     }
+
+  //     const data = await budgetAnalysisService.getYearlySummary(year);
+
+  //     res200({
+  //       res,
+  //       message: `Budget summary for year ${year} retrieved successfully`,
+  //       data,
+  //     });
+  //   } catch (error) {
+  //     next(error);
+  //   }
+  // };
 }
 
 export const analysisController = new AnalysisController();

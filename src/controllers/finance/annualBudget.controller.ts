@@ -23,29 +23,51 @@ export class AnnualBudgetController extends BaseController<
     super(annualBudgetService, 'budgetId');
   }
 
+  public getYearsOptions = async (req: Request, res: Response) => {
+    const years = await annualBudgetService.getAvailableYears();
+    res200({
+      res,
+      message: 'Successfully retrieved available years',
+      data: years,
+    });
+  };
+
   /**
-   * Mengambil semua anggaran dengan data detail (alokasi bulanan dan per meter).
-   * Metode ini secara internal memanggil `getDetailedBudgets` dari service.
-   * Mendukung filter berdasarkan tanggal aktif melalui query parameter `date`.
+   * BARU: Mengambil semua anggaran dengan data detail.
    */
+
   public override getAll = async (req: Request, res: Response) => {
-    // PERBAIKAN: Validasi dan type-safety yang lebih baik
     const query = res.locals.validatedData?.query as
       | GetAnnualBudgetQuery
       | undefined;
-    const date = query?.date;
 
-    const where: Prisma.AnnualBudgetWhereInput = {};
-    if (date) {
-      const targetDate = new Date(date);
-      where.period_start = { lte: targetDate };
-      where.period_end = { gte: targetDate };
-    }
+    const targetYear = query?.year || new Date().getFullYear();
+    const targetEnergyType = query?.energy_type;
 
-    const budgets = await annualBudgetService.getDetailedBudgets({ where });
+    const startDate = new Date(Date.UTC(targetYear, 0, 1));
+    const endDate = new Date(Date.UTC(targetYear, 11, 31, 23, 59, 59));
+
+    const where: Prisma.AnnualBudgetWhereInput = {
+      period_start: {
+        gte: startDate,
+        lte: endDate,
+      },
+
+      ...(targetEnergyType && {
+        energy_type: {
+          type_name: targetEnergyType,
+        },
+      }),
+    };
+
+    const budgets = await annualBudgetService.getDetailedBudgets({
+      where,
+      orderBy: { period_start: 'asc' }, // Opsional: urutkan berdasarkan bulan
+    });
+
     res200({
       res,
-      message: 'Successfully retrieved annual budgets',
+      message: `Successfully retrieved annual budgets for year ${targetYear}`,
       data: budgets,
     });
   };

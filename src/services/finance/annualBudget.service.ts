@@ -1,5 +1,9 @@
 import prisma from '../../configs/db.js';
-import { Prisma, type AnnualBudget } from '../../generated/prisma/index.js';
+import {
+  BudgetAllocation,
+  Prisma,
+  type AnnualBudget,
+} from '../../generated/prisma/index.js';
 import type {
   AllocationData,
   CreateAnnualBudgetBody,
@@ -23,21 +27,155 @@ export class AnnualBudgetService extends GenericBaseService<
     super(prisma, prisma.annualBudget, 'budget_id');
   }
 
-  /**
-   * Override metode create untuk menangani pembuatan AnnualBudget beserta
-   * alokasinya (BudgetAllocation) dalam satu transaksi.
-   * @param data - Data untuk membuat anggaran baru, termasuk array alokasi.
-   * @returns Anggaran yang baru dibuat beserta alokasinya.
-   */
+  public async getAvailableYears(): Promise<{ availableYears: number[] }> {
+    return this._handleCrudOperation(async () => {
+      const budgets = await prisma.annualBudget.findMany({
+        select: {
+          period_start: true,
+        },
+        orderBy: { period_start: 'desc' },
+      });
+
+      const dbYears = budgets.map((b) =>
+        new Date(b.period_start).getFullYear()
+      );
+
+      const currentYear = new Date().getFullYear();
+      const mandatoryYears = [currentYear, currentYear + 1];
+
+      const uniqueYears = new Set([...dbYears, ...mandatoryYears]);
+
+      return { availableYears: Array.from(uniqueYears).sort((a, b) => b - a) };
+    });
+  }
+
+  public async getDetailedBudgets(args: Prisma.AnnualBudgetFindManyArgs) {
+    return this._handleCrudOperation(async () => {
+      // 1. Fetch Data Utama
+      const budgets = await prisma.annualBudget.findMany({
+        ...args,
+        where: {
+          ...args.where,
+          parent_budget_id: { not: null }, // Hanya Child Budget
+        },
+        include: {
+          energy_type: true,
+          allocations: {
+            include: {
+              meter: {
+                // 🔥 Tambahkan meter_name agar card di UI tampil lengkap
+                select: { meter_id: true, meter_code: true },
+              },
+            },
+          },
+        },
+        orderBy: args.orderBy || { period_start: 'asc' },
+      });
+
+      if (budgets.length === 0) return [];
+
+      // 2. Siapkan Data untuk Batch Query
+      const allMeterIds = new Set<number>();
+      budgets.forEach((b) =>
+        b.allocations.forEach((a) => {
+          if (a.meter_id) allMeterIds.add(a.meter_id);
+        })
+      );
+
+      // Cari range tanggal terluar
+      const dates = budgets.flatMap((b) => [
+        b.period_start.getTime(),
+        b.period_end.getTime(),
+      ]);
+      const minDate = new Date(Math.min(...dates));
+      const maxDate = new Date(Math.max(...dates));
+
+      // 3. Batch Query: Ambil Realisasi (DailySummary)
+      const rawRealisations = await prisma.dailySummary.groupBy({
+        by: ['meter_id', 'summary_date'],
+        _sum: { total_cost: true },
+        where: {
+          meter_id: { in: Array.from(allMeterIds) },
+          summary_date: { gte: minDate, lte: maxDate },
+        },
+      });
+
+      // 4. Mapping & Kalkulasi (Per Allocation -> Per Budget)
+      const detailedBudgets = budgets.map((budget) => {
+        const totalBudget = budget.total_budget.toNumber();
+
+        // A. Hitung Realisasi PER METER (Allocation Level)
+        const processedAllocations = budget.allocations.map((alloc) => {
+          // Hitung Budget untuk meter ini (Total Budget * Bobot)
+          const allocBudget = budget.total_budget
+            .times(alloc.weight)
+            .toNumber();
+
+          // Filter realisasi khusus untuk meter ini di rentang tanggal budget ini
+          const allocRealization = rawRealisations
+            .filter((r) => {
+              const rDate = new Date(r.summary_date);
+              return (
+                r.meter_id === alloc.meter_id &&
+                rDate >= budget.period_start &&
+                rDate <= budget.period_end
+              );
+            })
+            .reduce((sum, r) => sum + (r._sum.total_cost?.toNumber() || 0), 0);
+
+          const allocRemaining = allocBudget - allocRealization;
+          const allocPercentage =
+            allocBudget > 0 ? (allocRealization / allocBudget) * 100 : 0;
+
+          return {
+            ...alloc,
+            // Pastikan object meter aman
+            meter: alloc.meter || {
+              meter_code: 'Unknown',
+              meter_name: 'Unknown',
+            },
+            allocatedBudget: allocBudget,
+            totalRealization: allocRealization,
+            remainingBudget: allocRemaining,
+            realizationPercentage: parseFloat(allocPercentage.toFixed(2)),
+          };
+        });
+
+        // B. Hitung Total Realisasi Budget (Sum dari allocation di atas)
+        // Ini memastikan angka di header budget sinkron dengan total kartu-kartu di bawahnya
+        const totalRealization = processedAllocations.reduce(
+          (acc, curr) => acc + curr.totalRealization,
+          0
+        );
+
+        const remainingBudget = totalBudget - totalRealization;
+
+        const realizationPercentage =
+          totalBudget > 0 ? (totalRealization / totalBudget) * 100 : 0;
+
+        return {
+          ...budget,
+          // 🔥 Return allocations yang sudah ada datanya
+          allocations: processedAllocations,
+          totalBudget,
+          totalRealization,
+          remainingBudget,
+          realizationPercentage: parseFloat(realizationPercentage.toFixed(2)),
+        };
+      });
+
+      return detailedBudgets;
+    });
+  }
+  // ---------------------------------------
+
   public override async create(
     data: CreateAnnualBudgetBody
   ): Promise<AnnualBudget> {
     const { allocations, parent_budget_id, ...budgetData } = data;
 
     return this._handleCrudOperation(async () => {
-      // Jika ini adalah anggaran anak, lakukan validasi tambahan
       if (parent_budget_id) {
-        // 1. Pastikan induknya ada dan merupakan anggaran induk
         const parentBudget = await this._prisma.annualBudget.findUnique({
           where: { budget_id: parent_budget_id },
         });
@@ -45,8 +183,6 @@ export class AnnualBudgetService extends GenericBaseService<
           throw new Error400('ID anggaran induk tidak valid.');
         }
 
-        // PERBAIKAN: Lakukan perbandingan tanggal tanpa terpengaruh zona waktu.
-        // Set jam ke 0 untuk memastikan perbandingan hanya berdasarkan tanggal.
         const childStartDate = new Date(budgetData.period_start);
         childStartDate.setUTCHours(0, 0, 0, 0);
         const childEndDate = new Date(budgetData.period_end);
@@ -71,7 +207,6 @@ export class AnnualBudgetService extends GenericBaseService<
         }
       }
 
-      // Jika ini adalah anggaran induk, pastikan tidak ada alokasi yang dikirim
       if (!parent_budget_id && allocations && allocations.length > 0) {
         throw new Error400(
           'Anggaran induk (tahunan) tidak boleh memiliki alokasi meter langsung. Alokasi dibuat pada anggaran periode (anak).'
@@ -82,7 +217,7 @@ export class AnnualBudgetService extends GenericBaseService<
         data: {
           ...budgetData,
           parent_budget_id,
-          // Hanya buat alokasi jika ada dan diizinkan
+
           ...(allocations && allocations.length > 0
             ? {
                 allocations: {
@@ -111,14 +246,12 @@ export class AnnualBudgetService extends GenericBaseService<
 
     return this._handleCrudOperation(async () => {
       return this._prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        // Jika ada data alokasi baru, hapus yang lama terlebih dahulu.
         if (allocations && allocations.length > 0) {
           await tx.budgetAllocation.deleteMany({
             where: { budget_id: budgetId },
           });
         }
 
-        // Perbarui data anggaran utama dan buat alokasi baru jika ada.
         const updatedBudget = await tx.annualBudget.update({
           where: { budget_id: budgetId },
           data: {
@@ -127,7 +260,7 @@ export class AnnualBudgetService extends GenericBaseService<
               allocations: { createMany: { data: allocations } },
             }),
           } as any,
-          // PERBAIKAN: Sertakan relasi lengkap untuk respons yang konsisten.
+
           include: {
             allocations: true,
             child_budgets: true,
@@ -157,7 +290,7 @@ export class AnnualBudgetService extends GenericBaseService<
               meter: { select: { meter_id: true, meter_code: true } },
             },
           },
-          // BARU: Sertakan juga data anak dan induk saat mengambil detail
+
           child_budgets: true,
           parent_budget: true,
         },
@@ -173,7 +306,6 @@ export class AnnualBudgetService extends GenericBaseService<
 
       const isParentBudget = !budget.parent_budget_id;
 
-      // --- 1. Kalkulasi Alokasi & Realisasi Bulanan (Hanya untuk anggaran anak) ---
       const monthlyAllocation: {
         month: number;
         monthName: string;
@@ -259,7 +391,6 @@ export class AnnualBudgetService extends GenericBaseService<
         }
       }
 
-      // --- 2. Kalkulasi Realisasi per Meter (Hanya untuk anggaran anak) ---
       const meterIds = allocations.map((alloc: any) => alloc.meter_id);
       const meterRealisations = await this._prisma.dailySummary.groupBy({
         by: ['meter_id'],
@@ -295,7 +426,6 @@ export class AnnualBudgetService extends GenericBaseService<
         };
       });
 
-      // --- 3. BARU: Jika ini adalah anggaran induk, agregat realisasi dari anak-anaknya ---
       let parentRealization = {
         totalRealization: 0,
         remainingBudget: budget.total_budget.toNumber(),
@@ -303,10 +433,8 @@ export class AnnualBudgetService extends GenericBaseService<
       };
 
       if (isParentBudget) {
-        // PERBAIKAN: Hitung total realisasi dengan menjumlahkan realisasi dari setiap anak
-        // sesuai dengan periode masing-masing anak.
         let totalRealization = new Prisma.Decimal(0);
-        // PERBAIKAN: Berikan tipe eksplisit untuk 'child' untuk membantu transpiler.
+
         for (const child of budget.child_budgets as Prisma.AnnualBudgetGetPayload<{
           include: { allocations: { select: { meter_id: true } } };
         }>[]) {
@@ -352,52 +480,20 @@ export class AnnualBudgetService extends GenericBaseService<
   }
 
   /**
-   * BARU: Mengambil daftar anggaran dengan detail lengkap untuk setiap item.
-   * @param args - Argumen findMany dari Prisma untuk filtering dan paginasi.
-   */
-  public async getDetailedBudgets(args: Prisma.AnnualBudgetFindManyArgs) {
-    return this._handleCrudOperation(async () => {
-      // PERBAIKAN: Logika disederhanakan untuk mengambil semua ID anggaran yang cocok
-      // lalu memanggil getDetailedBudgetById untuk setiap anggaran.
-      // Ini memastikan konsistensi kalkulasi dan menghindari duplikasi kode.
-
-      // 1. Ambil ID dari semua anggaran yang cocok dengan filter.
-      const budgets = await this._prisma.annualBudget.findMany({
-        ...args,
-        where: { parent_budget_id: { not: null } },
-        // PERBAIKAN: Hapus filter 'where' yang salah agar bisa mengambil semua jenis anggaran.
-        // Filter yang benar sudah ada di dalam '...args'.
-        select: { budget_id: true }, // Hanya ambil ID untuk efisiensi
-      });
-
-      if (budgets.length === 0) {
-        return [];
-      }
-
-      // 2. Panggil getDetailedBudgetById untuk setiap ID secara paralel.
-      const detailedBudgets = await Promise.all(
-        budgets.map((b: any) => this.getDetailedBudgetById(b.budget_id))
-      );
-
-      return detailedBudgets;
-    });
-  }
-  /**
    * BARU: Mengambil daftar anggaran INDUK (tahunan) dengan detail ringkas.
    * @param args - Argumen findMany dari Prisma untuk filtering dan paginasi.
    */
   public async getParentBudgets(args: Prisma.AnnualBudgetFindManyArgs) {
     return this._handleCrudOperation(async () => {
-      // 1. Ambil semua data anggaran induk yang cocok dengan filter
       const parentBudgets = await this._prisma.annualBudget.findMany({
         ...args,
         where: {
-          ...args.where, // Gabungkan dengan filter dari query (misal: tanggal)
-          parent_budget_id: null, // Ambil HANYA anggaran induk
+          ...args.where,
+          parent_budget_id: null,
         },
         include: {
           energy_type: true,
-          // Sertakan anak dan alokasinya untuk kalkulasi realisasi
+
           child_budgets: {
             orderBy: { period_start: 'asc' },
             include: {
@@ -413,14 +509,12 @@ export class AnnualBudgetService extends GenericBaseService<
         return [];
       }
 
-      // 2. Proses setiap anggaran induk untuk menambahkan kalkulasi realisasi
       const detailedParentBudgetsPromises = parentBudgets.map(
         async (budget: any) => {
           const { total_budget } = budget;
 
-          // Kalkulasi realisasi untuk anggaran induk
           let totalRealization = new Prisma.Decimal(0);
-          // PERBAIKAN: Berikan tipe eksplisit untuk 'child' untuk membantu transpiler.
+
           for (const child of budget.child_budgets as Prisma.AnnualBudgetGetPayload<{
             include: { allocations: { select: { meter_id: true } } };
           }>[]) {

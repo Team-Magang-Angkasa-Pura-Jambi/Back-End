@@ -61,8 +61,15 @@ export const annualBudgetSchema = new CrudSchemaBuilder({
   paramsSchema: annualBudgetParamsSchema,
 });
 
-export const queryAnnualBudget = z.object({
+export const getAnnualBudgetSchema = z.object({
   query: z.object({
-    date: z.string().date('Format tanggal tidak valid.').optional(),
+    year: z.coerce
+      .number({ error: 'Tahun harus berupa angka' })
+      .int()
+      .min(2000)
+      .max(2100)
+      .optional(),
+
+    energy_type: z.string().optional(),
   }),
 });

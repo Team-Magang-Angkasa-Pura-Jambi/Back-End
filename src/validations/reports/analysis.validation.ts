@@ -109,3 +109,14 @@ export const monthlyRecapSchema = z.object({
     meterId: z.coerce.number().int().positive().optional(),
   }),
 });
+
+export const getBudgetSummarySchema = z.object({
+  query: z.object({
+    year: z.coerce
+      .number({ error: 'Tahun harus berupa angka' })
+      .int('Tahun harus bilangan bulat')
+      .min(2000, 'Tahun tidak valid (terlalu lama)')
+      .max(2100, 'Tahun tidak valid (terlalu jauh)')
+      .optional(), // Optional: Jika user tidak kirim, akan jadi undefined
+  }),
+});
