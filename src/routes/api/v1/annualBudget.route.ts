@@ -10,7 +10,6 @@ import {
   getAnnualBudgetSchema,
 } from '../../../validations/finance/annualBudget.validation.js';
 import { RoleName } from '../../../generated/prisma/index.js';
-import { validate } from '../../../utils/validate.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { authorize } from '../../../middleware/auth.middleware.js';
 

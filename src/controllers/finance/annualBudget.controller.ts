@@ -79,7 +79,7 @@ export class AnnualBudgetController extends BaseController<
     const query = res.locals.validatedData?.query as
       | GetAnnualBudgetQuery
       | undefined;
-    const date = query?.date;
+    const date = query?.year;
 
     const where: Prisma.AnnualBudgetWhereInput = {};
     if (date) {

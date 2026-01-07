@@ -239,7 +239,7 @@ export const _updateDailySummary = async (
   }, new Prisma.Decimal(0));
 
   const finalTotalConsumption = summaryDetailsToCreate.reduce((sum, detail) => {
-    const rawCost = detail.consumption_cost ?? 0;
+    const rawCost = detail.consumption_value ?? 0;
     const safeCost = new Prisma.Decimal(rawCost as any);
 
     return !detail.metric_name.includes('WBP') &&

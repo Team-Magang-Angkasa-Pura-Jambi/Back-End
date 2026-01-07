@@ -824,42 +824,17 @@ export class AnalysisService extends BaseService {
     period_start: Date;
     period_end: Date;
     allocations?: { meter_id: number; weight: number }[];
-  }): Promise<{
-    monthlyAllocation: Omit<
-      MonthlyBudgetAllocation,
-      | 'realizationCost'
-      | 'remainingBudget'
-      | 'realizationPercentage'
-      | 'monthName'
-    >[];
-    meterAllocationPreview: {
-      meterId: number;
-      meterName: string;
-      allocatedBudget: number;
-      dailyBudgetAllocation: number;
-      estimatedDailyKwh: number;
-    }[];
-    calculationDetails: {
-      parentTotalBudget: number;
-      efficiencyBudget: number;
-      realizationToDate: number;
-      remainingBudgetForPeriod: number;
-      budgetPerMonth: number;
-      suggestedBudgetForPeriod: number;
-    };
-  }> {
+  }): Promise<any> {
     const { parent_budget_id, period_start, period_end, allocations } =
       budgetData;
 
-    const parentBudget = await this._prisma.annualBudget.findUnique({
+    // 1. Ambil Data Induk & Energy Type
+    const parentBudget = await prisma.annualBudget.findUnique({
       where: { budget_id: parent_budget_id },
       include: {
+        energy_type: true,
         child_budgets: {
-          include: {
-            allocations: {
-              select: { meter_id: true },
-            },
-          },
+          include: { allocations: true },
         },
       },
     });
@@ -870,136 +845,112 @@ export class AnalysisService extends BaseService {
       );
     }
 
-    const efficiencyTag = parentBudget.efficiency_tag ?? new Prisma.Decimal(1);
+    // 2. Ambil Daftar Meter yang VALID untuk Energy Type ini
+    // Ini memastikan user hanya bisa mengalokasikan meter yang sesuai (misal: Listrik ke Listrik)
+    const availableMeters = await prisma.meter.findMany({
+      where: {
+        energy_type_id: parentBudget.energy_type_id,
+        status: 'Active',
+      },
+      select: { meter_id: true, meter_code: true },
+    });
+
+    // 3. Kalkulasi Target Efisiensi (Saving)
+    const efficiencyTag = parentBudget.efficiency_tag
+      ? new Prisma.Decimal(parentBudget.efficiency_tag)
+      : new Prisma.Decimal(1);
     const efficiencyBudget = parentBudget.total_budget.times(efficiencyTag);
 
-    const realizationEndDate = new Date(period_start);
-    realizationEndDate.setUTCDate(realizationEndDate.getUTCDate() - 1);
-
-    console.log('--- DEBUG: Menghitung Realisasi Anggaran ---');
-    console.log('Periode Anggaran Induk:', {
-      start: parentBudget.period_start.toISOString(),
-      end: parentBudget.period_end.toISOString(),
-    });
-    console.log(
-      'Periode Realisasi Dihitung Hingga:',
-      realizationEndDate.toISOString()
-    );
-
-    let realizationToDate = new Prisma.Decimal(0);
-
-    for (const child of parentBudget.child_budgets as Prisma.AnnualBudgetGetPayload<{
-      include: { allocations: { select: { meter_id: true } } };
-    }>[]) {
-      const childMeterIds = child.allocations.map((a) => a.meter_id);
-      if (childMeterIds.length > 0) {
-        const effectiveEndDate =
-          realizationEndDate < child.period_end
-            ? realizationEndDate
-            : child.period_end;
-
-        const childRealizationResult =
-          await this._prisma.dailySummary.aggregate({
-            _sum: { total_cost: true },
-            where: {
-              meter_id: { in: childMeterIds },
-              summary_date: {
-                gte: child.period_start,
-                lte: effectiveEndDate,
-              },
-            },
-          });
-        realizationToDate = realizationToDate.plus(
-          childRealizationResult._sum.total_cost ?? new Prisma.Decimal(0)
-        );
-      }
-    }
-    console.log('Nilai Akhir realizationToDate:', realizationToDate.toNumber());
-
-    const remainingBudgetForPeriod = efficiencyBudget.minus(realizationToDate);
-
-    let suggestedBudgetForPeriod: Prisma.Decimal;
-
-    const periodMonths =
+    // 4. Hitung Durasi Bulan secara Akurat
+    const diffMonths =
       (period_end.getUTCFullYear() - period_start.getUTCFullYear()) * 12 +
       (period_end.getUTCMonth() - period_start.getUTCMonth()) +
       1;
 
-    console.log('Panjang Periode (bulan):', periodMonths);
+    if (diffMonths <= 0) throw new Error400('Periode tidak valid.');
 
-    if (periodMonths <= 0) {
-      throw new Error400('Periode tidak valid.');
-    }
+    // 5. Hitung Realisasi Historis (Usage sebelum period_start)
+    const meterIdsInParent = new Set<number>();
+    parentBudget.child_budgets.forEach((child) => {
+      child.allocations.forEach((a) => meterIdsInParent.add(a.meter_id));
+    });
 
-    let budgetPerMonth: Prisma.Decimal;
-    if (parentBudget.child_budgets.length === 0) {
-      budgetPerMonth = parentBudget.total_budget.div(12);
-    } else {
-      budgetPerMonth = remainingBudgetForPeriod.div(periodMonths);
-    }
-
-    if (realizationToDate.isZero()) {
-      suggestedBudgetForPeriod = efficiencyBudget;
-    } else {
-      suggestedBudgetForPeriod = remainingBudgetForPeriod;
-    }
-
-    const monthlyAllocation: Omit<
-      MonthlyBudgetAllocation,
-      | 'realizationCost'
-      | 'remainingBudget'
-      | 'realizationPercentage'
-      | 'monthName'
-    >[] = [];
-    for (
-      let d = new Date(period_start);
-      d <= period_end;
-      d.setUTCMonth(d.getUTCMonth() + 1)
-    ) {
-      monthlyAllocation.push({
-        month: d.getUTCMonth() + 1,
-        allocatedBudget: budgetPerMonth.toNumber(),
+    let realizationToDate = new Prisma.Decimal(0);
+    if (meterIdsInParent.size > 0) {
+      const aggregate = await prisma.dailySummary.aggregate({
+        _sum: { total_cost: true },
+        where: {
+          meter_id: { in: Array.from(meterIdsInParent) },
+          summary_date: {
+            gte: parentBudget.period_start,
+            lt: period_start,
+          },
+        },
       });
+      realizationToDate = aggregate._sum.total_cost ?? new Prisma.Decimal(0);
     }
 
-    const meterAllocationPreview: {
-      meterId: number;
-      meterName: string;
-      allocatedBudget: number;
-      dailyBudgetAllocation: number;
-      estimatedDailyKwh: number;
-    }[] = [];
+    // 6. PERBAIKAN LOGIKA: Saran Budget Proporsional (Anti-Saran 95 Miliar)
+    // Rumus: (Total Induk / 12) * Durasi Bulan * Tag Efisiensi
+    const monthlyBase = parentBudget.total_budget.div(12);
+    let suggestedBudgetForPeriod = monthlyBase
+      .times(diffMonths)
+      .times(efficiencyTag);
 
+    // Safety Check: Saran tidak boleh melebihi sisa uang tahunan
+    const remainingYearlyBudget = efficiencyBudget.minus(realizationToDate);
+    if (suggestedBudgetForPeriod.gt(remainingYearlyBudget)) {
+      suggestedBudgetForPeriod = remainingYearlyBudget;
+    }
+
+    const budgetPerMonth = suggestedBudgetForPeriod.div(diffMonths);
+
+    // 7. Preview Alokasi per Meter Berdasarkan Pilihan User
+    const meterAllocationPreview = [];
     if (allocations && allocations.length > 0) {
       const periodDays =
-        (period_end.getTime() - period_start.getTime()) /
-          (1000 * 60 * 60 * 24) +
-        1;
+        Math.ceil(
+          (period_end.getTime() - period_start.getTime()) /
+            (1000 * 60 * 60 * 24)
+        ) + 1;
 
       for (const alloc of allocations) {
-        const allocatedBudget = remainingBudgetForPeriod.times(alloc.weight);
-        const dailyBudgetAllocation = allocatedBudget.div(periodDays);
+        const meterInfo = availableMeters.find(
+          (m) => m.meter_id === alloc.meter_id
+        );
+        const allocatedAmount = suggestedBudgetForPeriod.times(
+          new Prisma.Decimal(alloc.weight)
+        );
 
         meterAllocationPreview.push({
           meterId: alloc.meter_id,
-          meterName: `Meter ${alloc.meter_id}`,
-          allocatedBudget: allocatedBudget.toNumber(),
-          dailyBudgetAllocation: dailyBudgetAllocation.toNumber(),
-          estimatedDailyKwh: 0,
+          meterName: meterInfo?.meter_code || `Meter ${alloc.meter_id}`,
+          allocatedBudget: allocatedAmount.toNumber(),
+          dailyBudgetAllocation: allocatedAmount.div(periodDays).toNumber(),
+          weight: alloc.weight,
         });
       }
     }
 
     return {
-      monthlyAllocation,
+      monthlyAllocation: Array.from({ length: diffMonths }).map((_, i) => {
+        const d = new Date(period_start);
+        d.setUTCMonth(d.getUTCMonth() + i);
+        return {
+          month: d.getUTCMonth() + 1,
+          allocatedBudget: budgetPerMonth.toNumber(),
+        };
+      }),
       meterAllocationPreview,
+      availableMeters, // Dikirim agar Frontend bisa render dropdown otomatis
       calculationDetails: {
         parentTotalBudget: parentBudget.total_budget.toNumber(),
         efficiencyBudget: efficiencyBudget.toNumber(),
         realizationToDate: realizationToDate.toNumber(),
-        remainingBudgetForPeriod: remainingBudgetForPeriod.toNumber(),
+        remainingBudgetForPeriod: remainingYearlyBudget.toNumber(),
         budgetPerMonth: budgetPerMonth.toNumber(),
         suggestedBudgetForPeriod: suggestedBudgetForPeriod.toNumber(),
+        periodMonths: diffMonths,
       },
     };
   }
@@ -1243,7 +1194,7 @@ export class AnalysisService extends BaseService {
         );
       }
 
-      const meter = await this._prisma.meter.findUnique({
+      const meter = await prisma.meter.findUnique({
         where: { meter_id: meterId },
         include: {
           energy_type: true,
@@ -1305,7 +1256,7 @@ export class AnalysisService extends BaseService {
       const inputTotalKwh = new Prisma.Decimal(target_value).times(totalDays);
       const estimatedTotalCost = inputTotalKwh.times(avgPricePerUnit);
 
-      const budgetAllocation = await this._prisma.budgetAllocation.findFirst({
+      const budgetAllocation = await prisma.budgetAllocation.findFirst({
         where: {
           meter_id: meterId,
           budget: {
@@ -1342,7 +1293,7 @@ export class AnalysisService extends BaseService {
         let realizedCost = new Prisma.Decimal(0);
 
         if (realizationEndDate >= budgetAllocation.budget.period_start) {
-          const realizationResult = await this._prisma.dailySummary.aggregate({
+          const realizationResult = await prisma.dailySummary.aggregate({
             _sum: { total_cost: true },
             where: {
               meter_id: meterId,

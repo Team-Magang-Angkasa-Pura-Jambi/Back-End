@@ -69,7 +69,7 @@ export class ReadingService extends GenericBaseService<
     await _validateReadingsAgainstPrevious(meter, dateForDb, details);
 
     const newSession = await this._handleCrudOperation<ReadingSession>(() =>
-      this._prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const { sessionId } = await _findOrCreateSession(
           tx,
           meter_id,

@@ -56,7 +56,8 @@ export class AnnualBudgetService extends GenericBaseService<
         ...args,
         where: {
           ...args.where,
-          parent_budget_id: { not: null }, // Hanya Child Budget
+          // parent_budget_id: { not: null },
+          // Hanya Child Budget
         },
         include: {
           energy_type: true,
@@ -167,7 +168,6 @@ export class AnnualBudgetService extends GenericBaseService<
       return detailedBudgets;
     });
   }
-  // ---------------------------------------
 
   public override async create(
     data: CreateAnnualBudgetBody
@@ -175,61 +175,70 @@ export class AnnualBudgetService extends GenericBaseService<
     const { allocations, parent_budget_id, ...budgetData } = data;
 
     return this._handleCrudOperation(async () => {
+      // 1. Normalisasi Tanggal
+      const childStartDate = new Date(budgetData.period_start);
+      childStartDate.setUTCHours(0, 0, 0, 0);
+      const childEndDate = new Date(budgetData.period_end);
+      childEndDate.setUTCHours(23, 59, 59, 999);
+
       if (parent_budget_id) {
-        const parentBudget = await this._prisma.annualBudget.findUnique({
+        const parentBudget = await prisma.annualBudget.findUnique({
           where: { budget_id: parent_budget_id },
         });
+
         if (!parentBudget || parentBudget.parent_budget_id !== null) {
           throw new Error400('ID anggaran induk tidak valid.');
         }
 
-        const childStartDate = new Date(budgetData.period_start);
-        childStartDate.setUTCHours(0, 0, 0, 0);
-        const childEndDate = new Date(budgetData.period_end);
-        childEndDate.setUTCHours(0, 0, 0, 0);
+        // Validasi Overlap
+        const overlapping = await prisma.annualBudget.findFirst({
+          where: {
+            parent_budget_id: parent_budget_id,
+            period_start: { lte: childEndDate },
+            period_end: { gte: childStartDate },
+          },
+        });
 
-        const parentStartDate = new Date(parentBudget.period_start);
-        parentStartDate.setUTCHours(0, 0, 0, 0);
-        const parentEndDate = new Date(parentBudget.period_end);
-        parentEndDate.setUTCHours(0, 0, 0, 0);
-
-        if (childStartDate < parentStartDate || childEndDate > parentEndDate) {
-          console.log(
-            childStartDate,
-            parentStartDate,
-            childEndDate,
-            parentEndDate
-          );
-
+        if (overlapping) {
           throw new Error400(
-            'Periode anggaran anak harus berada di dalam rentang periode anggaran induk.'
+            'Periode anggaran bertabrakan dengan yang sudah ada.'
           );
         }
       }
 
-      if (!parent_budget_id && allocations && allocations.length > 0) {
-        throw new Error400(
-          'Anggaran induk (tahunan) tidak boleh memiliki alokasi meter langsung. Alokasi dibuat pada anggaran periode (anak).'
-        );
-      }
-
-      return this._prisma.annualBudget.create({
+      // 2. Eksekusi Create
+      // Gunakan parent_budget_id langsung sebagai nilai angka (Number)
+      return prisma.annualBudget.create({
         data: {
-          ...budgetData,
-          parent_budget_id,
+          total_budget: budgetData.total_budget,
+          efficiency_tag: budgetData.efficiency_tag,
+          energy_type_id: budgetData.energy_type_id,
+          period_start: childStartDate,
+          period_end: childEndDate,
 
-          ...(allocations && allocations.length > 0
-            ? {
-                allocations: {
-                  createMany: { data: allocations },
+          // Perbaikan di sini: Gunakan field ID langsung
+          parent_budget_id: parent_budget_id || null,
+
+          ...(allocations &&
+            allocations.length > 0 && {
+              allocations: {
+                createMany: {
+                  data: allocations.map((a) => ({
+                    meter_id: a.meter_id,
+                    weight: a.weight,
+                  })),
                 },
-              }
-            : {}),
+              },
+            }),
         },
-        include: { allocations: true },
+        include: {
+          allocations: { include: { meter: true } },
+          energy_type: true,
+        },
       });
     });
   }
+  // ---------------------------------------
 
   /**
    * BARU: Override metode update untuk menangani pembaruan AnnualBudget beserta
@@ -245,7 +254,7 @@ export class AnnualBudgetService extends GenericBaseService<
     const { allocations, ...budgetData } = data;
 
     return this._handleCrudOperation(async () => {
-      return this._prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         if (allocations && allocations.length > 0) {
           await tx.budgetAllocation.deleteMany({
             where: { budget_id: budgetId },
@@ -281,7 +290,7 @@ export class AnnualBudgetService extends GenericBaseService<
    */
   public async getDetailedBudgetById(budgetId: number) {
     return this._handleCrudOperation(async () => {
-      const budget = await this._prisma.annualBudget.findUniqueOrThrow({
+      const budget = await prisma.annualBudget.findUniqueOrThrow({
         where: { budget_id: budgetId },
         include: {
           energy_type: true,
@@ -325,7 +334,7 @@ export class AnnualBudgetService extends GenericBaseService<
 
         const meterIds = allocations.map((alloc: any) => alloc.meter_id);
         const monthlyRealisations: { month: number; total_cost: number }[] =
-          await this._prisma.$queryRaw`
+          await prisma.$queryRaw`
               SELECT EXTRACT(MONTH FROM summary_date)::int as month, SUM(total_cost) as total_cost
               FROM "daily_summaries"
               WHERE meter_id = ANY(ARRAY[${Prisma.join(meterIds)}])
@@ -392,7 +401,7 @@ export class AnnualBudgetService extends GenericBaseService<
       }
 
       const meterIds = allocations.map((alloc: any) => alloc.meter_id);
-      const meterRealisations = await this._prisma.dailySummary.groupBy({
+      const meterRealisations = await prisma.dailySummary.groupBy({
         by: ['meter_id'],
         where: {
           meter_id: { in: meterIds.length > 0 ? meterIds : [-1] },
@@ -442,17 +451,16 @@ export class AnnualBudgetService extends GenericBaseService<
             (a: { meter_id: number }) => a.meter_id
           );
           if (childMeterIds?.length > 0) {
-            const childRealizationResult =
-              await this._prisma.dailySummary.aggregate({
-                _sum: { total_cost: true },
-                where: {
-                  meter_id: { in: childMeterIds },
-                  summary_date: {
-                    gte: child.period_start,
-                    lte: child.period_end,
-                  },
+            const childRealizationResult = await prisma.dailySummary.aggregate({
+              _sum: { total_cost: true },
+              where: {
+                meter_id: { in: childMeterIds },
+                summary_date: {
+                  gte: child.period_start,
+                  lte: child.period_end,
                 },
-              });
+              },
+            });
             totalRealization = totalRealization.plus(
               childRealizationResult._sum.total_cost ?? new Prisma.Decimal(0)
             );
@@ -485,7 +493,7 @@ export class AnnualBudgetService extends GenericBaseService<
    */
   public async getParentBudgets(args: Prisma.AnnualBudgetFindManyArgs) {
     return this._handleCrudOperation(async () => {
-      const parentBudgets = await this._prisma.annualBudget.findMany({
+      const parentBudgets = await prisma.annualBudget.findMany({
         ...args,
         where: {
           ...args.where,
@@ -522,7 +530,7 @@ export class AnnualBudgetService extends GenericBaseService<
 
             if (childMeterIds.length > 0) {
               const childRealizationResult =
-                await this._prisma.dailySummary.aggregate({
+                await prisma.dailySummary.aggregate({
                   _sum: { total_cost: true },
                   where: {
                     meter_id: { in: childMeterIds },
