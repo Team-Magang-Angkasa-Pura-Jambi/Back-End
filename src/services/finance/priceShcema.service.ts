@@ -61,7 +61,7 @@ export class PriceSchemeService extends GenericBaseService<
     const { tariff_group_id, set_by_user_id, rates, tax_ids, ...restOfData } =
       data;
 
-    const tariffGroupExists = await this._prisma.tariffGroup.findUnique({
+    const tariffGroupExists = await prisma.tariffGroup.findUnique({
       where: { tariff_group_id },
     });
     if (!tariffGroupExists) {
@@ -86,7 +86,7 @@ export class PriceSchemeService extends GenericBaseService<
     };
 
     if (tax_ids && tax_ids.length > 0) {
-      const taxCount = await this._prisma.tax.count({
+      const taxCount = await prisma.tax.count({
         where: { tax_id: { in: tax_ids } },
       });
       if (taxCount !== tax_ids.length) {
@@ -110,7 +110,7 @@ export class PriceSchemeService extends GenericBaseService<
     const { rates, tax_ids, ...restOfData } = data;
 
     return this._handleCrudOperation(async () => {
-      return this._prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const updateData: Prisma.PriceSchemeUpdateInput = { ...restOfData };
 
         if (rates) {

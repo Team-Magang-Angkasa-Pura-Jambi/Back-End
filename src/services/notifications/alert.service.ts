@@ -86,7 +86,7 @@ export class AlertService extends GenericBaseService<
       delete countWhere.OR;
     }
 
-    const [total, data] = await this._prisma.$transaction([
+    const [total, data] = await prisma.$transaction([
       this._model.count({ where: countWhere }),
       this._model.findMany(findArgs),
     ]);

@@ -65,7 +65,7 @@ export class NotificationService extends GenericBaseService<
         ...(isRead !== undefined && { is_read: isRead }),
       };
 
-      return this._prisma.notification.findMany({
+      return prisma.notification.findMany({
         where,
         take: limit,
         skip: (page - 1) * limit,
@@ -76,7 +76,7 @@ export class NotificationService extends GenericBaseService<
 
   public async getUnreadCount(userId: number): Promise<number> {
     return this._handleCrudOperation(async () => {
-      return this._prisma.notification.count({
+      return prisma.notification.count({
         where: {
           user_id: userId,
           is_read: false,
@@ -87,7 +87,7 @@ export class NotificationService extends GenericBaseService<
 
   public async markAsRead(notificationId: number) {
     return this._handleCrudOperation(async () => {
-      return this._prisma.notification.update({
+      return prisma.notification.update({
         where: { notification_id: notificationId },
         data: { is_read: true },
       });
@@ -96,7 +96,7 @@ export class NotificationService extends GenericBaseService<
 
   public async markAllAsRead(userId: number) {
     return this._handleCrudOperation(async () => {
-      return this._prisma.notification.updateMany({
+      return prisma.notification.updateMany({
         where: {
           user_id: userId,
           is_read: false,
@@ -108,7 +108,7 @@ export class NotificationService extends GenericBaseService<
 
   public async getLatest(userId: number) {
     return this._handleCrudOperation(async () => {
-      return this._prisma.notification.findMany({
+      return prisma.notification.findMany({
         where: {
           user_id: userId,
         },

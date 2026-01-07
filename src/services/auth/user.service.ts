@@ -67,7 +67,7 @@ export class UserService extends GenericBaseService<
         },
       });
 
-      const admins = await this._prisma.user.findMany({
+      const admins = await prisma.user.findMany({
         where: {
           role: { role_name: { in: [RoleName.Admin, RoleName.SuperAdmin] } },
           is_active: true,

@@ -119,7 +119,7 @@ export class ReadingService extends GenericBaseService<
       });
       const { meter_id, reading_date } = currentSession;
 
-      const latestSession = await this._prisma.readingSession.findFirst({
+      const latestSession = await prisma.readingSession.findFirst({
         where: { meter_id },
         orderBy: { reading_date: 'desc' },
       });
@@ -137,7 +137,7 @@ export class ReadingService extends GenericBaseService<
         details ?? []
       );
 
-      const updatedSession = await this._prisma.$transaction(
+      const updatedSession = await prisma.$transaction(
         async (tx: Prisma.TransactionClient) => {
           await tx.readingDetail.deleteMany({
             where: { session_id: sessionId },
@@ -171,7 +171,7 @@ export class ReadingService extends GenericBaseService<
     date: Date,
     tx?: Prisma.TransactionClient
   ): Promise<void> {
-    const db = tx || this._prisma;
+    const db = tx || prisma;
     return this._handleCrudOperation(async () => {
       // Gunakan 'tx' untuk query agar tetap dalam transaksi yang sama
       const meter = await db.meter.findUniqueOrThrow({
@@ -215,7 +215,7 @@ export class ReadingService extends GenericBaseService<
   }
   public override async delete(sessionId: number): Promise<ReadingSession> {
     return this._handleCrudOperation(() =>
-      this._prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const sessionToDelete = await tx.readingSession.findUniqueOrThrow({
           where: { session_id: sessionId },
           select: { meter_id: true, reading_date: true },
@@ -459,7 +459,7 @@ export class ReadingService extends GenericBaseService<
 
       // Gunakan Promise.all untuk mengambil data paralel
       const [readingSessions, paxData] = await Promise.all([
-        this._prisma.readingSession.findMany({
+        prisma.readingSession.findMany({
           where: whereClause,
           orderBy: orderByClause,
           select: {
@@ -491,7 +491,7 @@ export class ReadingService extends GenericBaseService<
             },
           },
         }),
-        this._prisma.paxData.findMany({
+        prisma.paxData.findMany({
           where: {
             data_date: whereClause.reading_date,
           },

@@ -36,7 +36,7 @@ export class BudgetService extends BaseService {
             )
           );
 
-      const activeBudget = await this._prisma.annualBudget.findFirst({
+      const activeBudget = await prisma.annualBudget.findFirst({
         where: {
           period_start: { lte: referenceDate },
           period_end: { gte: referenceDate },
@@ -67,18 +67,17 @@ export class BudgetService extends BaseService {
       const realizationEndDate = new Date(referenceDate);
       realizationEndDate.setUTCDate(realizationEndDate.getUTCDate() - 1);
 
-      const historicalConsumptionResult =
-        await this._prisma.dailySummary.aggregate({
-          _sum: {
-            total_consumption: true,
-          },
-          where: {
-            summary_date: { gte: budgetPeriodStart, lte: realizationEndDate },
-            meter: { energy_type: { type_name: 'Electricity' } },
-          },
-        });
+      const historicalConsumptionResult = await prisma.dailySummary.aggregate({
+        _sum: {
+          total_consumption: true,
+        },
+        where: {
+          summary_date: { gte: budgetPeriodStart, lte: realizationEndDate },
+          meter: { energy_type: { type_name: 'Electricity' } },
+        },
+      });
 
-      const realizationResult = await this._prisma.dailySummary.aggregate({
+      const realizationResult = await prisma.dailySummary.aggregate({
         _sum: {
           total_cost: true,
         },
@@ -143,7 +142,7 @@ export class BudgetService extends BaseService {
         );
       }
 
-      await this._prisma.efficiencyTarget.deleteMany({
+      await prisma.efficiencyTarget.deleteMany({
         where: {
           meter_id: {
             in: allocations.map((alloc: BudgetAllocation) => alloc.meter_id),
@@ -167,7 +166,7 @@ export class BudgetService extends BaseService {
         const dailyTargetPerMeter = newDailyTargetCost.times(alloc.weight);
         const dailyKwhTargetPerMeter = newDailyTargetKwh.times(alloc.weight);
 
-        return this._prisma.efficiencyTarget.create({
+        return prisma.efficiencyTarget.create({
           data: {
             meter_id: alloc.meter_id,
             kpi_name: `Target Biaya Harian Otomatis - ${budgetYear}`,

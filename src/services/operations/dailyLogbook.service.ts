@@ -138,7 +138,7 @@ export class DailyLogbookService extends GenericBaseService<
       orderBy: { log_date: 'desc' },
     };
 
-    const [total, data] = await this._prisma.$transaction([
+    const [total, data] = await prisma.$transaction([
       this._model.count({ where }),
       this._model.findMany(findArgs),
     ]);
@@ -192,7 +192,7 @@ export class DailyLogbookService extends GenericBaseService<
           target
         );
 
-        const createdLog = await this._prisma.dailyLogbook.upsert({
+        const createdLog = await prisma.dailyLogbook.upsert({
           where: {
             log_date_meter_id: {
               log_date: targetDate,
@@ -222,7 +222,7 @@ export class DailyLogbookService extends GenericBaseService<
   ) {
     const [todaySummaries, yesterdaySummaries, efficiencyTargets] =
       await Promise.all([
-        this._prisma.dailySummary.findMany({
+        prisma.dailySummary.findMany({
           where: { summary_date: targetDate },
 
           include: {
@@ -242,7 +242,7 @@ export class DailyLogbookService extends GenericBaseService<
             },
           },
         }),
-        this._prisma.dailySummary.findMany({
+        prisma.dailySummary.findMany({
           where: { summary_date: previousDate },
 
           select: {
@@ -253,7 +253,7 @@ export class DailyLogbookService extends GenericBaseService<
             classification: { select: { classification: true } },
           },
         }),
-        this._prisma.efficiencyTarget.findMany({
+        prisma.efficiencyTarget.findMany({
           where: {
             period_start: { lte: targetDate },
             period_end: { gte: targetDate },

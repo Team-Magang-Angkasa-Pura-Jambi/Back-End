@@ -56,7 +56,7 @@ export class RecapService extends BaseService {
         weatherHistories,
         predictions,
       ] = await Promise.all([
-        this._prisma.dailySummary.findMany({
+        prisma.dailySummary.findMany({
           where: whereClause,
           include: {
             details: true,
@@ -77,21 +77,21 @@ export class RecapService extends BaseService {
             },
           },
         }),
-        this._prisma.paxData.findMany({
+        prisma.paxData.findMany({
           where: { data_date: { gte: startDate, lte: endDate } },
         }),
-        this._prisma.efficiencyTarget.findMany({
+        prisma.efficiencyTarget.findMany({
           where: {
             ...(meterId && { meter_id: meterId }),
             period_start: { lte: endDate },
             period_end: { gte: startDate },
           },
         }),
-        this._prisma.weatherHistory.findMany({
+        prisma.weatherHistory.findMany({
           where: { data_date: { gte: startDate, lte: endDate } },
         }),
         meterId
-          ? this._prisma.consumptionPrediction.findMany({
+          ? prisma.consumptionPrediction.findMany({
               where: {
                 meter_id: meterId,
                 prediction_date: { gte: startDate, lte: endDate },
@@ -216,7 +216,7 @@ export class RecapService extends BaseService {
     endDate: Date,
     meterId?: number
   ): Promise<RecapApiResponse> {
-    const fuelSessions = await this._prisma.readingSession.findMany({
+    const fuelSessions = await prisma.readingSession.findMany({
       where: {
         reading_date: { gte: startDate, lte: endDate },
         ...(meterId && { meter_id: meterId }),
@@ -355,7 +355,7 @@ export class RecapService extends BaseService {
       userId && SocketServer.instance.io.to(String(userId)).emit(event, data);
 
     try {
-      const summaries = await this._prisma.dailySummary.findMany({
+      const summaries = await prisma.dailySummary.findMany({
         where: {
           summary_date: { gte: startDate, lte: endDate },
           ...(meterId && { meter_id: meterId }),

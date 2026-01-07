@@ -28,7 +28,7 @@ export abstract class BaseService {
   protected _prisma: PrismaClient; // Tambahkan properti ini
 
   constructor(prisma: PrismaClient) {
-    this._prisma = prisma;
+    prisma = prisma;
   }
   /**
    * Menerjemahkan error teknis dari Prisma menjadi error bisnis yang lebih jelas.

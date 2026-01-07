@@ -100,11 +100,11 @@ export class MeterService extends GenericBaseService<
 
   public override async create(data: CreateMeterBody): Promise<Meter> {
     return this._handleCrudOperation(async () => {
-      const energyType = await this._prisma.energyType.findUniqueOrThrow({
+      const energyType = await prisma.energyType.findUniqueOrThrow({
         where: { energy_type_id: data.energy_type_id },
       });
 
-      const tariffGroup = await this._prisma.tariffGroup.findUnique({
+      const tariffGroup = await prisma.tariffGroup.findUnique({
         where: { tariff_group_id: data.tariff_group_id },
         include: {
           price_schemes: {
@@ -185,7 +185,7 @@ export class MeterService extends GenericBaseService<
       const finalEnergyType =
         finalEnergyTypeId === currentMeter.energy_type_id
           ? currentMeter.energy_type
-          : await this._prisma.energyType.findUniqueOrThrow({
+          : await prisma.energyType.findUniqueOrThrow({
               where: { energy_type_id: finalEnergyTypeId },
             });
 
@@ -193,7 +193,7 @@ export class MeterService extends GenericBaseService<
         const targetTariffGroupId =
           data.tariff_group_id ?? currentMeter.tariff_group_id;
 
-        const fullTariffGroup = await this._prisma.tariffGroup.findUnique({
+        const fullTariffGroup = await prisma.tariffGroup.findUnique({
           where: { tariff_group_id: targetTariffGroupId },
           include: {
             price_schemes: {
