@@ -58,6 +58,10 @@ export type ReadingSessionWithRelations = Prisma.ReadingSessionGetPayload<{
 
 // 2. Definisikan struktur final setelah digabung dengan data Pax
 export type ReadingHistoryItem = ReadingSessionWithRelations & {
+  paxData: PaxData;
+};
+
+export type PaxData = {
   pax: number | null;
   pax_id: number | null;
 };

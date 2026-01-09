@@ -27,6 +27,7 @@ import dailyLogbookRoute from './dailyLogbook.route.js';
 import budgetRoute from './budget.route.js';
 import annualBudgetRoute from './annualBudget.route.js';
 import readingRoutes from './reading.routes.js';
+import visualizationsRoute from './visualizations.route.js';
 
 export default (app: any) => {
   const router = Router();
@@ -63,4 +64,6 @@ export default (app: any) => {
   alertRoute(router);
   budgetRoute(router);
   annualBudgetRoute(router);
+
+  visualizationsRoute(router);
 };

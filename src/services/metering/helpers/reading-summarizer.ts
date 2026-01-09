@@ -294,11 +294,13 @@ export const _updateDailySummary = async (
 export const _buildWhereClause = (
   date?: Date,
   energyTypeName?: string,
-  startDate?: Date,
-  endDate?: Date,
-  meterId?: number
+  startDate?: Date | string,
+  endDate?: Date | string,
+  meterId?: number | string
 ): Prisma.ReadingSessionWhereInput => {
   const where: Prisma.ReadingSessionWhereInput = {};
+
+  // 1. Filter Meter (Digabung agar tidak saling menimpa)
   const meterFilter: Prisma.MeterWhereInput = {};
 
   if (energyTypeName) {
@@ -308,20 +310,37 @@ export const _buildWhereClause = (
   }
 
   if (meterId) {
-    where.meter_id = meterId;
+    // Pastikan ID adalah angka
+    const parsedId =
+      typeof meterId === 'string' ? parseInt(meterId, 10) : meterId;
+    if (!isNaN(parsedId)) {
+      meterFilter.meter_id = parsedId;
+    }
   }
 
   if (Object.keys(meterFilter).length > 0) {
     where.meter = meterFilter;
   }
 
+  // 2. Filter Tanggal (Normalisasi Range agar mencakup seluruh hari)
   if (date) {
-    where.reading_date = _normalizeDate(date);
-  } else if (startDate && endDate) {
-    where.reading_date = {
-      gte: new Date(startDate),
-      lte: new Date(endDate),
-    };
+    where.reading_date = _normalizeDate(new Date(date));
+  } else if (startDate || endDate) {
+    const dateFilter: Prisma.DateTimeFilter<'ReadingSession'> = {};
+
+    if (startDate) {
+      const s = new Date(startDate);
+      s.setHours(0, 0, 0, 0); // Mulai dari jam 00:00:00
+      dateFilter.gte = s;
+    }
+
+    if (endDate) {
+      const e = new Date(endDate);
+      e.setHours(23, 59, 59, 999); // Sampai jam 23:59:59
+      dateFilter.lte = e;
+    }
+
+    where.reading_date = dateFilter;
   }
 
   return where;

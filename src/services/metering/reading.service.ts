@@ -119,7 +119,7 @@ export class ReadingService extends GenericBaseService<
       });
       const { meter_id, reading_date } = currentSession;
 
-      const latestSession = await prisma.readingSession.findFirst({
+      const latestSession = await this._prisma.readingSession.findFirst({
         where: { meter_id },
         orderBy: { reading_date: 'desc' },
       });
@@ -137,7 +137,7 @@ export class ReadingService extends GenericBaseService<
         details ?? []
       );
 
-      const updatedSession = await prisma.$transaction(
+      const updatedSession = await this._prisma.$transaction(
         async (tx: Prisma.TransactionClient) => {
           await tx.readingDetail.deleteMany({
             where: { session_id: sessionId },
@@ -171,9 +171,8 @@ export class ReadingService extends GenericBaseService<
     date: Date,
     tx?: Prisma.TransactionClient
   ): Promise<void> {
-    const db = tx || prisma;
+    const db = tx || this._prisma;
     return this._handleCrudOperation(async () => {
-      // Gunakan 'tx' untuk query agar tetap dalam transaksi yang sama
       const meter = await db.meter.findUniqueOrThrow({
         where: { meter_id: meterId },
         include: {
@@ -194,12 +193,10 @@ export class ReadingService extends GenericBaseService<
 
       const dateForDb = _normalizeDate(date);
 
-      // PERBAIKAN: _updateDailySummary sekarang menjadi pusat kalkulasi dan penyimpanan.
       const summaries = await _updateDailySummary(db, meter, dateForDb);
 
       if (summaries) {
         for (const summary of summaries) {
-          // Panggil proses sekunder setelah summary utama selesai.
           await _classifyDailyUsage(summary, meter);
           await _checkUsageAgainstTargetAndNotify(summary, meter);
         }
@@ -208,27 +205,23 @@ export class ReadingService extends GenericBaseService<
       console.log(
         `[ReadingService] Memicu pembuatan/pembaruan logbook untuk tanggal ${dateForDb.toISOString()}`
       );
-      // PERBAIKAN: Panggil generateDailyLog di luar transaksi utama
-      // untuk menghindari error jika transaksi sudah selesai.
+
       await dailyLogbookService.generateDailyLog(dateForDb);
     });
   }
   public override async delete(sessionId: number): Promise<ReadingSession> {
     return this._handleCrudOperation(() =>
-      prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      this._prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const sessionToDelete = await tx.readingSession.findUniqueOrThrow({
           where: { session_id: sessionId },
           select: { meter_id: true, reading_date: true },
         });
 
-        // BARU: Validasi bahwa hanya data terakhir yang bisa dihapus.
         const latestSession = await tx.readingSession.findFirst({
           where: { meter_id: sessionToDelete.meter_id },
           orderBy: { reading_date: 'desc' },
         });
 
-        // Jika ada sesi terakhir dan ID-nya tidak sama dengan sesi yang akan dihapus,
-        // berarti pengguna mencoba menghapus data di tengah.
         if (latestSession && latestSession.session_id !== sessionId) {
           throw new Error400(
             'Hanya data pembacaan terakhir yang dapat dihapus. Untuk memperbaiki data lama, hapus entri hingga tanggal tersebut dan input ulang.'
@@ -289,35 +282,6 @@ export class ReadingService extends GenericBaseService<
     return this._handleCrudOperation(() => this._model.findMany({ where }));
   }
 
-  // public override async findAll(
-  //   args: Prisma.ReadingTypeFindManyArgs
-  // ): Promise<ReadingSessionWithDetails[]> {
-  //   const { energyTypeName, date, meterId, userId } = args;
-  //   const whereClause: Prisma.ReadingSessionWhereInput = {};
-
-  //   if (energyTypeName)
-  //     whereClause.meter = { energy_type: { type_name: energyTypeName } };
-  //   if (date) {
-  //     const readingDate = new Date(date);
-  //     readingDate.setUTCHours(0, 0, 0, 0);
-  //     whereClause.reading_date = readingDate;
-  //   }
-  //   if (meterId) whereClause.meter_id = meterId;
-  //   if (userId) whereClause.user_id = userId;
-
-  //   return this._handleCrudOperation(() =>
-  //     this._model.findMany({
-  //       where: whereClause,
-  //       include: {
-  //         meter: { include: { energy_type: true, category: true } },
-  //         user: { select: { user_id: true, username: true } },
-  //         details: { include: { reading_type: true } },
-  //       },
-  //       orderBy: { created_at: 'desc' },
-  //     })
-  //   );
-  // }
-
   /**
    * Menemukan satu sesi pembacaan berdasarkan ID dengan relasi spesifik.
    */
@@ -337,45 +301,10 @@ export class ReadingService extends GenericBaseService<
     const { meterId, readingTypeId, readingDate } = query;
     const dateForDb = _normalizeDate(readingDate);
 
-    // MODIFIKASI: Hitung tanggal H-1 secara eksplisit
-    // const previousDate = new Date(dateForDb);
-    // previousDate.setUTCDate(previousDate.getUTCDate() - 1);
-
     const energyType = await prisma.meter.findFirst({
       where: { meter_id: meterId },
       select: { energy_type: { select: { type_name: true } } },
     });
-
-    // if (energyType?.energy_type.type_name === 'Fuel') {
-    //   const lastReading = await prisma.readingDetail.findFirst({
-    //     where: {
-    //       session: {
-    //         meter_id: meterId,
-    //       },
-    //       reading_type_id: readingTypeId,
-    //     },
-    //     orderBy: {
-    //       session: {
-    //         reading_date: 'desc',
-    //       },
-    //     },
-    //     include: {
-    //       session: {
-    //         select: { reading_date: true },
-    //       },
-    //     },
-    //   });
-
-    //   if (lastReading?.value) {
-    //     // KASUS: Data H-1 Ditemukan (Aman)
-    //     return {
-    //       meter_id: meterId,
-    //       last_reading_date: lastReading?.session?.reading_date,
-    //       value: lastReading?.value,
-    //       message: `Data Terakhir adalah ${lastReading?.value} cm`,
-    //     };
-    //   }
-    // }
 
     const lastReading = await prisma.readingDetail.findFirst({
       where: {
@@ -395,50 +324,11 @@ export class ReadingService extends GenericBaseService<
     });
 
     return lastReading;
-
-    // if (lastReading?.value) {
-    //   // KASUS: Data H-1 Ditemukan (Aman)
-    //   return {
-    //     meter_id: meterId,
-    //     last_reading_date: lastReading?.session?.reading_date,
-    //     value: lastReading?.value,
-    //     is_data_missing: false, // Data TIDAK hilang
-    //     missing_date: null,
-    //     message: 'Data hari sebelumnya lengkap.',
-    //   };
-    // } else {
-    //   // KASUS: Data H-1 Tidak Ada (Bolong)
-    //   return {
-    //     meter_id: meterId,
-    //     last_reading_date: null,
-    //     value: null,
-    //     is_data_missing: true, // Data HILANG
-    //     missing_date: previousDate,
-    //     // Format tanggal biar enak dibaca user
-    //     message: `Data Tanggal ${previousDate.toISOString().split('T')[0]} Belum Diisi. Harap input berurutan!`,
-    //   };
-    // }
   }
 
   /**
    * Menemukan semua sesi, selalu menyertakan relasi dasar.
    */
-  // public override async findAll(
-  //   args?: Prisma.ReadingSessionFindManyArgs
-  // ): Promise<ReadingSessionWithDetails[]> {
-  //   const includeArgs = {
-  //     meter: { include: { energy_type: true } },
-  //     user: { select: { user_id: true, username: true } },
-  //     details: { include: { reading_type: true } },
-  //   };
-  //   const findArgs = { ...args, include: { ...args?.include, ...includeArgs } };
-
-  //   const result = this._handleCrudOperation(() =>
-  //     this._model.findMany(findArgs)
-  //   );
-
-  //   return result as unknown as ReadingSessionWithDetails[];
-  // }
 
   public async getHistory(
     query: GetReadingSessionsQuery
@@ -457,72 +347,63 @@ export class ReadingService extends GenericBaseService<
 
       const orderByClause = _buildOrderByClause(sortBy, sortOrder);
 
-      // Gunakan Promise.all untuk mengambil data paralel
       const [readingSessions, paxData] = await Promise.all([
         prisma.readingSession.findMany({
           where: whereClause,
           orderBy: orderByClause,
-          select: {
-            session_id: true,
-            reading_date: true,
-
+          include: {
             meter: {
-              select: {
-                meter_id: true,
-                meter_code: true,
-              },
+              include: { energy_type: true, daily_logbooks: true },
             },
-
             user: {
-              select: {
-                username: true,
-              },
+              select: { username: true },
             },
-
             details: {
-              select: {
-                detail_id: true,
-                value: true,
-                reading_type: {
-                  select: { type_name: true, reading_type_id: true },
-                },
-              },
+              include: { reading_type: true },
               orderBy: { reading_type_id: 'asc' },
             },
           },
         }),
         prisma.paxData.findMany({
           where: {
-            data_date: whereClause.reading_date,
+            data_date: {
+              gte: startDate ? new Date(startDate) : undefined,
+              lte: endDate ? new Date(endDate) : undefined,
+            },
           },
         }),
       ]);
 
-      // Map Pax Data
+      // 1. Fungsi Helper untuk normalisasi tanggal ke format YYYY-MM-DD secara LOKAL
+      const toLocalDateString = (date: Date) => {
+        const d = new Date(date);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+
+      // 2. Buat Map dengan key lokal
       const paxDataMap = new Map<string, { total_pax: number; pax_id: number }>(
-        paxData.map((p: PaxData) => [
-          p.data_date.toISOString().split('T')[0],
+        paxData.map((p) => [
+          toLocalDateString(p.data_date),
           { total_pax: p.total_pax, pax_id: p.pax_id },
         ])
       );
 
-      // Merge Data
-      // Kita perlu casting 'as ReadingHistoryItem[]' karena TypeScript
-      // tidak otomatis tahu kalau kita sudah menambah properti 'pax' & 'pax_id'
-      const dataWithPax = readingSessions.map(
-        (session: ReadingSessionWithRelations) => {
-          const dateString = session.reading_date.toISOString().split('T')[0];
-          const paxInfo = paxDataMap.get(dateString);
+      // 3. Gabungkan data menggunakan normalisasi yang SAMA
+      const dataWithPax = readingSessions.map((session) => {
+        const dateKey = toLocalDateString(session.reading_date); // Pastikan pakai toLocalDateString
+        const paxInfo = paxDataMap.get(dateKey);
 
-          return {
-            ...session,
-            paxData: {
-              pax: paxInfo?.total_pax ?? null,
-              pax_id: paxInfo?.pax_id ?? null,
-            },
-          };
-        }
-      ) as ReadingHistoryItem[];
+        return {
+          ...session,
+          paxData: {
+            pax: paxInfo?.total_pax ?? null,
+            pax_id: paxInfo?.pax_id ?? null,
+          },
+        };
+      });
 
       return {
         data: dataWithPax,
@@ -531,5 +412,3 @@ export class ReadingService extends GenericBaseService<
     });
   }
 }
-
-// export const readingService = new ReadingService();

@@ -18,7 +18,6 @@ export const bulkPredictionSchema = z.object({
 export const analysisQuerySchema = z.object({
   query: z.object({
     energyType: z.enum(['Electricity', 'Water', 'Fuel']),
-
     month: z.string().regex(/^\d{4}-\d{2}$/, 'Format bulan harus YYYY-MM'),
     meterId: z.coerce.number().int().positive().optional(),
   }),
