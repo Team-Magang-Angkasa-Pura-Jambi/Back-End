@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   EnergyOutlookController,
+  getBudgetBurnRateController,
   getBudgetTrackingController,
   getDailyAveragePaxController,
   getEfficiencyRatioController,
@@ -12,6 +13,7 @@ import {
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { validate } from '../../../utils/validate.js';
 import {
+  getBudgetBurnRateSchema,
   getEfficiencyRatioSchema,
   getUnifiedComparisonSchema,
   getYearlyHeatmapQuery,
@@ -54,5 +56,11 @@ export default (router: Router) => {
     prefix + '/daily-average-pax',
     validate(getEfficiencyRatioSchema),
     asyncHandler(getDailyAveragePaxController)
+  );
+
+  router.get(
+    prefix + '/budget-burn-rate',
+    validate(getBudgetBurnRateSchema),
+    asyncHandler(getBudgetBurnRateController)
   );
 };

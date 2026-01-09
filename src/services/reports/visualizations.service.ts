@@ -2,7 +2,6 @@ import { Decimal } from '@prisma/client/runtime/library';
 import prisma from '../../configs/db.js';
 import { UsageCategory } from '../../generated/prisma/index.js';
 
-// --- TYPE DEFINITIONS ---
 export type MeterRankType = {
   code: string;
   consumption: number;
@@ -74,11 +73,10 @@ export type DailyAveragePaxType = { day: string; avgPax: number };
 
 export type BudgetBurnRateType = {
   dayDate: number;
-  actual: number;
+  actual: number | null;
   idea: number;
+  efficent: number;
 };
-
-// --- SERVICES ---
 
 export const MeterRankService = async (): Promise<MeterRankType[]> => {
   try {
@@ -391,7 +389,6 @@ export const getYearlyAnalysisService = async (
   year: number
 ): Promise<YearlyAnalysisType[]> => {
   try {
-    // 1. Fetch Semua Data Harian dalam range tahun tersebut
     const summaries = await prisma.dailySummary.findMany({
       where: {
         summary_date: {
@@ -411,7 +408,6 @@ export const getYearlyAnalysisService = async (
       },
     });
 
-    // 2. Fetch Budget Tahunan
     const budgetRecord = await prisma.annualBudget.findFirst({
       where: {
         period_start: {
@@ -425,11 +421,9 @@ export const getYearlyAnalysisService = async (
       },
     });
 
-    // Hitung Budget per Bulan (Rata-rata)
     const totalBudget = budgetRecord ? Number(budgetRecord.total_budget) : 0;
     const monthlyBudget = totalBudget / 12;
 
-    // 3. Inisialisasi Wadah Data 12 Bulan
     const aggregatedData = Array.from({ length: 12 }, (_, index) => ({
       monthIndex: index,
       monthName: MONTH_NAMES[index],
@@ -437,7 +431,6 @@ export const getYearlyAnalysisService = async (
       cost: 0,
     }));
 
-    // 4. Lakukan Agregasi
     for (const item of summaries) {
       const date = new Date(item.summary_date);
       const monthIndex = date.getMonth();
@@ -450,7 +443,6 @@ export const getYearlyAnalysisService = async (
       }
     }
 
-    // 5. Format Return
     const result: YearlyAnalysisType[] = aggregatedData.map((data) => ({
       month: data.monthName,
       consumption: data.consumption,
@@ -468,13 +460,13 @@ export const getYearlyAnalysisService = async (
 export const getUnifiedComparisonService = async (
   energyTypeName: string,
   year: number,
-  month: number // <--- 1. Tambahkan parameter Month (1 - 12)
+  month: number
 ): Promise<UnifiedEnergyComparisonType> => {
   try {
-    const startDate = new Date(year, month - 1, 1); // Tgl 1 bulan tsb
-    const endDate = new Date(year, month, 0, 23, 59, 59); // Tgl terakhir (28/29/30/31) jam 23:59
+    const startDate = new Date(year, month - 1, 1);
 
-    // 3. Ambil data harian (Filter gte startDate & lte endDate)
+    const endDate = new Date(year, month, 0, 23, 59, 59);
+
     const summaries = await prisma.dailySummary.findMany({
       where: {
         summary_date: {
@@ -492,7 +484,6 @@ export const getUnifiedComparisonService = async (
       },
     });
 
-    // 4. Inisialisasi Akumulator
     let weekdayTotalCons = 0;
     let weekdayTotalCost = 0;
     let weekdayCount = 0;
@@ -501,7 +492,6 @@ export const getUnifiedComparisonService = async (
     let holidayTotalCost = 0;
     let holidayCount = 0;
 
-    // 5. Unit Mapping
     const unitMap: Record<string, 'kWh' | 'm³' | 'L' | 'Unit'> = {
       Electricity: 'kWh',
       Water: 'm³',
@@ -509,12 +499,10 @@ export const getUnifiedComparisonService = async (
     };
     const unit = unitMap[energyTypeName] || 'Unit';
 
-    // 6. Iterasi Data
     for (const item of summaries) {
       const date = new Date(item.summary_date);
-      const day = date.getDay(); // 0 = Minggu, 6 = Sabtu
+      const day = date.getDay();
 
-      // LOGIC SEDERHANA: Sabtu & Minggu = Libur
       const isHoliday = day === 0 || day === 6;
 
       const cons = Number(item.total_consumption);
@@ -531,7 +519,6 @@ export const getUnifiedComparisonService = async (
       }
     }
 
-    // 7. Hitung Rata-rata
     const avgWeekdayCons =
       weekdayCount > 0 ? weekdayTotalCons / weekdayCount : 0;
     const avgHolidayCons =
@@ -563,8 +550,6 @@ export const getEfficiencyRatioService = async (
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59);
 
-    // --- 1. SIAPKAN BUCKET 7 HARI (Minggu - Sabtu) ---
-    // Index 0 = Minggu, 1 = Senin, dst.
     const dayBuckets: Record<
       number,
       {
@@ -572,7 +557,7 @@ export const getEfficiencyRatioService = async (
         totalPax: number;
         totalTerminal: number;
         totalOffice: number;
-        occurrenceCount: number; // Berapa kali hari ini muncul dalam bulan tsb
+        occurrenceCount: number;
       }
     > = {
       0: {
@@ -626,8 +611,6 @@ export const getEfficiencyRatioService = async (
       },
     };
 
-    // --- 2. HITUNG JUMLAH HARI (Occurrence) ---
-    // Contoh: Di bulan Oktober, hari Senin muncul 5 kali, Selasa 4 kali, dst.
     for (
       let d = new Date(startDate);
       d <= endDate;
@@ -637,7 +620,6 @@ export const getEfficiencyRatioService = async (
       dayBuckets[dayIndex].occurrenceCount += 1;
     }
 
-    // --- 3. FETCH & ISI DATA PAX ---
     const paxDataList = await prisma.paxData.findMany({
       where: { data_date: { gte: startDate, lte: endDate } },
     });
@@ -647,7 +629,6 @@ export const getEfficiencyRatioService = async (
       dayBuckets[dayIndex].totalPax += p.total_pax;
     });
 
-    // --- 4. FETCH & ISI DATA KONSUMSI ---
     const summaries = await prisma.dailySummary.findMany({
       where: {
         summary_date: { gte: startDate, lte: endDate },
@@ -667,7 +648,6 @@ export const getEfficiencyRatioService = async (
       const dayIndex = new Date(item.summary_date).getDay();
       const kwh = Number(item.total_consumption);
 
-      // Cek Kategori Terminal vs Office
       const categoryName = item.meter.category?.name?.toLowerCase() || '';
       const meterName = item.meter.meter_code.toLowerCase();
       const isOffice =
@@ -682,37 +662,29 @@ export const getEfficiencyRatioService = async (
       }
     }
 
-    // --- 5. HITUNG RATA-RATA & FORMAT HASIL ---
-    // Kita ingin urutan output: Senin, Selasa, ..., Minggu (Sesuai kebiasaan kerja)
-    const orderOfDay = [1, 2, 3, 4, 5, 6, 0]; // 1=Senin ... 0=Minggu
+    const orderOfDay = [1, 2, 3, 4, 5, 6, 0];
 
     const results = orderOfDay.map((dayIndex) => {
       const bucket = dayBuckets[dayIndex];
 
-      // A. TERMINAL RATIO (kWh / Pax)
-      // Rumus: Total Energi Hari X / Total Penumpang Hari X
       const terminalRatioVal =
         bucket.totalPax > 0 ? bucket.totalTerminal / bucket.totalPax : 0;
 
-      // B. OFFICE RATIO (Rata-rata kWh per Hari)
-      // Rumus: Total Energi Hari X / Berapa kali Hari X muncul
-      // Contoh: Total Senin 5000 kWh dibagi 4 kali hari Senin = 1250 kWh/hari
       const officeRatioVal =
         bucket.occurrenceCount > 0
           ? bucket.totalOffice / bucket.occurrenceCount
           : 0;
 
-      // C. Rata-rata Pax (Untuk Info Visual)
       const avgPax =
         bucket.occurrenceCount > 0
           ? Math.round(bucket.totalPax / bucket.occurrenceCount)
           : 0;
 
       return {
-        day: bucket.name, // "Senin", "Selasa", dll
-        pax: avgPax, // Rata-rata penumpang di hari tersebut
-        terminalRatio: new Decimal(terminalRatioVal), // kWh per Pax
-        officeRatio: new Decimal(officeRatioVal), // Rata-rata kWh Consumption
+        day: bucket.name,
+        pax: avgPax,
+        terminalRatio: new Decimal(terminalRatioVal),
+        officeRatio: new Decimal(officeRatioVal),
       };
     });
 
@@ -728,11 +700,9 @@ export const getDailyAveragePaxService = async (
   month: number
 ): Promise<DailyAveragePaxType[]> => {
   try {
-    // 1. Tentukan Range Tanggal
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59);
 
-    // 2. Ambil Data Pax dalam range tersebut
     const paxDataList = await prisma.paxData.findMany({
       where: {
         data_date: {
@@ -746,8 +716,6 @@ export const getDailyAveragePaxService = async (
       },
     });
 
-    // 3. Siapkan Bucket untuk 7 Hari (Minggu - Sabtu)
-    // Index: 0=Minggu, 1=Senin, ..., 6=Sabtu
     const dayBuckets: Record<
       number,
       { total: number; count: number; name: string }
@@ -761,7 +729,6 @@ export const getDailyAveragePaxService = async (
       6: { total: 0, count: 0, name: 'Sabtu' },
     };
 
-    // 4. Agregasi Data
     paxDataList.forEach((item) => {
       const dayIndex = new Date(item.data_date).getDay();
 
@@ -771,19 +738,16 @@ export const getDailyAveragePaxService = async (
       }
     });
 
-    // 5. Hitung Rata-rata & Format Return (Urutkan Senin - Minggu)
-    const orderOfDay = [1, 2, 3, 4, 5, 6, 0]; // 1=Senin ... 0=Minggu
+    const orderOfDay = [1, 2, 3, 4, 5, 6, 0];
 
     const results = orderOfDay.map((dayIndex) => {
       const bucket = dayBuckets[dayIndex];
 
-      // Hitung rata-rata: Total Pax / Jumlah Hari kejadian
-      // Contoh: Total 50.000 pax dibagi 4 hari Senin = 12.500
       const average = bucket.count > 0 ? bucket.total / bucket.count : 0;
 
       return {
         day: bucket.name,
-        avgPax: Math.round(average), // Bulatkan ke angka bulat terdekat
+        avgPax: Math.round(average),
       };
     });
 
@@ -794,10 +758,113 @@ export const getDailyAveragePaxService = async (
   }
 };
 
-export const BudgetBurnRateService = async (
+export const getBudgetBurnRateService = async (
   year: number,
   month: number
 ): Promise<BudgetBurnRateType[]> => {
   try {
-  } catch (error) {}
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59);
+    const totalDaysInMonth = endDate.getDate();
+
+    const childBudget = await prisma.annualBudget.findFirstOrThrow({
+      where: {
+        period_start: { lte: endDate },
+        period_end: { gte: startDate },
+        parent_budget_id: { not: null },
+      },
+      select: {
+        total_budget: true,
+        parent_budget_id: true,
+      },
+    });
+
+    const parentBudget = await prisma.annualBudget.findUniqueOrThrow({
+      where: { budget_id: childBudget.parent_budget_id! },
+      select: {
+        total_budget: true,
+        efficiency_tag: true,
+      },
+    });
+
+    const totalAnnualBudget =
+      Number(childBudget.total_budget) + Number(parentBudget.total_budget);
+    const monthlyBudget = totalAnnualBudget / 12;
+    const dailyIdealBurn = monthlyBudget / totalDaysInMonth;
+
+    const parentTotal = Number(parentBudget.total_budget);
+    const efficiencyTag = Number(parentBudget.efficiency_tag) || 1;
+
+    const annualEfficientBudget = parentTotal * efficiencyTag;
+    const monthlyEfficientBudget = annualEfficientBudget / 12;
+    const dailyEfficientBurn = monthlyEfficientBudget / totalDaysInMonth;
+
+    const summaries = await prisma.dailySummary.findMany({
+      where: {
+        summary_date: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      select: {
+        summary_date: true,
+        total_cost: true,
+      },
+      orderBy: {
+        summary_date: 'asc',
+      },
+    });
+
+    const dailyCostMap = new Map<number, number>();
+    summaries.forEach((item) => {
+      const day = new Date(item.summary_date).getDate();
+      const current = dailyCostMap.get(day) || 0;
+      dailyCostMap.set(day, current + Number(item.total_cost));
+    });
+
+    const results: BudgetBurnRateType[] = [];
+
+    let cumulativeActual = 0;
+
+    const today = new Date();
+    const isCurrentMonth =
+      today.getMonth() + 1 === month && today.getFullYear() === year;
+    const currentDay = today.getDate();
+
+    for (let day = 1; day <= totalDaysInMonth; day++) {
+      const cumulativeIdeal = dailyIdealBurn * day;
+
+      const cumulativeEfficient = dailyEfficientBurn * day;
+
+      const costToday = dailyCostMap.get(day) || 0;
+
+      let actualValue: number | null = null;
+
+      if (isCurrentMonth) {
+        if (day <= currentDay) {
+          cumulativeActual += costToday;
+          actualValue = Math.round(cumulativeActual);
+        } else {
+          actualValue = null;
+        }
+      } else {
+        if (new Date(year, month - 1) < today) {
+          cumulativeActual += costToday;
+          actualValue = Math.round(cumulativeActual);
+        }
+      }
+
+      results.push({
+        dayDate: day,
+        actual: actualValue,
+        idea: Math.round(cumulativeIdeal),
+        efficent: Math.round(cumulativeEfficient),
+      });
+    }
+
+    return results;
+  } catch (error) {
+    console.error('Error in BudgetBurnRateService:', error);
+    return [];
+  }
 };

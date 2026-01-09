@@ -332,7 +332,9 @@ export const _calculateFuelSummary = async (
 
   return [
     {
-      metric_name: `Pemakaian Harian (${meter.energy_type.type_name})`,
+      metric_name: currentHeight.equals(meter.tank_height_cm)
+        ? 'Pengisian Penuh'
+        : `Pemakaian Harian (${meter.energy_type.type_name})`,
       energy_type: { connect: { energy_type_id: meter.energy_type_id } },
       current_reading: currentHeight,
       previous_reading: previousHeight,

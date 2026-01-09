@@ -1,6 +1,8 @@
+import { get } from 'http';
 import { NextFunction, Request, Response } from 'express';
 import {
   EnergyOutlookService,
+  getBudgetBurnRateService,
   getBudgetTrackingService,
   getDailyAveragePaxService,
   getEfficiencyRatioService,
@@ -10,6 +12,7 @@ import {
   MeterRankService,
 } from '../../services/reports/visualizations.service.js';
 import { res200 } from '../../utils/response.js';
+import { Error400, Error404 } from '../../utils/customError.js';
 
 export const MeterRankController = async (
   req: Request,
@@ -123,6 +126,23 @@ export const getDailyAveragePaxController = async (
   try {
     const { year, month } = res.locals.validatedData.query;
     const result = await getDailyAveragePaxService(year, month);
+    return res200({ res, data: result, message: 'success' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getBudgetBurnRateController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { year, month } = res.locals.validatedData.query;
+    if (!year || !month) {
+      throw new Error400('filters is required');
+    }
+    const result = await getBudgetBurnRateService(year, month);
     return res200({ res, data: result, message: 'success' });
   } catch (error) {
     next(error);

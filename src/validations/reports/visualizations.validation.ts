@@ -1,3 +1,4 @@
+import { get } from 'http';
 import z from 'zod';
 
 export const getYearlyHeatmapQuery = z.object({
@@ -47,6 +48,17 @@ export const getEfficiencyRatioSchema = z.object({
 });
 
 export const getDailyAveragePaxSchema = z.object({
+  query: z.object({
+    year: z.coerce.number().int().min(2000),
+    month: z.coerce
+      .number()
+      .int()
+      .min(1, 'Month must be at least 1 (January)')
+      .max(12, 'Month must be at most 12 (December)'),
+  }),
+});
+
+export const getBudgetBurnRateSchema = z.object({
   query: z.object({
     year: z.coerce.number().int().min(2000),
     month: z.coerce
