@@ -69,6 +69,15 @@ export type efficiencyRatioType = {
   officeRatio: Decimal;
   pax: number;
 };
+
+export type DailyAveragePaxType = { day: string; avgPax: number };
+
+export type BudgetBurnRateType = {
+  dayDate: number;
+  actual: number;
+  idea: number;
+};
+
 // --- SERVICES ---
 
 export const MeterRankService = async (): Promise<MeterRankType[]> => {
@@ -712,4 +721,83 @@ export const getEfficiencyRatioService = async (
     console.error('Error in getEfficiencyRatioService:', error);
     throw new Error('Gagal menghitung profil efisiensi mingguan.');
   }
+};
+
+export const getDailyAveragePaxService = async (
+  year: number,
+  month: number
+): Promise<DailyAveragePaxType[]> => {
+  try {
+    // 1. Tentukan Range Tanggal
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59);
+
+    // 2. Ambil Data Pax dalam range tersebut
+    const paxDataList = await prisma.paxData.findMany({
+      where: {
+        data_date: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      select: {
+        data_date: true,
+        total_pax: true,
+      },
+    });
+
+    // 3. Siapkan Bucket untuk 7 Hari (Minggu - Sabtu)
+    // Index: 0=Minggu, 1=Senin, ..., 6=Sabtu
+    const dayBuckets: Record<
+      number,
+      { total: number; count: number; name: string }
+    > = {
+      0: { total: 0, count: 0, name: 'Minggu' },
+      1: { total: 0, count: 0, name: 'Senin' },
+      2: { total: 0, count: 0, name: 'Selasa' },
+      3: { total: 0, count: 0, name: 'Rabu' },
+      4: { total: 0, count: 0, name: 'Kamis' },
+      5: { total: 0, count: 0, name: 'Jumat' },
+      6: { total: 0, count: 0, name: 'Sabtu' },
+    };
+
+    // 4. Agregasi Data
+    paxDataList.forEach((item) => {
+      const dayIndex = new Date(item.data_date).getDay();
+
+      if (dayBuckets[dayIndex]) {
+        dayBuckets[dayIndex].total += item.total_pax;
+        dayBuckets[dayIndex].count += 1;
+      }
+    });
+
+    // 5. Hitung Rata-rata & Format Return (Urutkan Senin - Minggu)
+    const orderOfDay = [1, 2, 3, 4, 5, 6, 0]; // 1=Senin ... 0=Minggu
+
+    const results = orderOfDay.map((dayIndex) => {
+      const bucket = dayBuckets[dayIndex];
+
+      // Hitung rata-rata: Total Pax / Jumlah Hari kejadian
+      // Contoh: Total 50.000 pax dibagi 4 hari Senin = 12.500
+      const average = bucket.count > 0 ? bucket.total / bucket.count : 0;
+
+      return {
+        day: bucket.name,
+        avgPax: Math.round(average), // Bulatkan ke angka bulat terdekat
+      };
+    });
+
+    return results;
+  } catch (error) {
+    console.error('Error in getDailyAveragePaxService:', error);
+    throw new Error('Gagal menghitung rata-rata penumpang harian.');
+  }
+};
+
+export const BudgetBurnRateService = async (
+  year: number,
+  month: number
+): Promise<BudgetBurnRateType[]> => {
+  try {
+  } catch (error) {}
 };

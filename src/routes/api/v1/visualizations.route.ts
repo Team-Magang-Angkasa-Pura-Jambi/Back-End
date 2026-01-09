@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   EnergyOutlookController,
   getBudgetTrackingController,
+  getDailyAveragePaxController,
   getEfficiencyRatioController,
   getUnifiedComparisonController,
   getYearlyAnalysisController,
@@ -47,5 +48,11 @@ export default (router: Router) => {
     prefix + '/efficiency-ratio',
     validate(getEfficiencyRatioSchema),
     asyncHandler(getEfficiencyRatioController)
+  );
+
+  router.get(
+    prefix + '/daily-average-pax',
+    validate(getEfficiencyRatioSchema),
+    asyncHandler(getDailyAveragePaxController)
   );
 };

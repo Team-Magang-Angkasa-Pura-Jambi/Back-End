@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import {
   EnergyOutlookService,
   getBudgetTrackingService,
+  getDailyAveragePaxService,
   getEfficiencyRatioService,
   getUnifiedComparisonService,
   getYearlyAnalysisService,
@@ -108,6 +109,20 @@ export const getEfficiencyRatioController = async (
   try {
     const { year, month } = res.locals.validatedData.query;
     const result = await getEfficiencyRatioService(year, month);
+    return res200({ res, data: result, message: 'success' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getDailyAveragePaxController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { year, month } = res.locals.validatedData.query;
+    const result = await getDailyAveragePaxService(year, month);
     return res200({ res, data: result, message: 'success' });
   } catch (error) {
     next(error);
