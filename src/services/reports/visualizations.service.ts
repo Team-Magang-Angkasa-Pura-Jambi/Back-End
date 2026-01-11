@@ -1,13 +1,24 @@
 import { Decimal } from '@prisma/client/runtime/library';
 import prisma from '../../configs/db.js';
 import { UsageCategory } from '../../generated/prisma/index.js';
+import { Error400, Error404 } from '../../utils/customError.js';
+
+export type MeterRankInsightType = {
+  percentage_used: number;
+  estimated_cost: number;
+  avg_daily_consumption: number;
+  trend: 'NAIK' | 'TURUN' | 'STABIL' | 'UNKNOWN';
+  trend_percentage: number;
+  recommendation: string;
+};
 
 export type MeterRankType = {
   code: string;
+  unit_of_measurement: string;
   consumption: number;
   budget: number;
-  status: UsageCategory;
-  unit_of_measurement: string;
+  status: string;
+  insight: MeterRankInsightType;
 };
 
 export type EnergyOutlookType = {
@@ -36,6 +47,23 @@ export type YearlyAnalysisType = {
   consumption: number;
   cost: number;
   budget: number;
+};
+
+export type YearlyAnalysisResult = {
+  chartData: YearlyAnalysisType[];
+  summary: {
+    peakMonth: string;
+    peakCost: number;
+    peakConsumptionMonth: string;
+    peakConsumptionValue: number;
+    totalAnnualBudget: number;
+    totalRealizedCost: number;
+    realizedSavings: number;
+    isDeficit: boolean;
+    overBudgetCount: number;
+    budgetUtilization: number;
+    avgCostYTD: number;
+  };
 };
 
 export type UnifiedEnergyComparisonType = {
@@ -78,11 +106,42 @@ export type BudgetBurnRateType = {
   efficent: number;
 };
 
+export type getFuelRefillAnalysisType = {
+  month: string;
+  refill: number;
+  remainingStock: number;
+  consumption: number;
+};
+
+export type GetAnalysisQuery = {
+  energyType: string;
+  month: string;
+  meterId?: number;
+};
+
+export type DailyAnalysisRecord = {
+  date: Date;
+  actual_consumption: number | null;
+  consumption_cost: number | null;
+  prediction: number | null;
+  classification: UsageCategory | null;
+  confidence_score: Decimal | null;
+  efficiency_target: number | null;
+  efficiency_target_cost: number | null;
+};
+
+export type MeterAnalysisData = {
+  meterId: number;
+  meterName: string;
+  data: DailyAnalysisRecord[];
+};
+
 export const MeterRankService = async (): Promise<MeterRankType[]> => {
   try {
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(
+
+    const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfCurrentMonth = new Date(
       now.getFullYear(),
       now.getMonth() + 1,
       0,
@@ -90,6 +149,18 @@ export const MeterRankService = async (): Promise<MeterRankType[]> => {
       59,
       59
     );
+
+    const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfPrevMonth = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      0,
+      23,
+      59,
+      59
+    );
+
+    const daysPassedCurrentMonth = now.getDate();
 
     const data = await prisma.meter.findMany({
       where: { status: 'Active' },
@@ -104,9 +175,16 @@ export const MeterRankService = async (): Promise<MeterRankType[]> => {
             },
           },
         },
+
         daily_summaries: {
-          where: { summary_date: { gte: startOfMonth, lte: endOfMonth } },
+          where: {
+            summary_date: {
+              gte: startOfPrevMonth,
+              lte: endOfCurrentMonth,
+            },
+          },
           select: {
+            summary_date: true,
             total_consumption: true,
             classification: { select: { classification: true } },
           },
@@ -129,7 +207,7 @@ export const MeterRankService = async (): Promise<MeterRankType[]> => {
       },
     });
 
-    const result = data.map((meter) => {
+    const result: MeterRankType[] = data.map((meter) => {
       const allRates =
         meter.energy_type?.reading_types.flatMap((rt) =>
           rt.rates.map((r) => new Decimal(r.value).toNumber())
@@ -140,42 +218,103 @@ export const MeterRankService = async (): Promise<MeterRankType[]> => {
           ? allRates.reduce((acc, curr) => acc + curr, 0) / allRates.length
           : 1500;
 
-      const totalConsumptionMonth = meter.daily_summaries.reduce(
+      const currentMonthSummaries = meter.daily_summaries.filter(
+        (s) => new Date(s.summary_date) >= startOfCurrentMonth
+      );
+
+      const prevMonthSummaries = meter.daily_summaries.filter(
+        (s) =>
+          new Date(s.summary_date) >= startOfPrevMonth &&
+          new Date(s.summary_date) < startOfCurrentMonth
+      );
+
+      const consumptionCurrent = currentMonthSummaries.reduce(
+        (acc, curr) =>
+          acc + new Decimal(curr.total_consumption ?? 0).toNumber(),
+        0
+      );
+
+      const consumptionPrev = prevMonthSummaries.reduce(
         (acc, curr) =>
           acc + new Decimal(curr.total_consumption ?? 0).toNumber(),
         0
       );
 
       const latestStatus =
-        meter.daily_summaries[0]?.classification?.classification;
+        currentMonthSummaries[0]?.classification?.classification ?? 'UNKNOWN';
       const allocation = meter.budget_allocations[0];
       const budgetParent = allocation?.budget;
-      let budgetInKwh = 0;
+      let budgetInUnit = 0;
 
       if (budgetParent && allocation.weight) {
         const start = new Date(budgetParent.period_start);
         const end = new Date(budgetParent.period_end);
+
         const monthDuration =
           (end.getFullYear() - start.getFullYear()) * 12 +
-            (end.getMonth() - start.getMonth()) || 1;
+          (end.getMonth() - start.getMonth()) +
+          1;
 
         const totalBudgetInRp = new Decimal(
           budgetParent.total_budget
         ).toNumber();
-        const monthlyBudgetParent = totalBudgetInRp / monthDuration;
+        const monthlyBudgetParent = totalBudgetInRp / (monthDuration || 1);
         const meterMonthlyBudgetRp =
           monthlyBudgetParent * new Decimal(allocation.weight).toNumber();
 
-        budgetInKwh = meterMonthlyBudgetRp / specificAvgRate;
+        budgetInUnit = meterMonthlyBudgetRp / specificAvgRate;
       }
+
+      const estimatedCost = consumptionCurrent * specificAvgRate;
+
+      const percentageUsed =
+        budgetInUnit > 0 ? (consumptionCurrent / budgetInUnit) * 100 : 0;
+
+      const currentADC = consumptionCurrent / (daysPassedCurrentMonth || 1);
+
+      const daysInPrevMonth =
+        prevMonthSummaries.length ||
+        new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+      const prevADC = consumptionPrev / (daysInPrevMonth || 1);
+
+      let trend: 'NAIK' | 'TURUN' | 'STABIL' | 'UNKNOWN' = 'STABIL';
+      let trendDiffPercent = 0;
+
+      if (prevADC > 0) {
+        trendDiffPercent = ((currentADC - prevADC) / prevADC) * 100;
+        if (trendDiffPercent > 5) trend = 'NAIK';
+        else if (trendDiffPercent < -5) trend = 'TURUN';
+      } else if (currentADC > 0) {
+        trend = 'NAIK';
+        trendDiffPercent = 100;
+      } else {
+        trend = 'UNKNOWN';
+      }
+
+      let recommendation = 'Pemakaian normal.';
+      if (percentageUsed > 100)
+        recommendation = 'Over Budget! Segera lakukan efisiensi.';
+      else if (percentageUsed > 80)
+        recommendation = 'Hati-hati, mendekati batas anggaran.';
+      else if (trend === 'NAIK' && percentageUsed > 50)
+        recommendation = 'Tren naik signifikan, cek potensi kebocoran.';
+      else if (trend === 'TURUN') recommendation = 'Efisiensi berjalan baik.';
 
       return {
         code: meter.meter_code,
         unit_of_measurement:
           meter.energy_type?.unit_of_measurement ?? 'UNKNOWN',
-        consumption: totalConsumptionMonth,
-        budget: Math.round(budgetInKwh),
-        status: (latestStatus as UsageCategory) ?? 'UNKNOWN',
+        consumption: Number(consumptionCurrent.toFixed(2)),
+        budget: Math.round(budgetInUnit),
+        status: latestStatus as string,
+        insight: {
+          percentage_used: Number(percentageUsed.toFixed(1)),
+          estimated_cost: Math.round(estimatedCost),
+          avg_daily_consumption: Number(currentADC.toFixed(2)),
+          trend,
+          trend_percentage: Number(Math.abs(trendDiffPercent).toFixed(1)),
+          recommendation,
+        },
       };
     });
 
@@ -186,7 +325,7 @@ export const MeterRankService = async (): Promise<MeterRankType[]> => {
     });
   } catch (error) {
     console.error('Error in MeterRankService:', error);
-    throw new Error('Gagal mengambil data ranking meteran.');
+    throw new Error400('Gagal mengambil data ranking meteran beserta insight.');
   }
 };
 
@@ -387,8 +526,23 @@ export const getBudgetTrackingService = async (): Promise<
 export const getYearlyAnalysisService = async (
   energyTypeName: string,
   year: number
-): Promise<YearlyAnalysisType[]> => {
+): Promise<YearlyAnalysisResult> => {
   try {
+    const parentBudget = await prisma.annualBudget.findFirst({
+      where: {
+        parent_budget_id: null,
+        energy_type: {
+          type_name: energyTypeName,
+        },
+
+        period_start: { lte: new Date(`${year}-12-31`) },
+        period_end: { gte: new Date(`${year}-01-01`) },
+      },
+      include: {
+        child_budgets: true,
+      },
+    });
+
     const summaries = await prisma.dailySummary.findMany({
       where: {
         summary_date: {
@@ -408,51 +562,148 @@ export const getYearlyAnalysisService = async (
       },
     });
 
-    const budgetRecord = await prisma.annualBudget.findFirst({
-      where: {
-        period_start: {
-          gte: new Date(`${year}-01-01`),
-          lte: new Date(`${year}-12-31`),
-        },
-        parent_budget_id: null,
-        energy_type: {
-          type_name: energyTypeName,
-        },
-      },
-    });
+    const result: YearlyAnalysisType[] = [];
 
-    const totalBudget = budgetRecord ? Number(budgetRecord.total_budget) : 0;
-    const monthlyBudget = totalBudget / 12;
+    for (let i = 0; i < 12; i++) {
+      const monthName = MONTH_NAMES[i];
 
-    const aggregatedData = Array.from({ length: 12 }, (_, index) => ({
-      monthIndex: index,
-      monthName: MONTH_NAMES[index],
-      consumption: 0,
-      cost: 0,
-    }));
+      const startOfMonth = new Date(year, i, 1);
+      startOfMonth.setHours(0, 0, 0, 0);
 
-    for (const item of summaries) {
-      const date = new Date(item.summary_date);
-      const monthIndex = date.getMonth();
+      const endOfMonth = new Date(year, i + 1, 0);
+      endOfMonth.setHours(23, 59, 59, 999);
 
-      if (aggregatedData[monthIndex]) {
-        aggregatedData[monthIndex].consumption += Number(
-          item.total_consumption
-        );
-        aggregatedData[monthIndex].cost += Number(item.total_cost);
+      let calculatedMonthlyBudget = 0;
+
+      if (parentBudget) {
+        const activeChild = parentBudget.child_budgets.find((child) => {
+          const cStart = new Date(child.period_start);
+          const cEnd = new Date(child.period_end);
+          cStart.setHours(0, 0, 0, 0);
+          cEnd.setHours(23, 59, 59, 999);
+
+          return cStart <= endOfMonth && cEnd >= startOfMonth;
+        });
+
+        if (activeChild) {
+          const cStart = new Date(activeChild.period_start);
+          const cEnd = new Date(activeChild.period_end);
+
+          const durationMonths =
+            (cEnd.getFullYear() - cStart.getFullYear()) * 12 +
+            (cEnd.getMonth() - cStart.getMonth()) +
+            1;
+
+          if (durationMonths > 0) {
+            calculatedMonthlyBudget =
+              Number(activeChild.total_budget) / durationMonths;
+          }
+        } else {
+          const pStart = new Date(parentBudget.period_start);
+          const pEnd = new Date(parentBudget.period_end);
+          pStart.setHours(0, 0, 0, 0);
+          pEnd.setHours(23, 59, 59, 999);
+
+          if (pStart <= endOfMonth && pEnd >= startOfMonth) {
+            const parentDuration =
+              (pEnd.getFullYear() - pStart.getFullYear()) * 12 +
+              (pEnd.getMonth() - pStart.getMonth()) +
+              1;
+
+            if (parentDuration > 0) {
+              calculatedMonthlyBudget =
+                Number(parentBudget.total_budget) / parentDuration;
+            }
+          }
+        }
       }
+
+      const monthlySummaries = summaries.filter((item) => {
+        const d = new Date(item.summary_date);
+        return d.getMonth() === i && d.getFullYear() === year;
+      });
+
+      const totalConsumption = monthlySummaries.reduce(
+        (sum, item) => sum + Number(item.total_consumption),
+        0
+      );
+      const totalCost = monthlySummaries.reduce(
+        (sum, item) => sum + Number(item.total_cost),
+        0
+      );
+
+      result.push({
+        month: monthName,
+        consumption: totalConsumption,
+        cost: totalCost,
+        budget: calculatedMonthlyBudget,
+      });
     }
 
-    const result: YearlyAnalysisType[] = aggregatedData.map((data) => ({
-      month: data.monthName,
-      consumption: data.consumption,
-      cost: data.cost,
-      budget: monthlyBudget,
-    }));
+    const now = new Date();
+    const currentMonthIndex = now.getMonth();
+    const currentYear = now.getFullYear();
 
-    return result;
+    const isCurrentYear = year === currentYear;
+
+    let peakMonthObj = result[0];
+    let peakConsumptionObj = result[0];
+    let overBudgetCount = 0;
+
+    let totalAnnualBudget = 0;
+    let totalRealizedBudget = 0;
+    let totalRealizedCost = 0;
+
+    const validMonthsCount = isCurrentYear ? currentMonthIndex + 1 : 12;
+
+    result.forEach((data, index) => {
+      totalAnnualBudget += data.budget;
+      totalRealizedCost += data.cost;
+
+      if (data.cost > peakMonthObj.cost) peakMonthObj = data;
+      if (data.consumption > peakConsumptionObj.consumption)
+        peakConsumptionObj = data;
+
+      if (data.cost > data.budget && data.budget > 0) {
+        overBudgetCount++;
+      }
+
+      const isPassedMonth =
+        !isCurrentYear || (isCurrentYear && index <= currentMonthIndex);
+
+      if (isPassedMonth) {
+        totalRealizedBudget += data.budget;
+      }
+    });
+
+    const realizedSavings = totalRealizedBudget - totalRealizedCost;
+    const isDeficit = realizedSavings < 0;
+
+    const budgetUtilization =
+      totalRealizedBudget > 0
+        ? (totalRealizedCost / totalRealizedBudget) * 100
+        : 0;
+
+    const avgCostYTD = totalRealizedCost / validMonthsCount;
+
+    return {
+      chartData: result,
+      summary: {
+        peakMonth: peakMonthObj.month,
+        peakCost: peakMonthObj.cost,
+        peakConsumptionMonth: peakConsumptionObj.month,
+        peakConsumptionValue: peakConsumptionObj.consumption,
+        totalAnnualBudget,
+        totalRealizedCost,
+        realizedSavings,
+        isDeficit,
+        overBudgetCount,
+        budgetUtilization,
+        avgCostYTD,
+      },
+    };
   } catch (error) {
-    console.error('Error in getYearlyAnalysisService:', error);
+    console.error('Error:', error);
     throw new Error('Gagal menganalisis tren tahunan.');
   }
 };
@@ -867,4 +1118,285 @@ export const getBudgetBurnRateService = async (
     console.error('Error in BudgetBurnRateService:', error);
     return [];
   }
+};
+export const getFuelRefillAnalysisService = async (
+  year: number,
+  meterId: number
+): Promise<getFuelRefillAnalysisType[]> => {
+  try {
+    const startDate = new Date(year, 0, 1);
+    const endDate = new Date(year, 12, 0, 23, 59, 59);
+
+    const [consumptions, stockLogs, lastYearStockData] = await Promise.all([
+      prisma.summaryDetail.findMany({
+        where: {
+          summary: {
+            summary_date: { gte: startDate, lte: endDate },
+            meter_id: meterId,
+          },
+          metric_name: {
+            contains: 'Pemakaian Harian (Fuel)',
+            mode: 'insensitive',
+          },
+        },
+        select: {
+          summary: { select: { summary_date: true } },
+          consumption_value: true,
+        },
+      }),
+
+      prisma.summaryDetail.findMany({
+        where: {
+          summary: {
+            summary_date: { gte: startDate, lte: endDate },
+            meter_id: meterId,
+          },
+          remaining_stock: { not: null },
+        },
+        select: {
+          summary: { select: { summary_date: true } },
+          remaining_stock: true,
+        },
+        orderBy: { summary: { summary_date: 'asc' } },
+      }),
+
+      prisma.summaryDetail.findFirst({
+        where: {
+          summary: {
+            summary_date: { lt: startDate },
+
+            meter_id: meterId,
+          },
+          remaining_stock: { not: null },
+        },
+        orderBy: { summary: { summary_date: 'desc' } },
+
+        select: { remaining_stock: true },
+      }),
+    ]);
+
+    const monthlyStats = new Map<
+      number,
+      { consumption: number; lastStock: number | null }
+    >();
+
+    for (let i = 0; i < 12; i++) {
+      monthlyStats.set(i, { consumption: 0, lastStock: null });
+    }
+
+    consumptions.forEach((item) => {
+      const idx = new Date(item.summary.summary_date).getMonth();
+      const val = Number(item.consumption_value || 0);
+      if (monthlyStats.has(idx)) {
+        monthlyStats.get(idx)!.consumption += val;
+      }
+    });
+
+    stockLogs.forEach((item) => {
+      const idx = new Date(item.summary.summary_date).getMonth();
+      const val = Number(item.remaining_stock || 0);
+      if (monthlyStats.has(idx)) {
+        monthlyStats.get(idx)!.lastStock = val;
+      }
+    });
+
+    const results: getFuelRefillAnalysisType[] = [];
+
+    let previousMonthStock = Number(lastYearStockData?.remaining_stock || 0);
+
+    for (let i = 0; i < 12; i++) {
+      const stats = monthlyStats.get(i)!;
+
+      const currentEndStock =
+        stats.lastStock !== null ? stats.lastStock : previousMonthStock;
+
+      const consumption = stats.consumption;
+
+      let calculatedRefill = currentEndStock - previousMonthStock + consumption;
+
+      if (calculatedRefill < 0) calculatedRefill = 0;
+
+      results.push({
+        month: MONTH_NAMES[i],
+        refill: Math.round(calculatedRefill),
+        consumption: Math.round(consumption),
+        remainingStock: Math.round(currentEndStock),
+      });
+
+      previousMonthStock = currentEndStock;
+    }
+
+    return results;
+  } catch (error) {
+    console.error('Error in getFuelRefillAnalysisService:', error);
+    return [];
+  }
+};
+
+export const getTrentConsumptionService = async (
+  energyTypeName: string,
+  year: number, // [FIX] Tambahkan parameter year
+  month: number, // Bulan 1-12
+  meterId?: number // [FIX] Opsional
+): Promise<MeterAnalysisData[]> => {
+  // [FIX] Gunakan Date.UTC untuk menghindari masalah Timezone server
+  const monthIndex = month - 1;
+  const startDate = new Date(Date.UTC(year, monthIndex, 1));
+  const endDate = new Date(Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999));
+
+  // 1. Validasi Tipe Energi
+  const energyTypeRecord = await prisma.energyType.findUnique({
+    where: { type_name: energyTypeName },
+  });
+
+  if (!energyTypeRecord) {
+    throw new Error404(`Tipe energi '${energyTypeName}' tidak ditemukan.`);
+  }
+
+  const energyTypeId = energyTypeRecord.energy_type_id;
+
+  // 2. Fetch Data Paralel
+  const [summaries, predictions, targets] = await Promise.all([
+    // A. Actual Data
+    prisma.dailySummary.findMany({
+      where: {
+        meter: {
+          energy_type_id: energyTypeId,
+          ...(meterId !== undefined && { meter_id: meterId }), // Cek undefined agar id 0 tetap terbaca (jika ada)
+        },
+        summary_date: { gte: startDate, lte: endDate },
+      },
+      include: {
+        meter: { select: { meter_id: true, meter_code: true } },
+        classification: true,
+      },
+    }),
+
+    // B. Prediction Data
+    prisma.consumptionPrediction.findMany({
+      where: {
+        meter: {
+          energy_type_id: energyTypeId,
+          ...(meterId !== undefined && { meter_id: meterId }),
+        },
+        prediction_date: { gte: startDate, lte: endDate },
+      },
+      include: {
+        meter: { select: { meter_id: true, meter_code: true } },
+      },
+    }),
+
+    // C. Efficiency Targets
+    prisma.efficiencyTarget.findMany({
+      where: {
+        meter: {
+          energy_type_id: energyTypeId,
+          ...(meterId !== undefined && { meter_id: meterId }),
+        },
+        // Ambil target yang aktif/overlap dalam rentang tanggal ini
+        period_start: { lte: endDate },
+        period_end: { gte: startDate },
+      },
+    }),
+  ]);
+
+  // 3. Helper Types & Map Init
+  type TempData = {
+    actual?: number;
+    cost?: number;
+    prediction?: number;
+    classification?: any;
+    confidence?: any;
+  };
+
+  const meterMap = new Map<
+    number,
+    { name: string; dates: Map<string, TempData> }
+  >();
+
+  const getOrInitMeter = (id: number, name: string) => {
+    if (!meterMap.has(id)) {
+      meterMap.set(id, { name, dates: new Map() });
+    }
+    return meterMap.get(id)!;
+  };
+
+  const getOrInitDate = (datesMap: Map<string, TempData>, dateKey: string) => {
+    if (!datesMap.has(dateKey)) {
+      datesMap.set(dateKey, {});
+    }
+    return datesMap.get(dateKey)!;
+  };
+
+  // 4. Mapping Data ke Map Structure
+
+  // Process Summaries
+  for (const item of summaries) {
+    const meterEntry = getOrInitMeter(item.meter_id, item.meter.meter_code);
+    const dateKey = item.summary_date.toISOString().split('T')[0];
+    const dataEntry = getOrInitDate(meterEntry.dates, dateKey);
+
+    dataEntry.actual = item.total_consumption?.toNumber() ?? undefined;
+    dataEntry.cost = item.total_cost?.toNumber() ?? undefined;
+    dataEntry.classification = item.classification?.classification ?? null;
+    dataEntry.confidence = item.classification?.confidence_score ?? null;
+  }
+
+  // Process Predictions
+  for (const item of predictions) {
+    const meterEntry = getOrInitMeter(item.meter_id, item.meter.meter_code);
+    const dateKey = item.prediction_date.toISOString().split('T')[0];
+    const dataEntry = getOrInitDate(meterEntry.dates, dateKey);
+
+    dataEntry.prediction = item.predicted_value?.toNumber() ?? undefined;
+  }
+
+  // 5. Build Time Series (Looping Tanggal Penuh)
+  const finalResults: MeterAnalysisData[] = [];
+
+  for (const [mId, mData] of meterMap.entries()) {
+    const timeSeries: DailyAnalysisRecord[] = [];
+
+    // Gunakan pointer tanggal baru untuk setiap meter agar tidak side-effect
+    const currentDateIter = new Date(startDate);
+
+    while (currentDateIter <= endDate) {
+      const dateKey = currentDateIter.toISOString().split('T')[0];
+      const dayData = mData.dates.get(dateKey) || {};
+
+      // Cari target yang valid pada hari spesifik ini
+      const activeTarget = targets.find(
+        (t) =>
+          t.meter_id === mId &&
+          t.period_start <= currentDateIter &&
+          t.period_end >= currentDateIter
+      );
+
+      timeSeries.push({
+        date: new Date(currentDateIter), // Clone date object
+        actual_consumption: dayData.actual ?? null,
+        consumption_cost: dayData.cost ?? null,
+        prediction: dayData.prediction ?? null,
+        classification: dayData.classification ?? null,
+        confidence_score: dayData.confidence ?? null,
+        efficiency_target: activeTarget
+          ? Number(activeTarget.target_value) // Pastikan convert Decimal ke Number
+          : null,
+        efficiency_target_cost: activeTarget?.target_cost
+          ? Number(activeTarget.target_cost)
+          : null,
+      });
+
+      // Increment hari (UTC Safe)
+      currentDateIter.setUTCDate(currentDateIter.getUTCDate() + 1);
+    }
+
+    finalResults.push({
+      meterId: mId,
+      meterName: mData.name,
+      data: timeSeries,
+    });
+  }
+
+  return finalResults;
 };

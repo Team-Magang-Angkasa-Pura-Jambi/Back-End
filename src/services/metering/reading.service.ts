@@ -211,17 +211,20 @@ export class ReadingService extends GenericBaseService<
   }
   public override async delete(sessionId: number): Promise<ReadingSession> {
     return this._handleCrudOperation(() =>
-      this._prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // PERBAIKAN: Gunakan this.prisma.$transaction, bukan model.delete
+      prisma.$transaction(async (tx) => {
+        // 1. Cari data yang akan dihapus
         const sessionToDelete = await tx.readingSession.findUniqueOrThrow({
           where: { session_id: sessionId },
-          select: { meter_id: true, reading_date: true },
         });
 
+        // 2. Cek Session Terakhir untuk Meter tersebut
         const latestSession = await tx.readingSession.findFirst({
           where: { meter_id: sessionToDelete.meter_id },
           orderBy: { reading_date: 'desc' },
         });
 
+        // 3. Validasi: Hanya boleh menghapus jika ini adalah data terakhir
         if (latestSession && latestSession.session_id !== sessionId) {
           throw new Error400(
             'Hanya data pembacaan terakhir yang dapat dihapus. Untuk memperbaiki data lama, hapus entri hingga tanggal tersebut dan input ulang.'
@@ -230,6 +233,7 @@ export class ReadingService extends GenericBaseService<
 
         const { meter_id, reading_date } = sessionToDelete;
 
+        // 4. Hapus Data Terkait (DailySummary)
         await tx.dailySummary.deleteMany({
           where: {
             meter_id,
@@ -237,6 +241,7 @@ export class ReadingService extends GenericBaseService<
           },
         });
 
+        // 5. Hapus Data Terkait (DailyLogbook)
         await tx.dailyLogbook.deleteMany({
           where: {
             meter_id,
@@ -244,6 +249,7 @@ export class ReadingService extends GenericBaseService<
           },
         });
 
+        // 6. Hapus ReadingSession
         const deletedSession = await tx.readingSession.delete({
           where: { session_id: sessionId },
         });

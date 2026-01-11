@@ -7,24 +7,6 @@ class AnalysisController {
   private analysisService = new AnalysisService();
   // data untuk line chart
 
-  public getMonthlyAnalysis = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const query = res.locals.validatedData.query;
-      const result = await this.analysisService.getMonthlyAnalysis(query);
-      res200({
-        res,
-        data: result,
-        message: 'Analisis bulanan berhasil diambil.',
-      });
-    } catch (error) {
-      next(error);
-    }
-  };
-
   public getMonthlyFuelStockAnalysis = async (
     req: Request,
     res: Response,
@@ -261,33 +243,6 @@ class AnalysisController {
       next(error);
     }
   };
-
-  // budget
-  // public getDashboardSummary = async (
-  //   req: Request,
-  //   res: Response,
-  //   next: NextFunction
-  // ) => {
-  //   try {
-  //     // Ambil tahun dari query param, default ke tahun ini jika kosong
-  //     const yearParam = req.query.year as string;
-  //     const year = yearParam ? parseInt(yearParam) : new Date().getFullYear();
-
-  //     if (isNaN(year)) {
-  //       return res.status(400).json({ message: 'Invalid year parameter' });
-  //     }
-
-  //     const data = await budgetAnalysisService.getYearlySummary(year);
-
-  //     res200({
-  //       res,
-  //       message: `Budget summary for year ${year} retrieved successfully`,
-  //       data,
-  //     });
-  //   } catch (error) {
-  //     next(error);
-  //   }
-  // };
 }
 
 export const analysisController = new AnalysisController();

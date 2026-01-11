@@ -68,3 +68,31 @@ export const getBudgetBurnRateSchema = z.object({
       .max(12, 'Month must be at most 12 (December)'),
   }),
 });
+
+export const getFuelRefillAnalysisQuery = z.object({
+  query: z.object({
+    meterId: z.coerce.number().int().positive(),
+    year: z.coerce
+      .number()
+      .int()
+      .min(2000)
+      .max(new Date().getFullYear() + 1),
+  }),
+});
+
+export const getTrentCounsumptionSchema = z.object({
+  query: z.object({
+    energyTypeName: z.string(),
+    year: z.coerce
+      .number()
+      .int()
+      .min(2000)
+      .max(new Date().getFullYear() + 1),
+    month: z.coerce
+      .number()
+      .int()
+      .min(1, 'Month must be at least 1 (January)')
+      .max(12, 'Month must be at most 12 (December)'),
+    meterId: z.coerce.number().int().positive().optional(),
+  }),
+});

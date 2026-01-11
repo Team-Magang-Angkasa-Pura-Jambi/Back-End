@@ -21,13 +21,6 @@ export default (router: Router) => {
   const prefix = '/analytics';
 
   router.get(
-    prefix,
-    authorize('Admin', 'SuperAdmin', 'Technician'),
-    validate(analysisQuerySchema),
-    asyncHandler(analysisController.getMonthlyAnalysis)
-  );
-
-  router.get(
     `${prefix}/fuel-stock`,
     authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(fuelStockAnalysisQuerySchema),

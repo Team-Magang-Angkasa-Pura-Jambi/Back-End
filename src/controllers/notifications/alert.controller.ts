@@ -4,22 +4,6 @@ import { res200 } from '../../utils/response.js';
 import { Error401 } from '../../utils/customError.js';
 
 class AlertController {
-  public getAll = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      // PERBAIKAN: Panggil service yang sudah memiliki logika paginasi yang benar.
-      const query = res.locals.validatedData.query;
-      const { data, meta } = await alertService.findAllWithQuery(query);
-      res200({
-        res,
-        data, // Kembalikan data langsung
-        meta, // Kembalikan meta untuk info paginasi
-        message: 'Alerts berhasil diambil.',
-      });
-    } catch (error) {
-      next(error);
-    }
-  };
-
   public getSystemAlerts = async (
     req: Request,
     res: Response,
@@ -27,14 +11,12 @@ class AlertController {
   ) => {
     try {
       const query = res.locals.validatedData.query;
-      const { data, meta } = await alertService.findAllWithQuery(
-        query,
-        'system'
-      );
+      const { data, meta } = await alertService.getSystemAlerts();
 
       res200({
         res,
-        data: { data, meta },
+        data: { meters: data, meta },
+
         message: 'Alert sistem berhasil diambil.',
       });
     } catch (error) {
@@ -47,13 +29,28 @@ class AlertController {
     res: Response,
     next: NextFunction
   ) => {
-    const query = res.locals.validatedData.query;
-    const { data, meta } = await alertService.findAllWithQuery(query, 'meters');
+    const { data, meta } = await alertService.getMetersAlerts();
     res200({
       res,
-      data: { data, meta },
+      data: { alerts: data, meta },
       message: 'Alert meter berhasil diambil.',
     });
+  };
+
+  public getAll = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      // PERBAIKAN: Panggil service yang sudah memiliki logika paginasi yang benar.
+      const query = res.locals.validatedData.query;
+      // const { data, meta } = await alertService.findAllWithQuery(query);
+      // res200({
+      //   res,
+      //   data, // Kembalikan data langsung
+      //   meta, // Kembalikan meta untuk info paginasi
+      //   message: 'Alerts berhasil diambil.',
+      // });
+    } catch (error) {
+      next(error);
+    }
   };
 
   public getLatest = async (
@@ -158,22 +155,34 @@ class AlertController {
     next: NextFunction
   ) => {
     try {
-      const user = (req as any).user;
-      if (!user?.id) throw new Error401('User tidak terautentikasi.');
-
       const { alertId } = res.locals.validatedData.params;
-      const { status } = res.locals.validatedData.body;
-
-      const updatedAlert = await alertService.updateStatus(
-        alertId,
-        status,
-        Number(user.id)
-      );
+      const updatedAlert = await alertService.updateStatus(alertId);
 
       res200({
         res,
         data: updatedAlert,
         message: `Status alert berhasil diubah menjadi ${status}.`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public bulkUpdateStatus = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { alertIds } = res.locals.validatedData.body;
+      const updatedAlerts = await Promise.all(
+        alertIds.map((alertId: number) => alertService.updateStatus(alertId))
+      );
+
+      res200({
+        res,
+        data: updatedAlerts,
+        message: `Status alert berhasil diubah untuk ${updatedAlerts.length} alert.`,
       });
     } catch (error) {
       next(error);

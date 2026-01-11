@@ -35,12 +35,17 @@ export const updateAlertStatusSchema = z.object({
   params: z.object({
     alertId: positiveInt('ID Alert'),
   }),
-  body: z.object({
-    status: z.nativeEnum(AlertStatus),
-  }),
 });
 
 export const bulkDeleteAlertsSchema = z.object({
+  body: z.object({
+    alertIds: z
+      .array(positiveInt('Alert ID'))
+      .min(1, 'Setidaknya satu ID alert diperlukan.'),
+  }),
+});
+
+export const bulkUpdateAlertsSchema = z.object({
   body: z.object({
     alertIds: z
       .array(positiveInt('Alert ID'))

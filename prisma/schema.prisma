@@ -419,16 +419,11 @@ model Alert {
   description             String      @db.Text
   status                  AlertStatus @default(NEW)
   alert_timestamp         DateTime    @default(now())
-
-  
   meter_id                Int?
   target_id               Int?
   acknowledged_by_user_id Int?
-
-  
   actual_value            Decimal?    @db.Decimal(12, 2)
   target_value_at_trigger Decimal?    @db.Decimal(12, 2)
-
   meter           Meter?           @relation(fields: [meter_id], references: [meter_id])
   target          EfficiencyTarget? @relation(fields: [target_id], references: [target_id])
   acknowledged_by User?            @relation(fields: [acknowledged_by_user_id], references: [user_id])

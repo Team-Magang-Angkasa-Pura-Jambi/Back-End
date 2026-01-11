@@ -5,6 +5,8 @@ import {
   getBudgetTrackingController,
   getDailyAveragePaxController,
   getEfficiencyRatioController,
+  getFuelRefillAnalysisController,
+  getTrentCounsumptionController,
   getUnifiedComparisonController,
   getYearlyAnalysisController,
   getYearlyHeatmapController,
@@ -15,11 +17,12 @@ import { validate } from '../../../utils/validate.js';
 import {
   getBudgetBurnRateSchema,
   getEfficiencyRatioSchema,
+  getFuelRefillAnalysisQuery,
+  getTrentCounsumptionSchema,
   getUnifiedComparisonSchema,
   getYearlyHeatmapQuery,
   YearlyAnalysisQuery,
 } from '../../../validations/reports/visualizations.validation.js';
-import { get } from 'http';
 
 export default (router: Router) => {
   const prefix = '/visualizations';
@@ -62,5 +65,16 @@ export default (router: Router) => {
     prefix + '/budget-burn-rate',
     validate(getBudgetBurnRateSchema),
     asyncHandler(getBudgetBurnRateController)
+  );
+  router.get(
+    prefix + '/fuel-refill-analysis',
+    validate(getFuelRefillAnalysisQuery),
+    asyncHandler(getFuelRefillAnalysisController)
+  );
+
+  router.get(
+    prefix + '/trent-consumption',
+    validate(getTrentCounsumptionSchema),
+    asyncHandler(getTrentCounsumptionController)
   );
 };

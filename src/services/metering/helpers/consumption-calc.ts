@@ -207,7 +207,7 @@ export const _calculateFuelSummary = async (
   if (!mainType) return [];
 
   const getDetailValue = (session: SessionWithDetails | null, typeId: number) =>
-    session?.details.find((d) => d.reading_type_id === typeId)?.value;
+    session?.details.find((d) => d.reading_type_id === typeId)?.value ?? 0;
 
   const rate = priceScheme.rates.find(
     (r) => r.reading_type_id === mainType.reading_type_id
@@ -220,12 +220,13 @@ export const _calculateFuelSummary = async (
   }
   const HARGA_SATUAN = new Prisma.Decimal(rate.value);
 
-  const currentHeight =
-    getDetailValue(currentSession, mainType.reading_type_id) ??
-    new Prisma.Decimal(0);
-  const previousHeight =
-    getDetailValue(previousSession, mainType.reading_type_id) ??
-    new Prisma.Decimal(0);
+  const currentHeight = new Prisma.Decimal(
+    getDetailValue(currentSession, mainType.reading_type_id) ?? 0
+  );
+
+  const previousHeight = new Prisma.Decimal(
+    getDetailValue(previousSession, mainType.reading_type_id) ?? 0
+  );
 
   const heightDifference = previousHeight.minus(currentHeight);
   let consumptionInLiters: Prisma.Decimal;
@@ -340,7 +341,6 @@ export const _calculateFuelSummary = async (
       previous_reading: previousHeight,
       consumption_value: consumptionInLiters,
       consumption_cost: consumptionInLiters.times(HARGA_SATUAN),
-
       remaining_stock: remainingStockLiters,
     },
   ];

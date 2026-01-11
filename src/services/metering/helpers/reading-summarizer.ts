@@ -48,7 +48,7 @@ export const _createOrUpdateDistributedSummary = async (
     data: summaryDetails.map((detail) => {
       const { energy_type, ...rest } = detail;
 
-      const energyTypeId = (energy_type as any)?.connect?.energy_type_id;
+      const energyTypeId = energy_type?.connect?.energy_type_id;
 
       if (!energyTypeId) {
         throw new Error('Energy Type ID is missing in summary details');
@@ -192,11 +192,16 @@ export const _updateDailySummary = async (
 
   let previousSession: SessionWithDetails | null;
 
-  if (meter.energy_type.type_name === 'Fuel') {
+  const typeFuel = await tx.energyType.findUnique({
+    where: { type_name: 'Fuel' },
+    select: { type_name: true },
+  });
+
+  if (meter.energy_type.type_name === typeFuel?.type_name) {
     const previousFuelSession = await tx.readingSession.findFirst({
       where: {
         meter_id: meter.meter_id,
-        // reading_date: { lt: dateForDb },
+        reading_date: { lt: dateForDb },
       },
       orderBy: { reading_date: 'desc' },
       include: { details: true },

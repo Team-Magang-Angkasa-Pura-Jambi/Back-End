@@ -6,6 +6,8 @@ import {
   getBudgetTrackingService,
   getDailyAveragePaxService,
   getEfficiencyRatioService,
+  getFuelRefillAnalysisService,
+  getTrentConsumptionService,
   getUnifiedComparisonService,
   getYearlyAnalysisService,
   getYearlyHeatmapService,
@@ -144,6 +146,47 @@ export const getBudgetBurnRateController = async (
     }
     const result = await getBudgetBurnRateService(year, month);
     return res200({ res, data: result, message: 'success' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getFuelRefillAnalysisController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { year, meterId } = res.locals.validatedData.query;
+    if (!year || !meterId) {
+      throw new Error400('filters is required');
+    }
+    const result = await getFuelRefillAnalysisService(year, meterId);
+    return res200({ res, data: result, message: 'success' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getTrentCounsumptionController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { energyTypeName, year, month, meterId } =
+      res.locals.validatedData.query;
+    const result = await getTrentConsumptionService(
+      energyTypeName,
+      year,
+      month,
+      meterId
+    );
+    res200({
+      res,
+      data: result,
+      message: 'Analisis bulanan berhasil diambil.',
+    });
   } catch (error) {
     next(error);
   }
