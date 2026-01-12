@@ -4,7 +4,6 @@ import { GenericBaseService } from '../../utils/GenericBaseService.js';
 import type {
   Alert,
   PrismaAlert,
-  GetAlertsQuery,
   UpdateAlertBody,
 } from '../../types/notifications/alert.types.js';
 
@@ -22,7 +21,6 @@ export class AlertService extends GenericBaseService<
   constructor() {
     super(prisma, prisma.alert, 'alert_id');
   }
-
   public async getMetersAlerts() {
     try {
       const [alerts, total] = await prisma.$transaction([
@@ -46,7 +44,7 @@ export class AlertService extends GenericBaseService<
             },
           },
           orderBy: {
-            alert_timestamp: 'desc', // Alert terbaru muncul paling atas
+            alert_timestamp: 'desc',
           },
         }),
         prisma.alert.count({
@@ -54,8 +52,26 @@ export class AlertService extends GenericBaseService<
         }),
       ]);
 
+      const formattedAlerts = alerts.map((alert) => ({
+        alert_id: alert.alert_id,
+        target_id: alert.target_id ?? null,
+        title: alert.title,
+        description: alert.description,
+        status: alert.status,
+        actual_value: alert.actual_value ? Number(alert.actual_value) : null,
+        target_value_at_trigger: alert.target_value_at_trigger
+          ? Number(alert.target_value_at_trigger)
+          : null,
+
+        meter_code: alert.meter?.meter_code ?? null,
+        acknowledged_by: alert.acknowledged_by_user_id ?? null,
+        username: alert.acknowledged_by?.username ?? null,
+
+        alert_timestamp: alert.alert_timestamp,
+      }));
+
       return {
-        data: alerts,
+        data: formattedAlerts,
         meta: {
           total: total,
         },
@@ -74,36 +90,52 @@ export class AlertService extends GenericBaseService<
             meter_id: null,
           },
           include: {
-            meter: {
+            acknowledged_by: {
               select: {
-                meter_code: true,
-                energy_type: {
-                  select: { type_name: true },
-                },
+                username: true,
               },
             },
           },
           orderBy: {
-            alert_timestamp: 'desc', // Alert terbaru muncul paling atas
+            alert_timestamp: 'desc',
           },
         }),
         prisma.alert.count({
-          where: { meter_id: { not: null } },
+          where: { meter_id: null },
         }),
       ]);
 
+      const formattedAlerts = alerts.map((alert) => ({
+        alert_id: alert.alert_id,
+        target_id: alert.target_id ?? null,
+        title: alert.title,
+        description: alert.description,
+        status: alert.status,
+        actual_value: alert.actual_value ? Number(alert.actual_value) : null,
+        target_value_at_trigger: alert.target_value_at_trigger
+          ? Number(alert.target_value_at_trigger)
+          : null,
+
+        meter_code: null,
+
+        acknowledged_by: alert.acknowledged_by_user_id ?? null,
+        username: alert.acknowledged_by?.username ?? null,
+
+        alert_timestamp: alert.alert_timestamp,
+      }));
+
       return {
-        data: alerts,
+        data: formattedAlerts,
         meta: {
           total: total,
         },
       };
     } catch (error) {
-      console.error('Error fetching meter alerts:', error);
-      throw new Error('Gagal mengambil data alert meteran.');
+      console.error('Error fetching system alerts:', error);
+      throw new Error('Gagal mengambil data alert sistem.');
     }
   }
-  // --------------------------
+
   public async getUnreadCount(meterId?: number): Promise<number> {
     return this._handleCrudOperation(() =>
       this._model.count({

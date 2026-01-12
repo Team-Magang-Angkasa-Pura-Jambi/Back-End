@@ -455,7 +455,7 @@ export const getYearlyHeatmapService = async (
       select: {
         classification_date: true,
         classification: true,
-        confidence_score: true,
+        confidence_score: true, // This is already Decimal from Prisma
       },
       orderBy: { classification_date: 'asc' },
     });

@@ -3,12 +3,8 @@
 import prisma from '../../configs/db.js';
 import type { Prisma } from '../../generated/prisma/index.js';
 // import { socketServer } from '../socket-instance.js';
-import type { GetNotificationSchemaQuery } from '../../types/operations/notification.types.js';
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
-import type {
-  NotificationSchemaBody,
-  UpdateNotificationSchemaBody,
-} from '../../types/operations/notification.types.js';
+import type { UpdateNotificationSchemaBody } from '../../types/operations/notification.types.js';
 import { SocketServer } from '../../configs/socket.js';
 
 type CreateNotificationInput = {

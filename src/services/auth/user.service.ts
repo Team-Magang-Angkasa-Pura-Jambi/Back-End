@@ -12,6 +12,13 @@ import { notificationService } from '../notifications/notification.service.js';
 import { DefaultArgs } from '../../generated/prisma/runtime/library.js';
 import { CustomErrorMessages } from '../../utils/baseService.js';
 
+export interface userHistory {
+  id: number;
+  type: string;
+  timestamp: string;
+  description: string;
+}
+
 export class UserService extends GenericBaseService<
   typeof prisma.user,
   User,
@@ -42,7 +49,7 @@ export class UserService extends GenericBaseService<
           `[UserService] Pengguna tidak aktif '${data.username}' ditemukan. Mengaktifkan kembali dengan data baru.`
         );
         const hashedPassword = await bcrypt.hash(data.password, 10);
-        // const { password } = data;
+
         const restoredUser = await this._model.update({
           where: { user_id: existingUser.user_id },
           data: {
@@ -121,24 +128,6 @@ export class UserService extends GenericBaseService<
     );
   }
 
-  // public override async findAll(query?: any): Promise<User[]> {
-  //   const typedQuery: GetUsersQuery = query || {};
-  //   const { roleName, isActive, search } = typedQuery;
-
-  //   const findArgs: Prisma.UserFindManyArgs = {
-  //     where: {
-  //       ...(roleName && { role: { role_name: roleName } }),
-  //       is_active: isActive ?? true,
-  //       ...(search && {
-  //         username: { contains: search, mode: 'insensitive' },
-  //       }),
-  //     },
-  //     include: { role: true },
-  //   };
-
-  //   return this._handleCrudOperation(() => this._model.findMany(findArgs));
-  // }
-
   public override async update(
     id: number,
     data: UpdateUserBody
@@ -167,11 +156,6 @@ export class UserService extends GenericBaseService<
     });
   }
 
-  /**
-   * Melakukan soft delete dengan mengubah status is_active menjadi false.
-   * Ini memastikan integritas data historis tetap terjaga.
-   * @param id - ID pengguna yang akan di-nonaktifkan.
-   */
   public override async delete(id: number): Promise<User> {
     return this._handleCrudOperation(() =>
       this._model.update({
@@ -191,41 +175,32 @@ export class UserService extends GenericBaseService<
       })
     );
   }
-  /**
-   * BARU: Mengambil riwayat aktivitas pengguna, seperti sesi pembacaan yang telah dibuat.
-   * @param userId - ID pengguna yang riwayatnya akan diambil.
-   * @returns Daftar sesi pembacaan yang diurutkan berdasarkan tanggal terbaru.
-   */
 
-  public async getActivityHistory(userId: number) {
+  public async getActivityHistory(userId: number): Promise<userHistory[]> {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     const userWithRelations = await this._model.findUniqueOrThrow({
       where: { user_id: userId },
-      // Kita tidak menggunakan 'select' di root agar data user tetap terambil semua.
-      // Tapi kita batasi data relasinya.
       include: {
         reading_sessions: {
           where: {
             created_at: { gte: sevenDaysAgo },
           },
-          // OPTIMISASI 1: Hanya ambil kolom yang dibutuhkan untuk Log
           select: {
-            session_id: true, // Ambil ID jika nanti butuh link ke detail
+            session_id: true,
             created_at: true,
             meter: {
               select: {
                 meter_code: true,
                 energy_type: {
-                  select: { type_name: true }, // Hanya ambil nama tipe energi
+                  select: { type_name: true },
                 },
               },
             },
           },
           orderBy: { created_at: 'desc' },
         },
-
         price_schemes_set: {
           where: {
             effective_date: { gte: sevenDaysAgo },
@@ -240,7 +215,6 @@ export class UserService extends GenericBaseService<
           },
           orderBy: { effective_date: 'desc' },
         },
-
         efficiency_targets_set: {
           where: {
             period_start: { gte: sevenDaysAgo },
@@ -258,49 +232,40 @@ export class UserService extends GenericBaseService<
       },
     });
 
-    // Mapping data menjadi format Activity Log yang ringan
-    const readingHistory = userWithRelations.reading_sessions.map(
-      (session) => ({
-        id: session.session_id, // Cukup ID saja, bukan seluruh objek
+    const readingHistory: userHistory[] =
+      userWithRelations.reading_sessions.map((session) => ({
+        id: session.session_id,
         type: 'Pencatatan Meter',
-        timestamp: session.created_at,
+        timestamp: session.created_at.toISOString(),
         description: `Melakukan pencatatan untuk meter ${session.meter.meter_code} (${session.meter.energy_type.type_name}).`,
-      })
-    );
+      }));
 
-    const priceSchemeHistory = userWithRelations.price_schemes_set.map(
-      (scheme) => ({
+    const priceSchemeHistory: userHistory[] =
+      userWithRelations.price_schemes_set.map((scheme) => ({
         id: scheme.scheme_id,
         type: 'Pengaturan Harga',
-        timestamp: scheme.effective_date,
+        timestamp: scheme.effective_date.toISOString(),
         description: `Mengatur skema harga baru "${scheme.scheme_name}" untuk golongan tarif ${scheme.tariff_group.group_name}.`,
-      })
-    );
+      }));
 
-    const efficiencyTargetHistory =
+    const efficiencyTargetHistory: userHistory[] =
       userWithRelations.efficiency_targets_set.map((target) => ({
         id: target.target_id,
         type: 'Pengaturan Target',
-        timestamp: target.period_start,
+        timestamp: target.period_start.toISOString(),
         description: `Mengatur target "${target.kpi_name}" untuk meter ${target.meter.meter_code}.`,
       }));
 
-    // Menggabungkan dan mengurutkan berdasarkan waktu terbaru
-    const fullHistory = [
+    const fullHistory: userHistory[] = [
       ...readingHistory,
       ...priceSchemeHistory,
       ...efficiencyTargetHistory,
-    ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    ].sort(
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
 
-    // Memisahkan data raw relasi agar tidak ikut ter-return di object user
-    const {
-      reading_sessions,
-      price_schemes_set,
-      efficiency_targets_set,
-      ...user
-    } = userWithRelations;
-
-    return { ...user, history: fullHistory };
+    return fullHistory;
   }
 }
 

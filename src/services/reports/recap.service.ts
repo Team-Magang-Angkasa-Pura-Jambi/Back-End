@@ -216,13 +216,15 @@ export class RecapService extends BaseService {
     endDate: Date,
     meterId?: number
   ): Promise<RecapApiResponse> {
-    const fuelSessions = await prisma.readingSession.findMany({
+    const summaries = await prisma.dailySummary.findMany({
       where: {
-        reading_date: { gte: startDate, lte: endDate },
-        ...(meterId && { meter_id: meterId }),
+        summary_date: { gte: startDate, lte: endDate },
+        meter: {
+          energy_type: { type_name: 'Fuel' },
+          ...(meterId && { meter_id: meterId }),
+        },
       },
       include: {
-        details: true,
         meter: {
           include: {
             tariff_group: {
@@ -239,53 +241,34 @@ export class RecapService extends BaseService {
           },
         },
       },
-      orderBy: { reading_date: 'asc' },
+      orderBy: { summary_date: 'asc' },
     });
 
     // Hitung tarif pajak dinamis untuk BBM
     let taxRate = 0;
-    const sampleSession = fuelSessions.find(
+    const sampleSummary = summaries.find(
       (s: any) => s.meter?.tariff_group?.price_schemes?.length > 0
     );
-    if (sampleSession) {
-      taxRate = this._getTaxRateFromMeter((sampleSession as any).meter);
+    if (sampleSummary) {
+      taxRate = this._getTaxRateFromMeter((sampleSummary as any).meter);
     }
 
-    const fuelData: RecapDataRow[] = fuelSessions.map(
-      (session: any, i: number) => {
-        const prev = i > 0 ? fuelSessions[i - 1] : null;
-        const currVal = session.details[0]?.value ?? new Prisma.Decimal(0);
-        const prevVal = prev?.details[0]?.value ?? new Prisma.Decimal(0);
-        const litersPerCm = new Prisma.Decimal(
-          session.meter.tank_volume_liters!
-        ).div(session.meter.tank_height_cm!);
-
-        let consumption = 0,
-          cost = 0;
-        if (prev && currVal.lessThan(prevVal)) {
-          consumption = prevVal.minus(currVal).times(litersPerCm).toNumber();
-          const price =
-            session.meter.tariff_group.price_schemes[0]?.rates[0]?.value ??
-            new Prisma.Decimal(0);
-          cost = new Prisma.Decimal(consumption).times(price).toNumber();
-        }
-
-        return {
-          date: session.reading_date,
-          consumption,
-          cost,
-          remaining_stock: currVal.times(litersPerCm).toNumber(),
-          pax: null,
-          wbp: null,
-          lwbp: null,
-          classification: null,
-          target: null,
-          avg_temp: null,
-          max_temp: null,
-          is_workday: false,
-        };
-      }
-    );
+    const fuelData: RecapDataRow[] = summaries.map((summary: any) => {
+      return {
+        date: summary.summary_date,
+        consumption: summary.total_consumption?.toNumber() ?? 0,
+        cost: summary.total_cost?.toNumber() ?? 0,
+        remaining_stock: 0,
+        pax: null,
+        wbp: null,
+        lwbp: null,
+        classification: null,
+        target: null,
+        avg_temp: null,
+        max_temp: null,
+        is_workday: false,
+      };
+    });
 
     return {
       data: fuelData,
