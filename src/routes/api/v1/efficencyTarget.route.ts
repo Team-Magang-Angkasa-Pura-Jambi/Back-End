@@ -1,6 +1,6 @@
 // src/routes/efficiencyTarget.routes.ts
 
-import { Router } from 'express';
+import { type Router } from 'express';
 
 import { createCrudRouter } from '../../../utils/routerFactory.js';
 import { EfficiencyTargetService } from '../../../services/intelligence/efficiencyTarget.service.js';

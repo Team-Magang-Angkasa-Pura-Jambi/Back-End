@@ -15,12 +15,7 @@ interface ErrorResponseParams extends ResponseParams {
   error?: Error | HttpError;
 }
 
-export const res200 = <T>({
-  res,
-  message,
-  data,
-  meta,
-}: SuccessResponseParams<T>) => {
+export const res200 = <T>({ res, message, data, meta }: SuccessResponseParams<T>) => {
   return res.status(200).json({
     status: {
       code: 200,

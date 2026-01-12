@@ -1,9 +1,9 @@
 import {
-  Prisma,
-  ReadingDetail,
-  ReadingSession,
+  type Prisma,
+  type ReadingDetail,
+  type ReadingSession,
 } from '../../../generated/prisma/index.js';
-import { CreateReadingSessionBody } from '../../../types/metering/reading.types.js';
+import { type CreateReadingSessionBody } from '../../../types/metering/reading.types.js';
 
 export type CreateReadingSessionInternal = CreateReadingSessionBody & {
   user_id: number;
@@ -61,13 +61,13 @@ export type ReadingHistoryItem = ReadingSessionWithRelations & {
   paxData: PaxData;
 };
 
-export type PaxData = {
+export interface PaxData {
   pax: number | null;
   pax_id: number | null;
-};
+}
 
 // 3. Definisikan tipe return function
-export type GetHistoryResponse = {
+export interface GetHistoryResponse {
   data: ReadingHistoryItem[];
   message: string;
-};
+}

@@ -1,8 +1,5 @@
 import prisma from '../../configs/db.js';
-import type {
-  ConsumptionPrediction,
-  Prisma,
-} from '../../generated/prisma/index.js';
+import type { ConsumptionPrediction, Prisma } from '../../generated/prisma/index.js';
 import type {
   CreateConsumptionPredictionBody,
   UpdateConsumptionPredictionSchemaBody,
@@ -25,7 +22,7 @@ export class ConsumptionPredictionService extends GenericBaseService<
   }
 
   public override async create(
-    data: CreateConsumptionPredictionBody
+    data: CreateConsumptionPredictionBody,
   ): Promise<ConsumptionPrediction> {
     const {
       meter_id,
@@ -55,8 +52,6 @@ export class ConsumptionPredictionService extends GenericBaseService<
       },
     };
 
-    return this._handleCrudOperation(() =>
-      this._model.create({ data: prismaData })
-    );
+    return this._handleCrudOperation(() => this._model.create({ data: prismaData }));
   }
 }

@@ -1,12 +1,10 @@
 import prisma from '../../configs/db.js';
 import {
-  DailySummary,
-  EfficiencyTarget,
-  PaxData,
-  Prisma,
-  ReadingDetail,
-  ReadingSession,
-  SummaryDetail,
+  type DailySummary,
+  type EfficiencyTarget,
+  type PaxData,
+  type Prisma,
+  type SummaryDetail,
 } from '../../generated/prisma/index.js';
 import type {
   GetRecapQuery,
@@ -14,16 +12,11 @@ import type {
   RecapDataRow,
   RecapSummary,
 } from '../../types/reports/recap.types.js';
-import { notificationService } from '../notifications/notification.service.js';
 import { BaseService } from '../../utils/baseService.js';
 import { SocketServer } from '../../configs/socket.js';
 import { _classifyDailyUsage } from '../metering/helpers/forecast-calculator.js';
-import { SessionWithDetails } from '../metering/types/index.js';
 
-type NotificationEvent =
-  | 'recalculation:success'
-  | 'recalculation:progress'
-  | 'recalculation:error';
+type NotificationEvent = 'recalculation:success' | 'recalculation:progress' | 'recalculation:error';
 
 export class RecapService extends BaseService {
   constructor() {
@@ -31,8 +24,7 @@ export class RecapService extends BaseService {
   }
 
   public async getRecap(query: GetRecapQuery): Promise<RecapApiResponse> {
-    const { energyType, sortBy, sortOrder, meterId, startDate, endDate } =
-      query;
+    const { energyType, sortBy, sortOrder, meterId, startDate, endDate } = query;
 
     // --- LOGIK KHUSUS BBM (FUEL) ---
     if (energyType === 'Fuel') {
@@ -49,81 +41,70 @@ export class RecapService extends BaseService {
         summary_date: { gte: startDate, lte: endDate },
       };
 
-      const [
-        summaries,
-        paxData,
-        efficiencyTargets,
-        weatherHistories,
-        predictions,
-      ] = await Promise.all([
-        prisma.dailySummary.findMany({
-          where: whereClause,
-          include: {
-            details: true,
-            classification: true,
-            meter: {
-              include: {
-                tariff_group: {
-                  include: {
-                    price_schemes: {
-                      where: { is_active: true },
-                      include: {
-                        taxes: { include: { tax: true } },
+      const [summaries, paxData, efficiencyTargets, weatherHistories, predictions] =
+        await Promise.all([
+          prisma.dailySummary.findMany({
+            where: whereClause,
+            include: {
+              details: true,
+              classification: true,
+              meter: {
+                include: {
+                  tariff_group: {
+                    include: {
+                      price_schemes: {
+                        where: { is_active: true },
+                        include: {
+                          taxes: { include: { tax: true } },
+                        },
                       },
                     },
                   },
                 },
               },
             },
-          },
-        }),
-        prisma.paxData.findMany({
-          where: { data_date: { gte: startDate, lte: endDate } },
-        }),
-        prisma.efficiencyTarget.findMany({
-          where: {
-            ...(meterId && { meter_id: meterId }),
-            period_start: { lte: endDate },
-            period_end: { gte: startDate },
-          },
-        }),
-        prisma.weatherHistory.findMany({
-          where: { data_date: { gte: startDate, lte: endDate } },
-        }),
-        meterId
-          ? prisma.consumptionPrediction.findMany({
-              where: {
-                meter_id: meterId,
-                prediction_date: { gte: startDate, lte: endDate },
-              },
-            })
-          : Promise.resolve([]),
-      ]);
+          }),
+          prisma.paxData.findMany({
+            where: { data_date: { gte: startDate, lte: endDate } },
+          }),
+          prisma.efficiencyTarget.findMany({
+            where: {
+              ...(meterId && { meter_id: meterId }),
+              period_start: { lte: endDate },
+              period_end: { gte: startDate },
+            },
+          }),
+          prisma.weatherHistory.findMany({
+            where: { data_date: { gte: startDate, lte: endDate } },
+          }),
+          meterId
+            ? prisma.consumptionPrediction.findMany({
+                where: {
+                  meter_id: meterId,
+                  prediction_date: { gte: startDate, lte: endDate },
+                },
+              })
+            : Promise.resolve([]),
+        ]);
 
       // Mapping data untuk akses cepat
       const paxMap = new Map(
-        paxData.map((p: PaxData) => [
-          p.data_date.toISOString().split('T')[0],
-          p.total_pax,
-        ])
+        paxData.map((p: PaxData) => [p.data_date.toISOString().split('T')[0], p.total_pax]),
       );
       const weatherMap = new Map(
-        weatherHistories.map((w: any) => [
-          w.data_date.toISOString().split('T')[0],
-          w,
-        ])
+        weatherHistories.map((w: any) => [w.data_date.toISOString().split('T')[0], w]),
       );
       const predictMap = new Map(
         predictions.map((p: any) => [
           p.prediction_date.toISOString().split('T')[0],
           p.predicted_value.toNumber(),
-        ])
+        ]),
       );
 
       // Hitung tarif pajak dinamis dari skema yang aktif
       let taxRate = 0;
       const sampleWithScheme = summaries.find(
-        (s: any) => s.meter?.tariff_group?.price_schemes?.length > 0
+        (s: any) => s.meter?.tariff_group?.price_schemes?.length > 0,
       );
 
       if (sampleWithScheme) {
@@ -132,32 +113,24 @@ export class RecapService extends BaseService {
       }
 
       const data: RecapDataRow[] = [];
-      for (
-        let d = new Date(startDate);
-        d <= endDate;
-        d.setDate(d.getDate() + 1)
-      ) {
+      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
         const currentDate = new Date(d);
         const dateStr = currentDate.toISOString().split('T')[0];
 
         const summaryForDate = summaries.filter(
-          (s: DailySummary) =>
-            s.summary_date.toISOString().split('T')[0] === dateStr
+          (s: DailySummary) => s.summary_date.toISOString().split('T')[0] === dateStr,
         );
         const target = efficiencyTargets.find(
-          (t: EfficiencyTarget) =>
-            currentDate >= t.period_start && currentDate <= t.period_end
+          (t: EfficiencyTarget) => currentDate >= t.period_start && currentDate <= t.period_end,
         );
 
         const consumption = summaryForDate.reduce(
-          (sum: number, s: DailySummary) =>
-            sum + (s.total_consumption?.toNumber() ?? 0),
-          0
+          (sum: number, s: DailySummary) => sum + (s.total_consumption?.toNumber() ?? 0),
+          0,
         );
         const cost = summaryForDate.reduce(
-          (sum: number, s: DailySummary) =>
-            sum + (s.total_cost?.toNumber() ?? 0),
-          0
+          (sum: number, s: DailySummary) => sum + (s.total_cost?.toNumber() ?? 0),
+          0,
         );
 
         data.push({
@@ -174,10 +147,8 @@ export class RecapService extends BaseService {
               ?.consumption_value?.toNumber() ?? null,
           consumption: consumption || null,
           cost: cost || null,
-          classification:
-            summaryForDate[0]?.classification?.classification ?? null,
-          confidence_score:
-            summaryForDate[0]?.classification?.confidence_score ?? null,
+          classification: summaryForDate[0]?.classification?.classification ?? null,
+          confidence_score: summaryForDate[0]?.classification?.confidence_score ?? null,
           target: target?.target_value.toNumber() ?? null,
           prediction: predictMap.get(dateStr) ?? null,
           pax: paxMap.get(dateStr) ?? null,
@@ -190,20 +161,10 @@ export class RecapService extends BaseService {
       if (sortBy) {
         data.sort((a, b) => {
           const valA =
-            sortBy === 'date'
-              ? a.date.getTime()
-              : (a[sortBy as keyof RecapDataRow] ?? -1);
+            sortBy === 'date' ? a.date.getTime() : (a[sortBy as keyof RecapDataRow] ?? -1);
           const valB =
-            sortBy === 'date'
-              ? b.date.getTime()
-              : (b[sortBy as keyof RecapDataRow] ?? -1);
-          return sortOrder === 'desc'
-            ? valA < valB
-              ? 1
-              : -1
-            : valA > valB
-              ? 1
-              : -1;
+            sortBy === 'date' ? b.date.getTime() : (b[sortBy as keyof RecapDataRow] ?? -1);
+          return sortOrder === 'desc' ? (valA < valB ? 1 : -1) : valA > valB ? 1 : -1;
         });
       }
 
@@ -214,7 +175,7 @@ export class RecapService extends BaseService {
   private async _handleFuelRecap(
     startDate: Date,
     endDate: Date,
-    meterId?: number
+    meterId?: number,
   ): Promise<RecapApiResponse> {
     const summaries = await prisma.dailySummary.findMany({
       where: {
@@ -247,7 +208,7 @@ export class RecapService extends BaseService {
     // Hitung tarif pajak dinamis untuk BBM
     let taxRate = 0;
     const sampleSummary = summaries.find(
-      (s: any) => s.meter?.tariff_group?.price_schemes?.length > 0
+      (s: any) => s.meter?.tariff_group?.price_schemes?.length > 0,
     );
     if (sampleSummary) {
       taxRate = this._getTaxRateFromMeter((sampleSummary as any).meter);
@@ -285,26 +246,19 @@ export class RecapService extends BaseService {
     if (scheme?.taxes?.length > 0) {
       return scheme.taxes.reduce(
         (acc: number, curr: any) => acc + (curr.tax?.rate?.toNumber() ?? 0),
-        0
+        0,
       );
     }
     return 0;
   }
 
-  private _calculateSummary(
-    data: RecapDataRow[],
-    energyType: string,
-    taxRate: number = 0
-  ): RecapSummary {
+  private _calculateSummary(data: RecapDataRow[], energyType: string, taxRate = 0): RecapSummary {
     const totalSumCost = data.reduce((sum, row) => sum + (row.cost ?? 0), 0);
-    const totalConsumption = data.reduce(
-      (sum, row) => sum + (row.consumption ?? 0),
-      0
-    );
+    const totalConsumption = data.reduce((sum, row) => sum + (row.consumption ?? 0), 0);
     const totalPax = data.reduce((sum, row) => sum + (Number(row.pax) || 0), 0);
 
     let totalCost = totalSumCost;
-    let totalCostBeforeTax = totalSumCost;
+    const totalCostBeforeTax = totalSumCost;
 
     // Terapkan pajak jika ada (totalCost = preTax * (1 + taxRate))
     if (taxRate > 0) {
@@ -317,13 +271,9 @@ export class RecapService extends BaseService {
       totalTarget: data.reduce((sum, row) => sum + (row.target ?? 0), 0),
       totalConsumption,
       totalWbp:
-        energyType === 'Electricity'
-          ? data.reduce((sum, row) => sum + (row.wbp ?? 0), 0)
-          : 0,
+        energyType === 'Electricity' ? data.reduce((sum, row) => sum + (row.wbp ?? 0), 0) : 0,
       totalLwbp:
-        energyType === 'Electricity'
-          ? data.reduce((sum, row) => sum + (row.lwbp ?? 0), 0)
-          : 0,
+        energyType === 'Electricity' ? data.reduce((sum, row) => sum + (row.lwbp ?? 0), 0) : 0,
       totalPax,
     };
   }
@@ -332,7 +282,7 @@ export class RecapService extends BaseService {
     startDate: Date,
     endDate: Date,
     meterId?: number,
-    userId?: number
+    userId?: number,
   ): Promise<void> {
     const notify = (event: NotificationEvent, data: any) =>
       userId && SocketServer.instance.io.to(String(userId)).emit(event, data);

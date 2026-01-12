@@ -1,8 +1,5 @@
-import { z } from 'zod';
-import type {
-  meterSchema,
-  queryMeter,
-} from '../../validations/metering/meter.validation.js';
+import { type z } from 'zod';
+import type { meterSchema, queryMeter } from '../../validations/metering/meter.validation.js';
 
 export type CreateMeterBody = z.infer<typeof meterSchema.body>;
 

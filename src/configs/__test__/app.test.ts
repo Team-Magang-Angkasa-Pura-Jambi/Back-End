@@ -5,10 +5,7 @@ import prisma from '../db.js';
 describe('API Endpoint Tests', () => {
   describe('GET Root', () => {
     test('should return a 200 OK status and the correct API status object', async () => {
-      const response = await request(app)
-        .get('/api/v1')
-        .expect('Content-Type', /json/)
-        .expect(200);
+      const response = await request(app).get('/api/v1').expect('Content-Type', /json/).expect(200);
 
       expect(response.body).toEqual({
         status: {

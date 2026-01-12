@@ -39,16 +39,12 @@ export const updateAlertStatusSchema = z.object({
 
 export const bulkDeleteAlertsSchema = z.object({
   body: z.object({
-    alertIds: z
-      .array(positiveInt('Alert ID'))
-      .min(1, 'Setidaknya satu ID alert diperlukan.'),
+    alertIds: z.array(positiveInt('Alert ID')).min(1, 'Setidaknya satu ID alert diperlukan.'),
   }),
 });
 
 export const bulkUpdateAlertsSchema = z.object({
   body: z.object({
-    alertIds: z
-      .array(positiveInt('Alert ID'))
-      .min(1, 'Setidaknya satu ID alert diperlukan.'),
+    alertIds: z.array(positiveInt('Alert ID')).min(1, 'Setidaknya satu ID alert diperlukan.'),
   }),
 });

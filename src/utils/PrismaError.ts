@@ -2,7 +2,7 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 export function isPrismaError(
   error: unknown,
-  code: string
+  code: string,
 ): error is PrismaClientKnownRequestError {
   return error instanceof PrismaClientKnownRequestError && error.code === code;
 }

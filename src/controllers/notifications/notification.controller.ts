@@ -1,13 +1,9 @@
 import type { Request, Response } from 'express';
 import type { Notification } from '../../generated/prisma/index.js';
-import {
-  notificationService,
-  NotificationService,
-} from '../../services/notifications/notification.service.js';
+import { NotificationService } from '../../services/notifications/notification.service.js';
 import type {
   CreateNotificationInput,
   GetNotificationSchemaQuery,
-  NotificationSchemaBody,
   UpdateNotificationSchemaBody,
 } from '../../types/operations/notification.types.js';
 import { BaseController } from '../../utils/baseController.js';
@@ -25,10 +21,7 @@ export class NotificationController extends BaseController<
     super(new NotificationService(), 'notificationId');
   }
 
-  public override getAll = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  public override getAll = async (req: Request, res: Response): Promise<void> => {
     const userId = req.user?.id;
     if (!userId) {
       throw new Error401('User not authenticated.');

@@ -1,13 +1,10 @@
-import { Router } from 'express';
+import { type Router } from 'express';
 import { validate } from '../../../utils/validate.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { authorize } from '../../../middleware/auth.middleware.js';
 import { alertController } from '../../../controllers/notifications/alert.controller.js';
 import {
-  alertIdParamSchema,
-  emptySchema,
   bulkDeleteAlertsSchema,
-  getAlertsSchema,
   getLatestAlertsSchema,
   updateAlertStatusSchema,
   bulkUpdateAlertsSchema,
@@ -19,32 +16,32 @@ export default (router: Router) => {
   router.get(
     `${prefix}/meters`,
     authorize('Admin', 'SuperAdmin', 'Technician'),
-    asyncHandler(alertController.getMeterAlerts)
+    asyncHandler(alertController.getMeterAlerts),
   );
   router.patch(
     `${prefix}/`,
     authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(updateAlertStatusSchema),
-    asyncHandler(alertController.updateStatus)
+    asyncHandler(alertController.updateStatus),
   );
   router.patch(
     `${prefix}/bulk-update`,
     authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(bulkUpdateAlertsSchema),
-    asyncHandler(alertController.bulkUpdateStatus)
+    asyncHandler(alertController.bulkUpdateStatus),
   );
 
   router.post(
     `${prefix}/bulk-delete`,
     authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(bulkDeleteAlertsSchema),
-    asyncHandler(alertController.bulkDelete)
+    asyncHandler(alertController.bulkDelete),
   );
 
   router.get(
     `${prefix}/system`,
     authorize('Admin', 'SuperAdmin', 'Technician'),
-    asyncHandler(alertController.getSystemAlerts)
+    asyncHandler(alertController.getSystemAlerts),
   );
 
   // ---------------------------
@@ -60,7 +57,7 @@ export default (router: Router) => {
     `${prefix}/latest`,
     authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(getLatestAlertsSchema),
-    asyncHandler(alertController.getLatest)
+    asyncHandler(alertController.getLatest),
   );
 
   // router.get(

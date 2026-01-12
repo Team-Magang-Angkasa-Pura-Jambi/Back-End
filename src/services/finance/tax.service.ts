@@ -1,11 +1,7 @@
 import prisma from '../../configs/db.js';
 import type { Prisma, Tax } from '../../generated/prisma/index.js';
 import type { DefaultArgs } from '../../generated/prisma/runtime/library.js';
-import type {
-  CreateTaxBody,
-  UpdateTaxBody,
-} from '../../types/finance/tax.type.js';
-import type { CustomErrorMessages } from '../../utils/baseService.js';
+import type { CreateTaxBody, UpdateTaxBody } from '../../types/finance/tax.type.js';
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
 
 export class TaxService extends GenericBaseService<
@@ -23,10 +19,7 @@ export class TaxService extends GenericBaseService<
     super(prisma, prisma.tax, 'tax_id');
   }
 
-  public override async findAll(
-    args?: Prisma.TaxFindManyArgs<DefaultArgs> | undefined,
-    customMessages?: CustomErrorMessages
-  ): Promise<Tax[]> {
+  public override async findAll(args?: Prisma.TaxFindManyArgs<DefaultArgs>): Promise<Tax[]> {
     const queryArgs: Prisma.TaxFindManyArgs = {
       ...args,
       include: {

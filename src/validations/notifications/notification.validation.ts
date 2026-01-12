@@ -8,11 +8,10 @@ export const getNotificationsSchema = z.object({
     isRead: z
       .preprocess(
         (val) => (val === 'true' ? true : val === 'false' ? false : undefined),
-        z.boolean().optional()
+        z.boolean().optional(),
       )
       .optional(),
   }),
-  
 });
 
 export const markAsReadSchema = z.object({
@@ -41,4 +40,3 @@ export const createNotificationSchema = z.object({
     // is_read tidak perlu karena default false di database
   }),
 });
-

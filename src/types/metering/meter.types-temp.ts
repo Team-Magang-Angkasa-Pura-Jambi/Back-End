@@ -1,17 +1,17 @@
 import type { Meter, MeterStatus } from '../../generated/prisma/index.js';
 
 // Tipe dasar untuk properti yang bisa di-query
-export type GetMetersQuery = {
+export interface GetMetersQuery {
   page: number;
   limit: number;
   search?: string;
   status?: MeterStatus;
   energyTypeId?: number;
   categoryId?: number;
-};
+}
 
 // Tipe untuk body request saat membuat meter baru
-export type CreateMeterBody = {
+export interface CreateMeterBody {
   meter_code: string;
   status?: MeterStatus;
   energy_type_id: number;
@@ -21,7 +21,7 @@ export type CreateMeterBody = {
   tank_height_cm?: number | null;
   tank_volume_liters?: number | null;
   rollover_limit?: number | null;
-};
+}
 
 // Tipe untuk body request saat memperbarui meter
 // Semua properti dibuat opsional

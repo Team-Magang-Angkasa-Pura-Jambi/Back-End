@@ -16,25 +16,19 @@ class RecapController {
     }
   };
 
-  public recalculateRecap = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public recalculateRecap = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = (req as any).user;
-      if (!user || !user.id) {
-        throw new Error401(
-          'Data pengguna tidak ditemukan. Sesi mungkin tidak valid.'
-        );
+      if (!user?.id) {
+        throw new Error401('Data pengguna tidak ditemukan. Sesi mungkin tidak valid.');
       }
       const { startDate, endDate, meterId } = res.locals.validatedData.body;
 
-      recapService.recalculateSummaries(
+      await recapService.recalculateSummaries(
         new Date(startDate),
         new Date(endDate),
         meterId,
-        Number(user.id)
+        Number(user.id),
       );
 
       res200({

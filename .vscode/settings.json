@@ -1,0 +1,14 @@
+{
+  "editor.formatOnSave": true,
+
+  // PERBAIKAN 1: Gunakan Prettier sebagai formatter utama (lebih stabil)
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+
+  "editor.codeActionsOnSave": {
+    // PERBAIKAN 2: Pastikan ESLint memperbaiki error saat save
+    "source.fixAll.eslint": "explicit"
+  },
+
+  // Validasi file TypeScript juga
+  "eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact"]
+}

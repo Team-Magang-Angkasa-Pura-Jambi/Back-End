@@ -14,6 +14,6 @@ export const weatherConfig = {
 
 if (!weatherConfig.apiKey) {
   console.warn(
-    'WARNING: OPENWEATHER_API_KEY is not set in your .env file. The WeatherService will not function.'
+    'WARNING: OPENWEATHER_API_KEY is not set in your .env file. The WeatherService will not function.',
   );
 }

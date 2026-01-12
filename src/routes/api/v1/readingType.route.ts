@@ -1,9 +1,6 @@
 import type { Router } from 'express';
 import { ReadingTypeService } from '../../../services/metering/readingType.service.js';
-import {
-  readingTypeController,
-  ReadingTypeController,
-} from '../../../controllers/metering/readingType.controller.js';
+import { ReadingTypeController } from '../../../controllers/metering/readingType.controller.js';
 import {
   queryGetByMeter,
   readingTypeSchema,

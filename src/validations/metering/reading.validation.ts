@@ -1,9 +1,5 @@
 import z from 'zod';
-import {
-  isoDate,
-  positiveInt,
-  positiveNumber,
-} from '../../utils/schmeHelper.js';
+import { isoDate, positiveInt, positiveNumber } from '../../utils/schmeHelper.js';
 import { CrudSchemaBuilder } from '../../utils/shemaHandler.js';
 import { DateRangeRules, PaginationRules } from '../common/index.js';
 
@@ -24,7 +20,7 @@ export const readingSessionBodySchema = z.object({
       z.object({
         value: positiveNumber('Nilai Pembacaan'),
         reading_type_id: positiveInt('ID Tipe Pembacaan'),
-      })
+      }),
     )
     .min(1, 'Minimal harus ada satu detail pembacaan.'),
 });
@@ -38,10 +34,8 @@ export const readingSessionSchemas = new CrudSchemaBuilder({
   paramsSchema: readingSessionParamsSchema,
 });
 
-export const  getReadingsSchema = z.object({
-  query: PaginationRules.merge(
-    QueryIdentifiers.pick({ meterId: true, userId: true })
-  ).extend({
+export const getReadingsSchema = z.object({
+  query: PaginationRules.merge(QueryIdentifiers.pick({ meterId: true, userId: true })).extend({
     energyTypeName: EnergyTypeEnum.optional(),
     date: z.coerce.date().optional(),
     startDate: z.coerce.date().optional(),

@@ -1,13 +1,8 @@
 import prisma from '../../configs/db.js';
 
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
-import {
-  PaxData,
-  Prisma,
-  type ReadingSession,
-} from '../../generated/prisma/index.js';
+import { type Prisma, type ReadingSession } from '../../generated/prisma/index.js';
 import type {
-  CreateReadingSessionBody,
   GetQueryLastReading,
   GetReadingSessionsQuery,
   UpdateReadingSessionBody,
@@ -24,11 +19,9 @@ import {
   _validateReadingsAgainstPrevious,
 } from './helpers/reading-validator.js';
 import {
-  CreateReadingSessionInternal,
-  GetHistoryResponse,
-  ReadingHistoryItem,
-  ReadingSessionWithDetails,
-  ReadingSessionWithRelations,
+  type CreateReadingSessionInternal,
+  type GetHistoryResponse,
+  type ReadingSessionWithDetails,
 } from './types/index.js';
 import {
   _buildOrderByClause,
@@ -38,7 +31,6 @@ import {
   _updateDailySummary,
 } from './helpers/reading-summarizer.js';
 import { _classifyDailyUsage } from './helpers/forecast-calculator.js';
-import { CustomErrorMessages } from '../../utils/baseService.js';
 
 export class ReadingService extends GenericBaseService<
   typeof prisma.readingSession,
@@ -55,9 +47,7 @@ export class ReadingService extends GenericBaseService<
     super(prisma, prisma.readingSession, 'session_id');
   }
 
-  public override async create(
-    data: CreateReadingSessionInternal
-  ): Promise<ReadingSession> {
+  public override async create(data: CreateReadingSessionInternal): Promise<ReadingSession> {
     const { meter_id, reading_date, details, user_id } = data;
 
     const meter = await _validateMeter(meter_id);
@@ -70,12 +60,7 @@ export class ReadingService extends GenericBaseService<
 
     const newSession = await this._handleCrudOperation<ReadingSession>(() =>
       prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        const { sessionId } = await _findOrCreateSession(
-          tx,
-          meter_id,
-          dateForDb,
-          user_id
-        );
+        const { sessionId } = await _findOrCreateSession(tx, meter_id, dateForDb, user_id);
         await _createReadingDetails(tx, sessionId, details);
 
         await _updateDailySummary(tx, meter, dateForDb);
@@ -88,7 +73,7 @@ export class ReadingService extends GenericBaseService<
             user: { select: { username: true } },
           },
         });
-      })
+      }),
     );
 
     await _checkAndResolveMissingDataAlert(meter_id, dateForDb);
@@ -109,7 +94,7 @@ export class ReadingService extends GenericBaseService<
    */
   public override async update(
     sessionId: number,
-    data: UpdateReadingSessionBody
+    data: UpdateReadingSessionBody,
   ): Promise<ReadingSession> {
     const { details } = data;
 
@@ -126,16 +111,12 @@ export class ReadingService extends GenericBaseService<
 
       if (latestSession && latestSession.session_id !== sessionId) {
         throw new Error400(
-          'Hanya data pembacaan terakhir yang dapat diubah. Untuk memperbaiki data lama, hapus entri hingga tanggal tersebut dan input ulang.'
+          'Hanya data pembacaan terakhir yang dapat diubah. Untuk memperbaiki data lama, hapus entri hingga tanggal tersebut dan input ulang.',
         );
       }
 
       const meter = await _validateMeter(meter_id);
-      await _validateReadingsAgainstPrevious(
-        meter,
-        reading_date,
-        details ?? []
-      );
+      await _validateReadingsAgainstPrevious(meter, reading_date, details ?? []);
 
       const updatedSession = await this._prisma.$transaction(
         async (tx: Prisma.TransactionClient) => {
@@ -153,13 +134,13 @@ export class ReadingService extends GenericBaseService<
               user: { select: { username: true } },
             },
           });
-        }
+        },
       );
 
       console.log(
         `[ReadingService] Data sesi ${sessionId} diperbarui. Memicu kalkulasi ulang untuk ${
           reading_date.toISOString().split('T')[0]
-        }`
+        }`,
       );
 
       return updatedSession;
@@ -169,9 +150,9 @@ export class ReadingService extends GenericBaseService<
   public async processAndSummarizeReading(
     meterId: number,
     date: Date,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<void> {
-    const db = tx || this._prisma;
+    const db = tx ?? this._prisma;
     return this._handleCrudOperation(async () => {
       const meter = await db.meter.findUniqueOrThrow({
         where: { meter_id: meterId },
@@ -203,7 +184,7 @@ export class ReadingService extends GenericBaseService<
       }
 
       console.log(
-        `[ReadingService] Memicu pembuatan/pembaruan logbook untuk tanggal ${dateForDb.toISOString()}`
+        `[ReadingService] Memicu pembuatan/pembaruan logbook untuk tanggal ${dateForDb.toISOString()}`,
       );
 
       await dailyLogbookService.generateDailyLog(dateForDb);
@@ -227,7 +208,7 @@ export class ReadingService extends GenericBaseService<
         // 3. Validasi: Hanya boleh menghapus jika ini adalah data terakhir
         if (latestSession && latestSession.session_id !== sessionId) {
           throw new Error400(
-            'Hanya data pembacaan terakhir yang dapat dihapus. Untuk memperbaiki data lama, hapus entri hingga tanggal tersebut dan input ulang.'
+            'Hanya data pembacaan terakhir yang dapat dihapus. Untuk memperbaiki data lama, hapus entri hingga tanggal tersebut dan input ulang.',
           );
         }
 
@@ -255,15 +236,14 @@ export class ReadingService extends GenericBaseService<
         });
 
         return deletedSession;
-      })
+      }),
     );
   }
 
   public override async findAll(
     args?: Prisma.ReadingSessionFindManyArgs & GetReadingSessionsQuery,
-    customMessages?: CustomErrorMessages
   ): Promise<ReadingSession[]> {
-    const { meterId, userId, energyTypeName, date, ...rest } = args || {};
+    const { meterId, userId, energyTypeName, date } = args ?? {};
 
     const where: Prisma.ReadingSessionWhereInput = {};
 
@@ -291,9 +271,7 @@ export class ReadingService extends GenericBaseService<
   /**
    * Menemukan satu sesi pembacaan berdasarkan ID dengan relasi spesifik.
    */
-  public override async findById(
-    sessionId: number
-  ): Promise<ReadingSessionWithDetails> {
+  public override async findById(sessionId: number): Promise<ReadingSessionWithDetails> {
     const includeArgs = {
       meter: { include: { energy_type: true, category: true } },
       user: { select: { user_id: true, username: true } },
@@ -304,13 +282,7 @@ export class ReadingService extends GenericBaseService<
   }
 
   public async findLastReading(query: GetQueryLastReading) {
-    const { meterId, readingTypeId, readingDate } = query;
-    const dateForDb = _normalizeDate(readingDate);
-
-    const energyType = await prisma.meter.findFirst({
-      where: { meter_id: meterId },
-      select: { energy_type: { select: { type_name: true } } },
-    });
+    const { meterId, readingTypeId } = query;
 
     const lastReading = await prisma.readingDetail.findFirst({
       where: {
@@ -336,11 +308,8 @@ export class ReadingService extends GenericBaseService<
    * Menemukan semua sesi, selalu menyertakan relasi dasar.
    */
 
-  public async getHistory(
-    query: GetReadingSessionsQuery
-  ): Promise<GetHistoryResponse> {
-    const { energyTypeName, startDate, endDate, meterId, sortBy, sortOrder } =
-      query;
+  public async getHistory(query: GetReadingSessionsQuery): Promise<GetHistoryResponse> {
+    const { energyTypeName, startDate, endDate, meterId, sortBy, sortOrder } = query;
 
     return this._handleCrudOperation(async () => {
       const whereClause = _buildWhereClause(
@@ -348,7 +317,7 @@ export class ReadingService extends GenericBaseService<
         energyTypeName,
         startDate,
         endDate,
-        meterId
+        meterId,
       );
 
       const orderByClause = _buildOrderByClause(sortBy, sortOrder);
@@ -394,7 +363,7 @@ export class ReadingService extends GenericBaseService<
         paxData.map((p) => [
           toLocalDateString(p.data_date),
           { total_pax: p.total_pax, pax_id: p.pax_id },
-        ])
+        ]),
       );
 
       // 3. Gabungkan data menggunakan normalisasi yang SAMA

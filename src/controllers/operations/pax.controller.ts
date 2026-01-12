@@ -1,8 +1,5 @@
 import type { PaxData } from '../../generated/prisma/index.js';
-import {
-  paxService,
-  PaxService,
-} from '../../services/operations/pax.service.js';
+import { paxService, type PaxService } from '../../services/operations/pax.service.js';
 import type {
   CreatePaxParamsBody,
   GetPaxParamsQuery,

@@ -1,19 +1,10 @@
 import prisma from '../../configs/db.js';
-import {
-  $Enums,
-  Prisma,
-  RoleName,
-  User,
-  type Meter,
-} from '../../generated/prisma/index.js';
+import { type Prisma, type Meter } from '../../generated/prisma/index.js';
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
 import { Error400 } from '../../utils/customError.js';
-import type {
-  CreateMeterBody,
-  UpdateMeterBody,
-} from '../../types/metering/meter.types-temp.js';
-import { CustomErrorMessages } from '../../utils/baseService.js';
-import { DefaultArgs } from '../../generated/prisma/runtime/library.js';
+import type { CreateMeterBody, UpdateMeterBody } from '../../types/metering/meter.types-temp.js';
+import { type CustomErrorMessages } from '../../utils/baseService.js';
+import { type DefaultArgs } from '../../generated/prisma/runtime/library.js';
 
 type TariffGroupForValidation = Prisma.TariffGroupGetPayload<{
   include: {
@@ -47,10 +38,16 @@ export class MeterService extends GenericBaseService<
     args?: Prisma.MeterFindManyArgs & {
       energyTypeId?: number;
       typeName?: string;
+      search?: string;
+      sortBy?: string;
+      sortOrder?: 'asc' | 'desc';
+      page?: number;
+      limit?: number;
     },
-    customMessages?: CustomErrorMessages
+    customMessages?: CustomErrorMessages,
   ) {
-    const { energyTypeId, typeName, ...restArgs } = args || {};
+    const { energyTypeId, typeName, search, sortBy, sortOrder, page, limit, ...restArgs } =
+      args ?? {};
 
     const user = await prisma.user.findFirstOrThrow({
       where: { user_id: userId },
@@ -71,13 +68,15 @@ export class MeterService extends GenericBaseService<
 
     if (typeName) {
       where.energy_type = {
-        is: {
-          type_name: {
-            contains: typeName,
-            mode: 'insensitive',
-          },
+        type_name: {
+          contains: typeName,
+          mode: 'insensitive',
         },
       };
+    }
+
+    if (search) {
+      where.OR = [{ meter_code: { contains: search, mode: 'insensitive' } }];
     }
 
     const findArgs: Prisma.MeterFindManyArgs = {
@@ -92,10 +91,11 @@ export class MeterService extends GenericBaseService<
         energy_type: true,
       },
 
-      orderBy: restArgs.orderBy || { meter_id: 'asc' },
+      orderBy:
+        restArgs.orderBy ?? (sortBy ? { [sortBy]: sortOrder ?? 'asc' } : { meter_id: 'asc' }),
     };
 
-    return super.findAll(findArgs as any, customMessages);
+    return super.findAll({ ...findArgs, page, limit } as any, customMessages);
   }
 
   public override async create(data: CreateMeterBody): Promise<Meter> {
@@ -118,9 +118,7 @@ export class MeterService extends GenericBaseService<
       });
 
       if (!tariffGroup) {
-        throw new Error400(
-          `Golongan tarif dengan ID ${data.tariff_group_id} tidak ditemukan.`
-        );
+        throw new Error400(`Golongan tarif dengan ID ${data.tariff_group_id} tidak ditemukan.`);
       }
 
       this._validateTariffGroupConfiguration(tariffGroup, energyType.type_name);
@@ -146,7 +144,7 @@ export class MeterService extends GenericBaseService<
           data.tank_volume_liters <= 0
         ) {
           throw new Error400(
-            "Untuk meter tipe 'Fuel', properti 'tank_height_cm' dan 'tank_volume_liters' wajib diisi dan harus lebih besar dari 0."
+            "Untuk meter tipe 'Fuel', properti 'tank_height_cm' dan 'tank_volume_liters' wajib diisi dan harus lebih besar dari 0.",
           );
         }
 
@@ -170,18 +168,14 @@ export class MeterService extends GenericBaseService<
   /**
    * Memperbarui meter dengan validasi khusus untuk tipe 'Fuel'.
    */
-  public override async update(
-    id: number,
-    data: UpdateMeterBody
-  ): Promise<Meter> {
+  public override async update(id: number, data: UpdateMeterBody): Promise<Meter> {
     return this._handleCrudOperation(async () => {
       const currentMeter = await this._model.findUniqueOrThrow({
         where: { meter_id: id },
         include: { energy_type: true },
       });
 
-      const finalEnergyTypeId =
-        data.energy_type_id ?? currentMeter.energy_type_id;
+      const finalEnergyTypeId = data.energy_type_id ?? currentMeter.energy_type_id;
       const finalEnergyType =
         finalEnergyTypeId === currentMeter.energy_type_id
           ? currentMeter.energy_type
@@ -190,8 +184,7 @@ export class MeterService extends GenericBaseService<
             });
 
       if (data.tariff_group_id || data.energy_type_id) {
-        const targetTariffGroupId =
-          data.tariff_group_id ?? currentMeter.tariff_group_id;
+        const targetTariffGroupId = data.tariff_group_id ?? currentMeter.tariff_group_id;
 
         const fullTariffGroup = await prisma.tariffGroup.findUnique({
           where: { tariff_group_id: targetTariffGroupId },
@@ -203,34 +196,26 @@ export class MeterService extends GenericBaseService<
         });
 
         if (!fullTariffGroup) {
-          throw new Error400(
-            `Golongan tarif dengan ID ${targetTariffGroupId} tidak ditemukan.`
-          );
+          throw new Error400(`Golongan tarif dengan ID ${targetTariffGroupId} tidak ditemukan.`);
         }
 
-        this._validateTariffGroupConfiguration(
-          fullTariffGroup,
-          finalEnergyType.type_name
-        );
+        this._validateTariffGroupConfiguration(fullTariffGroup, finalEnergyType.type_name);
       }
 
       const updateData: Prisma.MeterUpdateInput = { ...data };
 
       if (finalEnergyType.type_name === 'Fuel') {
-        const tankHeight =
-          data.tank_height_cm ?? currentMeter.tank_height_cm?.toNumber();
-        const tankVolume =
-          data.tank_volume_liters ??
-          currentMeter.tank_volume_liters?.toNumber();
+        const tankHeight = data.tank_height_cm ?? currentMeter.tank_height_cm?.toNumber();
+        const tankVolume = data.tank_volume_liters ?? currentMeter.tank_volume_liters?.toNumber();
 
         if (
-          tankHeight == null ||
-          tankVolume == null ||
-          tankHeight <= 0 ||
-          tankVolume <= 0
+          tankHeight === null ||
+          tankVolume === null ||
+          (tankHeight && tankHeight <= 0) ||
+          (tankVolume && tankVolume <= 0)
         ) {
           throw new Error400(
-            "Untuk meter tipe 'Fuel', properti 'tank_height_cm' dan 'tank_volume_liters' wajib diisi dan harus lebih besar dari 0."
+            "Untuk meter tipe 'Fuel', properti 'tank_height_cm' dan 'tank_volume_liters' wajib diisi dan harus lebih besar dari 0.",
           );
         }
         updateData.tank_height_cm = tankHeight;
@@ -254,16 +239,14 @@ export class MeterService extends GenericBaseService<
 
   public override async delete(
     id: number,
-    args?: Omit<Prisma.MeterDeleteArgs<DefaultArgs>, 'where'>
+    args?: Omit<Prisma.MeterDeleteArgs<DefaultArgs>, 'where'>,
   ): Promise<Meter> {
     const availableChild = await prisma.readingSession.findFirst({
       where: { meter_id: id },
     });
 
     if (!availableChild) {
-      return this._handleCrudOperation(() =>
-        this._model.delete({ where: { meter_id: id } })
-      );
+      return this._handleCrudOperation(() => this._model.delete({ where: { meter_id: id } }));
     }
 
     return this._handleCrudOperation(() =>
@@ -271,7 +254,7 @@ export class MeterService extends GenericBaseService<
         where: { meter_id: id },
         data: { status: 'Deleted' },
         ...args,
-      })
+      }),
     );
   }
 
@@ -284,27 +267,23 @@ export class MeterService extends GenericBaseService<
 
   private _validateTariffGroupConfiguration(
     tariffGroup: TariffGroupForValidation,
-    energyTypeName: string
+    energyTypeName: string,
   ): void {
     if (tariffGroup.price_schemes.length === 0) {
       throw new Error400(
-        `Golongan tarif '${tariffGroup.group_code}' tidak memiliki skema harga yang terkonfigurasi.`
+        `Golongan tarif '${tariffGroup.group_code}' tidak memiliki skema harga yang terkonfigurasi.`,
       );
     }
 
     if (energyTypeName === 'Electricity') {
-      const hasValidElectricityScheme = tariffGroup.price_schemes.some(
-        (scheme) => {
-          const rateTypes = new Set(
-            scheme.rates.map((r) => r.reading_type.type_name)
-          );
-          return rateTypes.has('WBP') && rateTypes.has('LWBP');
-        }
-      );
+      const hasValidElectricityScheme = tariffGroup.price_schemes.some((scheme) => {
+        const rateTypes = new Set(scheme.rates.map((r) => r.reading_type.type_name));
+        return rateTypes.has('WBP') && rateTypes.has('LWBP');
+      });
 
       if (!hasValidElectricityScheme) {
         throw new Error400(
-          `Golongan tarif '${tariffGroup.group_code}' (Listrik) wajib memiliki tarif untuk WBP dan LWBP.`
+          `Golongan tarif '${tariffGroup.group_code}' (Listrik) wajib memiliki tarif untuk WBP dan LWBP.`,
         );
       }
     }

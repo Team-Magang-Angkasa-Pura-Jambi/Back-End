@@ -41,7 +41,7 @@ export const userSchemas = new CrudSchemaBuilder({
       body: baseUserSchema.pick({ username: true }).extend({
         password: passwordRules,
       }),
-    })
+    }),
   )
   .addCustomSchema(
     'changePassword',
@@ -51,5 +51,5 @@ export const userSchemas = new CrudSchemaBuilder({
         oldPassword: passwordRules.describe('Password Lama'),
         newPassword: passwordRules.describe('Password Baru'),
       }),
-    })
+    }),
   );

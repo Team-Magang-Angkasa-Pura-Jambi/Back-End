@@ -6,7 +6,7 @@ import type {
 } from '../../generated/prisma/index.js';
 import type { Alert as PrismaAlert } from '../../generated/prisma/index.js';
 
-export type GetAlertsQuery = {
+export interface GetAlertsQuery {
   page: number;
   limit: number;
   startDate?: string;
@@ -15,12 +15,12 @@ export type GetAlertsQuery = {
   status?: AlertStatus;
   meterId?: number;
   search?: string;
-};
+}
 
-export type UpdateAlertBody = {
+export interface UpdateAlertBody {
   status?: InsightStatus;
   acknowledged_by_user_id?: number;
-};
+}
 
 export type Alert = Prisma.AlertGetPayload<{
   include: {

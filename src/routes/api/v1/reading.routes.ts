@@ -35,19 +35,19 @@ export default (router: Router) => {
       getById: ['Admin', 'SuperAdmin'],
       create: ['Technician', 'Admin', 'SuperAdmin'],
       update: ['Technician', 'Admin', 'SuperAdmin'],
-      delete: ['Technician','Admin', 'SuperAdmin'],
+      delete: ['Technician', 'Admin', 'SuperAdmin'],
     },
   });
 
   router.get(
     prefix + '/last',
     validate(queryLastReading),
-    asyncHandler(readingController.getLastReading)
+    asyncHandler(readingController.getLastReading),
   );
   router.get(
     prefix + '/history',
     validate(getHistoryQuerySchema),
-    asyncHandler(readingController.findHistory)
+    asyncHandler(readingController.findHistory),
   );
 
   router.use(userRouter);

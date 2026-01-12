@@ -1,11 +1,11 @@
-import z from 'zod';
+import type z from 'zod';
 import type { Prisma } from '../../generated/prisma/index.js';
-import { getAnnualBudgetSchema } from '../../validations/finance/annualBudget.validation.js';
+import { type getAnnualBudgetSchema } from '../../validations/finance/annualBudget.validation.js';
 
-export type AllocationData = {
+export interface AllocationData {
   meter_id: number;
   weight: number;
-};
+}
 
 export type CreateAnnualBudgetBody = Omit<
   Prisma.AnnualBudgetCreateInput,
@@ -18,6 +18,4 @@ export type CreateAnnualBudgetBody = Omit<
 
 export type UpdateAnnualBudgetBody = Partial<CreateAnnualBudgetBody>;
 
-export type GetAnnualBudgetQuery = z.infer<
-  typeof getAnnualBudgetSchema
->['query'];
+export type GetAnnualBudgetQuery = z.infer<typeof getAnnualBudgetSchema>['query'];

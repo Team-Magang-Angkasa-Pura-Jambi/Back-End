@@ -1,4 +1,3 @@
-import { get } from 'http';
 import z from 'zod';
 
 export const getYearlyHeatmapQuery = z.object({

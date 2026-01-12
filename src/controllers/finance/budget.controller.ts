@@ -7,7 +7,7 @@ export class BudgetController {
 
     const result = await budgetService.processAnnualBudgetAndSetTargets(
       Number(pjj_rate),
-      process_date ? new Date(process_date) : undefined
+      process_date ? new Date(process_date) : undefined,
     );
 
     res.status(200).json({

@@ -1,9 +1,6 @@
 import { Prisma } from '../../../generated/prisma/index.js';
-import { MeterWithRelations } from '../../../types/metering/meter.types-temp.js';
-import {
-  CreateReadingSessionInternal,
-  SessionWithDetails,
-} from '../types/index.js';
+import { type MeterWithRelations } from '../../../types/metering/meter.types-temp.js';
+import { type CreateReadingSessionInternal, type SessionWithDetails } from '../types/index.js';
 import {
   _calculateAndDistributeFuelSummary,
   _calculateSummaryDetails,
@@ -14,15 +11,10 @@ export const _createOrUpdateDistributedSummary = async (
   tx: Prisma.TransactionClient,
   meter: MeterWithRelations,
   date: Date,
-  summaryDetails: Omit<
-    Prisma.SummaryDetailCreateInput,
-    'summary' | 'summary_id'
-  >[]
+  summaryDetails: Omit<Prisma.SummaryDetailCreateInput, 'summary' | 'summary_id'>[],
 ): Promise<Prisma.DailySummaryGetPayload<{}>> => {
-  const totalConsumption =
-    summaryDetails[0]?.consumption_value ?? new Prisma.Decimal(0);
-  const totalCost =
-    summaryDetails[0]?.consumption_cost ?? new Prisma.Decimal(0);
+  const totalConsumption = summaryDetails[0]?.consumption_value ?? new Prisma.Decimal(0);
+  const totalCost = summaryDetails[0]?.consumption_cost ?? new Prisma.Decimal(0);
 
   const summary = await tx.dailySummary.upsert({
     where: {
@@ -69,13 +61,12 @@ export const _createSingleSummaryFromDetails = async (
   tx: Prisma.TransactionClient,
   meterId: number,
   date: Date,
-  details: Omit<Prisma.SummaryDetailCreateInput, 'summary' | 'summary_id'>[]
-): Promise<Prisma.DailySummaryGetPayload<{}> | null> => {
+  details: Omit<Prisma.SummaryDetailCreateInput, 'summary' | 'summary_id'>[],
+): Promise<Prisma.DailySummaryGetPayload<object> | null> => {
   if (details.length === 0) return null;
 
   const totalCost = details[0].consumption_cost ?? new Prisma.Decimal(0);
-  const totalConsumption =
-    details[0].consumption_value ?? new Prisma.Decimal(0);
+  const totalConsumption = details[0].consumption_value ?? new Prisma.Decimal(0);
 
   const summary = await tx.dailySummary.upsert({
     where: {
@@ -114,23 +105,18 @@ export const _getLatestPriceScheme = async (
           };
         };
       }>,
-  date: Date
+  date: Date,
 ) => {
-  if (
-    typeof tariffGroupOrId === 'object' &&
-    'price_schemes' in tariffGroupOrId
-  ) {
+  if (typeof tariffGroupOrId === 'object' && 'price_schemes' in tariffGroupOrId) {
     return (
       tariffGroupOrId.price_schemes
         .filter((ps) => ps.effective_date <= date && ps.is_active)
-        .sort(
-          (a, b) => b.effective_date.getTime() - a.effective_date.getTime()
-        )[0] || null
+        .sort((a, b) => b.effective_date.getTime() - a.effective_date.getTime())[0] || null
     );
   } else {
     return tx.priceScheme.findFirst({
       where: {
-        tariff_group_id: tariffGroupOrId as number,
+        tariff_group_id: tariffGroupOrId,
         effective_date: { lte: date },
         is_active: true,
       },
@@ -147,7 +133,7 @@ export const _findOrCreateSession = async (
   tx: Prisma.TransactionClient,
   meter_id: number,
   reading_date: Date,
-  user_id: number
+  user_id: number,
 ) => {
   const existingSession = await tx.readingSession.findUnique({
     where: { unique_meter_reading_per_day: { reading_date, meter_id } },
@@ -163,7 +149,7 @@ export const _findOrCreateSession = async (
 export const _createReadingDetails = async (
   tx: Prisma.TransactionClient,
   sessionId: number,
-  details: CreateReadingSessionInternal['details']
+  details: CreateReadingSessionInternal['details'],
 ) => {
   const detailsToCreate = details.map((detail) => ({
     session_id: sessionId,
@@ -176,8 +162,8 @@ export const _createReadingDetails = async (
 export const _updateDailySummary = async (
   tx: Prisma.TransactionClient,
   meter: MeterWithRelations,
-  dateForDb: Date
-): Promise<Prisma.DailySummaryGetPayload<{}>[] | null> => {
+  dateForDb: Date,
+): Promise<Prisma.DailySummaryGetPayload<object>[] | null> => {
   const currentSession = await tx.readingSession.findUnique({
     where: {
       unique_meter_reading_per_day: {
@@ -207,12 +193,7 @@ export const _updateDailySummary = async (
       include: { details: true },
     });
 
-    return _calculateAndDistributeFuelSummary(
-      tx,
-      meter,
-      currentSession,
-      previousFuelSession
-    );
+    return _calculateAndDistributeFuelSummary(tx, meter, currentSession, previousFuelSession);
   } else {
     const previousDate = new Date(dateForDb);
     previousDate.setUTCDate(previousDate.getUTCDate() - 1);
@@ -232,7 +213,7 @@ export const _updateDailySummary = async (
     tx,
     meter,
     currentSession,
-    previousSession
+    previousSession,
   );
   if (summaryDetailsToCreate.length === 0) return null;
 
@@ -247,8 +228,7 @@ export const _updateDailySummary = async (
     const rawCost = detail.consumption_value ?? 0;
     const safeCost = new Prisma.Decimal(rawCost as any);
 
-    return !detail.metric_name.includes('WBP') &&
-      !detail.metric_name.includes('LWBP')
+    return !detail.metric_name.includes('WBP') && !detail.metric_name.includes('LWBP')
       ? sum.plus(new Prisma.Decimal(safeCost))
       : sum;
   }, new Prisma.Decimal(0));
@@ -301,7 +281,7 @@ export const _buildWhereClause = (
   energyTypeName?: string,
   startDate?: Date | string,
   endDate?: Date | string,
-  meterId?: number | string
+  meterId?: number | string,
 ): Prisma.ReadingSessionWhereInput => {
   const where: Prisma.ReadingSessionWhereInput = {};
 
@@ -316,8 +296,7 @@ export const _buildWhereClause = (
 
   if (meterId) {
     // Pastikan ID adalah angka
-    const parsedId =
-      typeof meterId === 'string' ? parseInt(meterId, 10) : meterId;
+    const parsedId = typeof meterId === 'string' ? parseInt(meterId, 10) : meterId;
     if (!isNaN(parsedId)) {
       meterFilter.meter_id = parsedId;
     }
@@ -352,8 +331,8 @@ export const _buildWhereClause = (
 };
 
 export const _buildOrderByClause = (
-  sortBy: string | 'reading_date' | 'created_at' = 'reading_date',
-  sortOrder: 'asc' | 'desc' = 'desc'
+  sortBy: (string & {}) | 'reading_date' | 'created_at' = 'reading_date',
+  sortOrder: 'asc' | 'desc' = 'desc',
 ): Prisma.ReadingSessionOrderByWithRelationInput => {
   const orderBy: Prisma.ReadingSessionOrderByWithRelationInput = {};
 

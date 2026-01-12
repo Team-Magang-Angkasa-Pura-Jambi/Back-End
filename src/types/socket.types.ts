@@ -31,10 +31,7 @@ export interface ServerToClientEvents {
   new_notification_available: () => void;
 
   // BARU: Event untuk progres kalkulasi ulang
-  'recalculation:progress': (payload: {
-    processed: number;
-    total: number;
-  }) => void;
+  'recalculation:progress': (payload: { processed: number; total: number }) => void;
   'recalculation:success': (payload: { message: string }) => void;
   'recalculation:error': (payload: { message: string }) => void;
 }

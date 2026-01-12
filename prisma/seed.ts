@@ -1,11 +1,5 @@
-import {
-  PrismaClient,
-  Prisma,
-  RoleName,
-} from '../src/generated/prisma/index.js';
+import { PrismaClient, Prisma, RoleName } from '../src/generated/prisma/index.js';
 import bcrypt from 'bcrypt';
-import { runImport } from './import.js';
-import { differenceInDays } from 'date-fns';
 
 const prisma = new PrismaClient();
 
@@ -76,9 +70,7 @@ async function main() {
       { type_name: 'Fuel', unit_of_measurement: 'Liter' },
     ],
   });
-  const electricityType = energyTypes.find(
-    (e) => e.type_name === 'Electricity'
-  )!;
+  const electricityType = energyTypes.find((e) => e.type_name === 'Electricity')!;
   const waterType = energyTypes.find((e) => e.type_name === 'Water')!;
   const fuelType = energyTypes.find((e) => e.type_name === 'Fuel')!;
 
@@ -176,8 +168,7 @@ async function main() {
     data: {
       meter_code: 'ELEC-KANTOR-01',
       energy_type_id: electricityType.energy_type_id,
-      category_id: categories.find((c) => c.name === 'Listrik Perkantoran')!
-        .category_id,
+      category_id: categories.find((c) => c.name === 'Listrik Perkantoran')!.category_id,
       tariff_group_id: tariffB2.tariff_group_id, // Asumsi golongan tarif berbeda
     },
   });
@@ -354,31 +345,28 @@ async function main() {
           },
         });
         console.log(
-          `   -> Berhasil memasukkan data mentah BBM untuk meter ID ${reading.meterId} pada tanggal ${reading.date.toISOString().split('T')[0]}`
+          `   -> Berhasil memasukkan data mentah BBM untuk meter ID ${reading.meterId} pada tanggal ${reading.date.toISOString().split('T')[0]}`,
         );
 
         // 2. Hitung dan distribusikan konsumsi ke DailySummary
-        const meter =
-          reading.meterId === fuelMeter.meter_id ? fuelMeter : fuelMeter800;
+        const meter = reading.meterId === fuelMeter.meter_id ? fuelMeter : fuelMeter800;
         const previousReading = lastReadings.get(reading.meterId);
 
         if (previousReading) {
-          const heightDifference = new Prisma.Decimal(
-            previousReading.value
-          ).minus(reading.value);
+          const heightDifference = new Prisma.Decimal(previousReading.value).minus(reading.value);
 
           // Hanya proses jika ada konsumsi (ketinggian menurun)
           if (heightDifference.isPositive()) {
-            const litersPerCm = new Prisma.Decimal(
-              meter.tank_volume_liters!
-            ).div(meter.tank_height_cm!);
+            const litersPerCm = new Prisma.Decimal(meter.tank_volume_liters!).div(
+              meter.tank_height_cm!,
+            );
             const totalConsumptionLiters = heightDifference.times(litersPerCm);
             const totalCost = totalConsumptionLiters.times(fuelPrice);
 
             // PERBAIKAN: Buat satu DailySummary untuk total konsumsi pada periode ini,
             // menggunakan tanggal pembacaan saat ini.
             console.log(
-              `     -> Menghitung total konsumsi BBM untuk periode ${previousReading.date.toISOString().split('T')[0]} hingga ${reading.date.toISOString().split('T')[0]}`
+              `     -> Menghitung total konsumsi BBM untuk periode ${previousReading.date.toISOString().split('T')[0]} hingga ${reading.date.toISOString().split('T')[0]}`,
             );
             await tx.dailySummary.create({
               data: {
@@ -390,13 +378,11 @@ async function main() {
             });
             console.log(
               `     ...Membuat 1 DailySummary dengan total konsumsi ${totalConsumptionLiters.toFixed(
-                2
-              )} L.`
+                2,
+              )} L.`,
             );
           } else {
-            console.log(
-              `     -> Ketinggian BBM naik atau sama, tidak ada konsumsi yang dicatat.`
-            );
+            console.log(`     -> Ketinggian BBM naik atau sama, tidak ada konsumsi yang dicatat.`);
           }
         }
 
@@ -410,7 +396,7 @@ async function main() {
           // Abaikan error duplikat jika seeder dijalankan ulang
           console.error(
             `   -> Gagal memproses data BBM untuk meter ID ${reading.meterId}:`,
-            error.message
+            error.message,
           );
         }
       }

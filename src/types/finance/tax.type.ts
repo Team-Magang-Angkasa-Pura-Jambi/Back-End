@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { type z } from 'zod';
 import type { taxSchema } from '../../validations/finance/tax.validation.js';
 
 export type CreateTaxBody = z.infer<typeof taxSchema.body>;

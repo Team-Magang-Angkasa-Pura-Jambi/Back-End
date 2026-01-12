@@ -7,7 +7,6 @@ import type {
 } from '../../types/metering/readingType.type.js';
 import type { ReadingType } from '../../generated/prisma/index.js';
 
-
 /**
  * Controller untuk menangani request HTTP terkait Tipe Pembacaan.
  */

@@ -1,10 +1,7 @@
 import type { Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
 import { DailySummaryService } from '../../../services/reports/dailySummary.service.js';
-import {
-  dailySummaryController,
-  DailySummaryController,
-} from '../../../controllers/report/dailySummary.controller.js';
+import { DailySummaryController } from '../../../controllers/report/dailySummary.controller.js';
 import {
   getMonthlyReportSchema,
   querySchema,
@@ -40,7 +37,7 @@ export default (router: Router) => {
     '/daily-summary/reports/monthly',
     authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(getMonthlyReportSchema),
-    asyncHandler(DailySummaryController.getMonthlyReport)
+    asyncHandler(DailySummaryController.getMonthlyReport),
   );
 
   router.use(dailySummaryRouter);

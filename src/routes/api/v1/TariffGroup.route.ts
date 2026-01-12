@@ -38,7 +38,7 @@ export default (router: Router) => {
   router.get(
     prefix + '/types',
     validate(paramsTariffGroup),
-    asyncHandler(tariffGroupController.findByType)
+    asyncHandler(tariffGroupController.findByType),
   );
   router.use(tariffGroupRouter);
 };

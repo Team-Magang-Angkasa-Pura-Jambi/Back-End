@@ -1,8 +1,5 @@
-import { Router } from 'express';
-import {
-  authMiddleware,
-  authorize,
-} from '../../../middleware/auth.middleware.js';
+import { type Router } from 'express';
+import { authMiddleware, authorize } from '../../../middleware/auth.middleware.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { validate } from '../../../utils/validate.js';
 import { dailyLogbookController } from '../../../controllers/operations/dailyLogbook.controller.js';
@@ -24,7 +21,7 @@ export default (router: Router) => {
     prefix,
     authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(getLogbooksSchema),
-    asyncHandler(dailyLogbookController.getAll)
+    asyncHandler(dailyLogbookController.getAll),
   );
 
   // GET /api/v1/logbooks/:logId - Mengambil satu logbook berdasarkan ID
@@ -32,7 +29,7 @@ export default (router: Router) => {
     `${prefix}/:logId`,
     authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(getLogbookByIdSchema),
-    asyncHandler(dailyLogbookController.getById)
+    asyncHandler(dailyLogbookController.getById),
   );
 
   // POST /api/v1/logbooks/generate - Membuat logbook harian secara otomatis
@@ -40,7 +37,7 @@ export default (router: Router) => {
     `${prefix}/generate`,
     authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(generateLogbookSchema),
-    asyncHandler(dailyLogbookController.generate)
+    asyncHandler(dailyLogbookController.generate),
   );
 
   // PATCH /api/v1/logbooks/:logId - Memperbarui catatan manual pada logbook
@@ -48,7 +45,7 @@ export default (router: Router) => {
     `${prefix}/:logId`,
     authorize('Admin', 'SuperAdmin'),
     validate(updateLogbookSchema),
-    asyncHandler(dailyLogbookController.update)
+    asyncHandler(dailyLogbookController.update),
   );
 
   // DELETE /api/v1/logbooks/:logId - Menghapus logbook
@@ -56,6 +53,6 @@ export default (router: Router) => {
     `${prefix}/:logId`,
     authorize('SuperAdmin'), // Hanya SuperAdmin yang boleh menghapus
     validate(deleteLogbookSchema),
-    asyncHandler(dailyLogbookController.delete)
+    asyncHandler(dailyLogbookController.delete),
   );
 };

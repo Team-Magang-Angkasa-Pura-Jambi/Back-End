@@ -1,9 +1,4 @@
-import {
-  DailySummary,
-  EfficiencyTarget,
-  Prisma,
-  SummaryDetail,
-} from '../../generated/prisma/index.js';
+import { type EfficiencyTarget, Prisma } from '../../generated/prisma/index.js';
 import prisma from '../../configs/db.js';
 import type {
   CreateDailyLogbookBody,
@@ -14,10 +9,7 @@ import type {
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
 
 type SummaryWithRelations = Prisma.DailySummaryGetPayload<{
-  select: {
-    summary_id: true;
-    total_consumption: true;
-    total_cost: true;
+  include: {
     meter: {
       select: {
         meter_id: true;
@@ -25,49 +17,14 @@ type SummaryWithRelations = Prisma.DailySummaryGetPayload<{
         energy_type: { select: { type_name: true; unit_of_measurement: true } };
       };
     };
-    classification:
-      | {
-          select: { classification: true };
-        }
-      | undefined;
+    classification: {
+      select: {
+        classification: true;
+      };
+    };
   };
 }>;
 
-/**
- * Helper untuk menghitung persentase perubahan.
- * @param current - Nilai saat ini.
- * @param previous - Nilai sebelumnya.
- * @returns Persentase perubahan. Mengembalikan 0 jika nilai sebelumnya adalah 0.
- */
-function calculatePercentageChange(current: number, previous: number): number {
-  if (previous === 0) {
-    return current > 0 ? 100.0 : 0.0;
-  }
-  return ((current - previous) / previous) * 100;
-}
-
-/**
- * Helper untuk membuat kalimat ringkasan.
- * @param change - Nilai perubahan persentase.
- * @param metricName - Nama metrik (e.g., "listrik").
- * @returns Kalimat deskriptif.
- */
-function formatChange(change: number, metricName: string): string {
-  if (change > 0) {
-    return `kenaikan ${metricName} sebesar ${change.toFixed(1)}%`;
-  }
-  if (change < 0) {
-    return `penurunan ${metricName} sebesar ${Math.abs(change).toFixed(1)}%`;
-  }
-  return `penggunaan ${metricName} stabil`;
-}
-
-/**
- * BARU: Menormalkan tanggal ke awal hari (00:00:00) di zona waktu Asia/Jakarta.
- * Ini penting untuk memastikan konsistensi query tanggal terlepas dari zona waktu server.
- * @param date - Objek Date atau string tanggal.
- * @returns Objek Date baru yang sudah dinormalisasi ke UTC berdasarkan tanggal di Jakarta.
- */
 function normalizeToJakartaDate(date: Date | string): Date {
   const d = new Date(date);
 
@@ -106,7 +63,7 @@ export class DailyLogbookService extends GenericBaseService<
    */
 
   public async findAllPaginated(
-    query: GetLogbooksQuery
+    query: GetLogbooksQuery,
   ): Promise<{ data: DailyLogbook[]; meta: any }> {
     const { limit, page, startDate, endDate, date } = query;
 
@@ -163,7 +120,7 @@ export class DailyLogbookService extends GenericBaseService<
       previousDate.setUTCDate(targetDate.getUTCDate() - 1);
 
       console.log(
-        `[DailyLog] Generating log for ${targetDate.toISOString()} by comparing with ${previousDate.toISOString()}`
+        `[DailyLog] Generating log for ${targetDate.toISOString()} by comparing with ${previousDate.toISOString()}`,
       );
 
       const { todaySummaries, yesterdaySummaries, efficiencyTargets } =
@@ -171,7 +128,7 @@ export class DailyLogbookService extends GenericBaseService<
 
       if (todaySummaries.length === 0) {
         console.log(
-          `[DailyLog] Tidak ada DailySummary untuk tanggal ${targetDate.toISOString()}. Tidak ada log yang dibuat.`
+          `[DailyLog] Tidak ada DailySummary untuk tanggal ${targetDate.toISOString()}. Tidak ada log yang dibuat.`,
         );
         return [];
       }
@@ -179,17 +136,17 @@ export class DailyLogbookService extends GenericBaseService<
       const createdLogs = [];
       for (const summary of todaySummaries) {
         const previousSummary = yesterdaySummaries.find(
-          (s: any) => s.meter.meter_id === summary.meter.meter_id
+          (s: any) => s.meter.meter_id === summary.meter.meter_id,
         );
         const target = efficiencyTargets.find(
-          (t: EfficiencyTarget) => t.meter_id === summary.meter.meter_id
+          (t: EfficiencyTarget) => t.meter_id === summary.meter.meter_id,
         );
 
         const finalLogData = this._analyzeSingleSummary(
           targetDate,
           summary,
           previousSummary,
-          target
+          target,
         );
 
         const createdLog = await prisma.dailyLogbook.upsert({
@@ -206,9 +163,7 @@ export class DailyLogbookService extends GenericBaseService<
         createdLogs.push(createdLog);
       }
 
-      console.log(
-        `[DailyLog] Successfully generated/updated ${createdLogs.length} logs.`
-      );
+      console.log(`[DailyLog] Successfully generated/updated ${createdLogs.length} logs.`);
       return createdLogs;
     });
   }
@@ -216,51 +171,54 @@ export class DailyLogbookService extends GenericBaseService<
   /**
    * BARU: Mengambil semua data yang diperlukan untuk pembuatan logbook.
    */
-  private async _fetchDataForLogGeneration(
-    targetDate: Date,
-    previousDate: Date
-  ) {
-    const [todaySummaries, yesterdaySummaries, efficiencyTargets] =
-      await Promise.all([
-        prisma.dailySummary.findMany({
-          where: { summary_date: targetDate },
+  private async _fetchDataForLogGeneration(targetDate: Date, previousDate: Date) {
+    const [todaySummaries, yesterdaySummaries, efficiencyTargets] = await Promise.all([
+      prisma.dailySummary.findMany({
+        where: { summary_date: targetDate },
 
-          include: {
-            meter: {
-              select: {
-                meter_id: true,
-                meter_code: true,
-                energy_type: {
-                  select: { type_name: true, unit_of_measurement: true },
-                },
-              },
-            },
-            classification: {
-              select: {
-                classification: true,
+        include: {
+          meter: {
+            select: {
+              meter_id: true,
+              meter_code: true,
+              energy_type: {
+                select: { type_name: true, unit_of_measurement: true },
               },
             },
           },
-        }),
-        prisma.dailySummary.findMany({
-          where: { summary_date: previousDate },
+          classification: {
+            select: {
+              classification: true,
+            },
+          },
+        },
+      }),
+      prisma.dailySummary.findMany({
+        where: { summary_date: previousDate },
 
-          select: {
-            summary_id: true,
-            total_consumption: true,
-            total_cost: true,
-            meter: { select: { meter_id: true } },
-            classification: { select: { classification: true } },
+        include: {
+          meter: {
+            select: {
+              meter_id: true,
+              meter_code: true,
+              energy_type: { select: { type_name: true, unit_of_measurement: true } },
+            },
           },
-        }),
-        prisma.efficiencyTarget.findMany({
-          where: {
-            period_start: { lte: targetDate },
-            period_end: { gte: targetDate },
+          classification: {
+            select: {
+              classification: true,
+            },
           },
-          include: { meter: { select: { tariff_group: true } } },
-        }),
-      ]);
+        },
+      }),
+      prisma.efficiencyTarget.findMany({
+        where: {
+          period_start: { lte: targetDate },
+          period_end: { gte: targetDate },
+        },
+        include: { meter: { select: { tariff_group: true } } },
+      }),
+    ]);
 
     return { todaySummaries, yesterdaySummaries, efficiencyTargets };
   }
@@ -276,12 +234,15 @@ export class DailyLogbookService extends GenericBaseService<
       | Prisma.EfficiencyTargetGetPayload<{
           include: { meter: { select: { tariff_group: true } } };
         }>
-      | undefined
+      | undefined,
   ): Prisma.DailyLogbookCreateInput {
     const { meter } = summary;
 
-    const { logData, savingsSummary, targetDeviationPercent } =
-      this._calculateSavingsAndOverage(summary, previousSummary, target);
+    const { logData, savingsSummary, targetDeviationPercent } = this._calculateSavingsAndOverage(
+      summary,
+      previousSummary,
+      target,
+    );
 
     let classificationNote = '';
     if (summary.classification) {
@@ -313,11 +274,10 @@ export class DailyLogbookService extends GenericBaseService<
       | Prisma.EfficiencyTargetGetPayload<{
           include: { meter: { select: { tariff_group: true } } };
         }>
-      | undefined
+      | undefined,
   ) {
     const logData: Partial<Prisma.DailyLogbookCreateInput> = {};
-    let savingsSummary =
-      'Tidak ada target efisiensi yang ditetapkan untuk hari ini.';
+    let savingsSummary = 'Tidak ada target efisiensi yang ditetapkan untuk hari ini.';
     let targetDeviationPercent: number | null = null;
 
     if (target) {
@@ -327,49 +287,42 @@ export class DailyLogbookService extends GenericBaseService<
       let estimatedTargetCost: number;
 
       if (targetValue > 0) {
-        targetDeviationPercent =
-          ((consumption - targetValue) / targetValue) * 100;
+        targetDeviationPercent = ((consumption - targetValue) / targetValue) * 100;
       }
 
       if (target.target_cost) {
         estimatedTargetCost = target.target_cost.toNumber();
       } else {
-        const consumptionYesterday =
-          previousSummary?.total_consumption?.toNumber() ?? 0;
+        const consumptionYesterday = previousSummary?.total_consumption?.toNumber() ?? 0;
         const costYesterday = previousSummary?.total_cost?.toNumber() ?? 0;
-        const avgPricePerUnit =
-          consumptionYesterday > 0 ? costYesterday / consumptionYesterday : 0;
+        const avgPricePerUnit = consumptionYesterday > 0 ? costYesterday / consumptionYesterday : 0;
         const faktorKali = target.meter.tariff_group?.faktor_kali ?? 1;
         estimatedTargetCost = targetValue * faktorKali * avgPricePerUnit;
       }
 
       if (consumption < targetValue) {
         logData.savings_value = new Prisma.Decimal(targetValue - consumption);
-        logData.savings_cost = new Prisma.Decimal(
-          Math.max(0, estimatedTargetCost - actualCost)
-        );
+        logData.savings_cost = new Prisma.Decimal(Math.max(0, estimatedTargetCost - actualCost));
         savingsSummary = `Tercapai penghematan sebesar ${logData.savings_value.toFixed(
-          2
+          2,
         )} ${summary.meter.energy_type.unit_of_measurement} (${Math.abs(
-          targetDeviationPercent ?? 0
+          targetDeviationPercent ?? 0,
         ).toFixed(
-          1
+          1,
         )}% di bawah target), setara dengan estimasi penghematan biaya Rp ${logData.savings_cost.toFixed(
-          0
+          0,
         )}.`;
       } else {
         logData.overage_value = new Prisma.Decimal(consumption - targetValue);
-        logData.overage_cost = new Prisma.Decimal(
-          Math.max(0, actualCost - estimatedTargetCost)
-        );
+        logData.overage_cost = new Prisma.Decimal(Math.max(0, actualCost - estimatedTargetCost));
         savingsSummary = `Terjadi pemborosan sebesar ${logData.overage_value.toFixed(
-          2
+          2,
         )} ${summary.meter.energy_type.unit_of_measurement} (${Math.abs(
-          targetDeviationPercent ?? 0
+          targetDeviationPercent ?? 0,
         ).toFixed(
-          1
+          1,
         )}% di atas target), setara dengan estimasi pemborosan biaya Rp ${logData.overage_cost.toFixed(
-          0
+          0,
         )}.`;
       }
     }

@@ -1,10 +1,9 @@
-import { Router } from 'express';
+import { type Router } from 'express';
 import { authorize } from '../../../middleware/auth.middleware.js';
 import { validate } from '../../../utils/validate.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { analysisController } from '../../../controllers/report/analysis.controller.js';
 import {
-  analysisQuerySchema,
   budgetAllocationQuerySchema,
   budgetPreviewSchema,
   bulkPredictionSchema,
@@ -24,48 +23,48 @@ export default (router: Router) => {
     `${prefix}/fuel-stock`,
     authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(fuelStockAnalysisQuerySchema),
-    asyncHandler(analysisController.getMonthlyFuelStockAnalysis)
+    asyncHandler(analysisController.getMonthlyFuelStockAnalysis),
   );
   // summary
   router.get(
     `${prefix}/classification-summary`,
     authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(classificationSummaryQuerySchema),
-    asyncHandler(analysisController.getClassificationSummary)
+    asyncHandler(analysisController.getClassificationSummary),
   );
   router.get(
     `${prefix}/today-summary`,
     authorize('Technician', 'Admin', 'SuperAdmin'),
     validate(todaySummaryQuerySchema),
-    asyncHandler(analysisController.getTodaySummary)
+    asyncHandler(analysisController.getTodaySummary),
   );
   // budget
   router.get(
     `${prefix}/budget-allocation`,
     authorize('Admin', 'SuperAdmin'),
     validate(budgetAllocationQuerySchema),
-    asyncHandler(analysisController.getBudgetAllocation)
+    asyncHandler(analysisController.getBudgetAllocation),
   );
 
   router.post(
     `${prefix}/budget-preview`,
     authorize('Admin', 'SuperAdmin'),
     validate(budgetPreviewSchema),
-    asyncHandler(analysisController.getBudgetPreview)
+    asyncHandler(analysisController.getBudgetPreview),
   );
 
   router.get(
     `${prefix}/budget-summary`,
     authorize('Admin', 'SuperAdmin'),
     validate(getBudgetSummarySchema),
-    asyncHandler(analysisController.getBudgetSummary)
+    asyncHandler(analysisController.getBudgetSummary),
   );
 
   router.get(
     `${prefix}/prepare-budget/:parentBudgetId`,
     authorize('Admin', 'SuperAdmin'),
     validate(prepareBudgetSchema),
-    asyncHandler(analysisController.prepareNextPeriodBudget)
+    asyncHandler(analysisController.prepareNextPeriodBudget),
   );
 
   // predict
@@ -73,27 +72,27 @@ export default (router: Router) => {
     `${prefix}/run-single-prediction`,
     authorize('SuperAdmin', 'Admin', 'Technician'),
     validate(singlePredictionSchema),
-    asyncHandler(analysisController.runSinglePrediction)
+    asyncHandler(analysisController.runSinglePrediction),
   );
 
   router.post(
     `${prefix}/run-bulk-predictions`,
     authorize('SuperAdmin'),
     validate(bulkPredictionSchema),
-    asyncHandler(analysisController.runBulkPredictions)
+    asyncHandler(analysisController.runBulkPredictions),
   );
   // classifation
   router.post(
     `${prefix}/run-single-classification`,
     authorize('Admin', 'SuperAdmin'),
     validate(singlePredictionSchema),
-    asyncHandler(analysisController.runSingleClassification)
+    asyncHandler(analysisController.runSingleClassification),
   );
   // efficiency
   router.post(
     `${prefix}/efficiency-target-preview`,
     authorize('Admin', 'SuperAdmin'),
     validate(efficiencyTargetPreviewSchema),
-    asyncHandler(analysisController.getEfficiencyTargetPreview)
+    asyncHandler(analysisController.getEfficiencyTargetPreview),
   );
 };

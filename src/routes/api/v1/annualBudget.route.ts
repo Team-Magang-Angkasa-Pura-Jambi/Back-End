@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { type Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
 import { AnnualBudgetService } from '../../../services/finance/annualBudget.service.js';
 import {
@@ -38,14 +38,14 @@ export default (router: Router) => {
     '/annual-budgets/parents',
     authorize('Admin', 'SuperAdmin'),
     // validate(queryAnnualBudget),
-    asyncHandler(annualBudgetController.getAllParents)
+    asyncHandler(annualBudgetController.getAllParents),
   );
 
   // -----------------------------new-----------------------------
   router.get(
     '/annual-budgets/year-options',
     authorize('Admin', 'SuperAdmin'),
-    asyncHandler(annualBudgetController.getYearsOptions)
+    asyncHandler(annualBudgetController.getYearsOptions),
   );
   router.use(annualBudgetRouter);
 };

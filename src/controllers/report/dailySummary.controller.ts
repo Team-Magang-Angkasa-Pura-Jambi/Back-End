@@ -26,10 +26,7 @@ export class DailySummaryController extends BaseController<
   static getMonthlyReport = async (req: Request, res: Response) => {
     const { query } = res.locals.validatedData;
 
-    const report = await dailySummaryService.getMonthlySummaryReport(
-      query.year,
-      query.month
-    );
+    const report = await dailySummaryService.getMonthlySummaryReport(query.year, query.month);
 
     res200({
       res,

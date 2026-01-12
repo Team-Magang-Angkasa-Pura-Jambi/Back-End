@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { type z } from 'zod';
 import type { paxScheme } from '../../validations/operations/paxData.validation.js';
 
 export type CreatePaxParamsBody = z.infer<typeof paxScheme.body>;

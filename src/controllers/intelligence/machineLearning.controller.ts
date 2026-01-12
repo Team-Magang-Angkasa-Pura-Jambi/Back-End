@@ -7,11 +7,7 @@ class MachineLearningController {
   /**
    * Memicu proses prediksi untuk tanggal tertentu dan menyimpannya ke database.
    */
-  public runPrediction = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public runPrediction = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { date } = req.body;
 

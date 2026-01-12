@@ -26,12 +26,7 @@ export abstract class BaseController<
   TCreateInput,
   TUpdateInput,
   TListQuery,
-  TService extends IGenericService<
-    TModel,
-    TCreateInput,
-    TUpdateInput,
-    TListQuery
-  >,
+  TService extends IGenericService<TModel, TCreateInput, TUpdateInput, TListQuery>,
 > {
   protected service: TService;
   private idParamName: string;

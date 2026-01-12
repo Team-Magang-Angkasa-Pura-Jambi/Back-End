@@ -1,7 +1,7 @@
 import type { SummaryDetail } from '../../generated/prisma/index.js';
 import {
   summaryDetailService,
-  SummaryDetailService,
+  type SummaryDetailService,
 } from '../../services/reports/summaryDetail.service.js';
 
 import type {

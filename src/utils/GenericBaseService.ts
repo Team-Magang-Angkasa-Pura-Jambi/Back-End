@@ -1,5 +1,5 @@
-import type { Prisma, PrismaClient } from '../generated/prisma/index.js';
-import { PaginationParams } from '../types/common/index.js';
+import type { PrismaClient } from '../generated/prisma/index.js';
+import { type PaginationParams } from '../types/common/index.js';
 import { BaseService, type CustomErrorMessages } from './baseService.js';
 import { Error400 } from './customError.js';
 
@@ -14,7 +14,7 @@ export abstract class GenericBaseService<
   TModel,
   TCreateInput,
   TUpdateInput,
-  TFindManyArgs extends { [key: string]: any }, // Constraint ini sudah bagus agar fleksibel
+  TFindManyArgs extends Record<string, any>, // Constraint ini sudah bagus agar fleksibel
   TFindUniqueArgs,
   TCreateArgs,
   TUpdateArgs,
@@ -45,13 +45,13 @@ export abstract class GenericBaseService<
 
   public async findAll(
     args?: TFindManyArgs & PaginationParams,
-    customMessages?: CustomErrorMessages
+    customMessages?: CustomErrorMessages,
   ): Promise<TModel[]> {
     // [FIX] Ganti TEntity[] menjadi TModel[] (karena TEntity tidak didefinisikan)
 
-    return this._handleCrudOperation(async () => {
+    return this._handleCrudOperation(() => {
       // 1. Destructuring: Ambil page & limit, sisanya adalah args murni Prisma
-      const { page = 1, limit = 10, ...prismaArgs } = args || {};
+      const { page = 1, limit = 10, ...prismaArgs } = args ?? {};
 
       // 2. Kalkulasi Pagination
       const take = Number(limit);
@@ -70,7 +70,7 @@ export abstract class GenericBaseService<
   public async findById(
     id: number,
     args?: Omit<TFindUniqueArgs, 'where'>,
-    customMessages?: CustomErrorMessages
+    customMessages?: CustomErrorMessages,
   ): Promise<TModel> {
     // Casting 'as any' diperlukan karena Dynamic Key {[this._idField]: id}
     // sering dianggap tidak kompatibel dengan strict typing Prisma WhereInput
@@ -78,54 +78,41 @@ export abstract class GenericBaseService<
 
     return this._handleCrudOperation(
       () => this._model.findUniqueOrThrow(queryArgs),
-      customMessages
+      customMessages,
     );
   }
 
   public async delete(
     id: number,
     args?: Omit<TDeleteArgs, 'where'>,
-    customMessages?: CustomErrorMessages
+    customMessages?: CustomErrorMessages,
   ): Promise<TModel> {
     const queryArgs = { ...args, where: { [this._idField]: id } } as any;
 
-    return this._handleCrudOperation(
-      () => this._model.delete(queryArgs),
-      customMessages
-    );
+    return this._handleCrudOperation(() => this._model.delete(queryArgs), customMessages);
   }
 
   // --- HELPER INTERNAL ---
 
   protected async _create(
     args: TCreateArgs,
-    customMessages?: CustomErrorMessages
+    customMessages?: CustomErrorMessages,
   ): Promise<TModel> {
-    return this._handleCrudOperation(
-      () => this._model.create(args),
-      customMessages
-    );
+    return this._handleCrudOperation(() => this._model.create(args), customMessages);
   }
 
   protected async _update(
     id: number,
     args: Omit<TUpdateArgs, 'where'>,
-    customMessages?: CustomErrorMessages
+    customMessages?: CustomErrorMessages,
   ): Promise<TModel> {
     // Validasi sederhana: Pastikan ada data yang dikirim
-    if (
-      !args ||
-      !(args as any).data ||
-      Object.keys((args as any).data).length === 0
-    ) {
+    if (!args || !(args as any).data || Object.keys((args as any).data).length === 0) {
       throw new Error400('Tidak ada data yang dikirim untuk diupdate.');
     }
 
     const queryArgs = { ...args, where: { [this._idField]: id } } as any;
 
-    return this._handleCrudOperation(
-      () => this._model.update(queryArgs),
-      customMessages
-    );
+    return this._handleCrudOperation(() => this._model.update(queryArgs), customMessages);
   }
 }

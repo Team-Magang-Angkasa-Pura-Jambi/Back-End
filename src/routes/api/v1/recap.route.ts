@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { type Router } from 'express';
 import { recapController } from '../../../controllers/report/recap.controller.js';
 import {
   getRecapSchema,
@@ -16,13 +16,13 @@ export default (router: Router) => {
     prefix,
     authorize(RoleName.Admin, RoleName.SuperAdmin, RoleName.Technician),
     validate(getRecapSchema),
-    asyncHandler(recapController.getRecap)
+    asyncHandler(recapController.getRecap),
   );
 
   router.post(
     prefix + '/recalculate',
     authorize(RoleName.Admin, RoleName.SuperAdmin),
     validate(recalculateRecapSchema),
-    asyncHandler(recapController.recalculateRecap)
+    asyncHandler(recapController.recalculateRecap),
   );
 };

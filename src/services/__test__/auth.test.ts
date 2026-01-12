@@ -64,7 +64,7 @@ describe('AuthService Test Suite', () => {
         process.env.JWT_SECRET = '';
 
         await expect(authService.login(loginInput)).rejects.toThrow(
-          'JWT_SECRET environment variable is not defined'
+          'JWT_SECRET environment variable is not defined',
         );
       });
     });
@@ -74,9 +74,7 @@ describe('AuthService Test Suite', () => {
       it('Harus mengembalikan Token & Data User jika username & password benar', async () => {
         // ARRANGE
         // 1. Mock userService menemukan user
-        vi.mocked(userService.findByUsername).mockResolvedValue(
-          mockUserDb as any
-        );
+        vi.mocked(userService.findByUsername).mockResolvedValue(mockUserDb as any);
 
         // 2. Mock bcrypt bilang password COCOK (true)
         vi.mocked(bcrypt.compare).mockResolvedValue(true as never); // as never untuk bypass type check
@@ -89,15 +87,10 @@ describe('AuthService Test Suite', () => {
 
         // ASSERT
         // Cek userService dipanggil
-        expect(userService.findByUsername).toHaveBeenCalledWith(
-          'admin_sentinel'
-        );
+        expect(userService.findByUsername).toHaveBeenCalledWith('admin_sentinel');
 
         // Cek bcrypt membandingkan password mentah vs hash
-        expect(bcrypt.compare).toHaveBeenCalledWith(
-          'password123',
-          mockUserDb.password_hash
-        );
+        expect(bcrypt.compare).toHaveBeenCalledWith('password123', mockUserDb.password_hash);
 
         // Cek jwt membuat token dengan payload yang benar
         expect(jwt.sign).toHaveBeenCalledWith(
@@ -107,7 +100,7 @@ describe('AuthService Test Suite', () => {
             role: 'Admin',
           }),
           'rahasia-negara', // Secret key
-          expect.any(Object)
+          expect.any(Object),
         );
 
         // Cek Hasil Akhir
@@ -146,9 +139,7 @@ describe('AuthService Test Suite', () => {
 
       it('Gagal: Password SALAH -> Error 401', async () => {
         // Mock user ketemu
-        vi.mocked(userService.findByUsername).mockResolvedValue(
-          mockUserDb as any
-        );
+        vi.mocked(userService.findByUsername).mockResolvedValue(mockUserDb as any);
         // Mock bcrypt bilang SALAH (false)
         vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
 

@@ -18,16 +18,12 @@ const Schema = z.object({
       z.object({
         reading_type_id: positiveInt('Reading Type ID'),
         value: z.number(),
-      })
+      }),
     )
     .min(1, 'At least one rate must be provided.')
-    .refine(
-      (items) =>
-        new Set(items.map((i) => i.reading_type_id)).size === items.length,
-      {
-        message: 'Each reading type can only have one rate per scheme.',
-      }
-    ),
+    .refine((items) => new Set(items.map((i) => i.reading_type_id)).size === items.length, {
+      message: 'Each reading type can only have one rate per scheme.',
+    }),
 
   tax_ids: z.array(positiveInt('Tax ID')).optional(),
 });
@@ -44,5 +40,5 @@ export const priceSchema = new CrudSchemaBuilder({
 export const queryPriceSchema = priceSchema.getList(
   z.object({
     tariffGroupId: positiveInt('tariff group id').optional(),
-  })
+  }),
 );

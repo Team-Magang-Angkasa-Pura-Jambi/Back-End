@@ -1,6 +1,6 @@
 import prisma from '../../configs/db.js';
 import type { EnergyType, Prisma } from '../../generated/prisma/index.js';
-import { PaginationParams } from '../../types/common/index.js';
+import { type PaginationParams } from '../../types/common/index.js';
 import type {
   CreateEnergyTypeBody,
   UpdateEnergyTypeBody,
@@ -24,11 +24,10 @@ export class EnergyTypeService extends GenericBaseService<
     super(prisma, prisma.energyType, 'energy_type_id');
   }
   public override async findAll(
-    args?: Prisma.EnergyTypeFindManyArgs &
-      PaginationParams & { typeName?: string },
-    customMessages?: CustomErrorMessages
+    args?: Prisma.EnergyTypeFindManyArgs & PaginationParams & { typeName?: string },
+    customMessages?: CustomErrorMessages,
   ): Promise<EnergyType[]> {
-    const { typeName, ...restArgs } = args || {};
+    const { typeName, ...restArgs } = args ?? {};
 
     const where: Prisma.EnergyTypeWhereInput = {
       ...(restArgs as any).where,

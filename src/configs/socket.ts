@@ -1,9 +1,8 @@
 // src/configs/socket.ts
-import { Server as HttpServer } from 'http';
-import { Server, Socket } from 'socket.io';
+import { type Server as HttpServer } from 'http';
+import { Server, type Socket } from 'socket.io';
 import type {
   ClientToServerEvents,
-  NotificationPayload,
   MissingDataPayload,
   ServerToClientEvents,
 } from '../types/socket.types.js';
@@ -15,19 +14,13 @@ export class SocketServer {
   constructor(httpServer: HttpServer) {
     // Singleton pattern: ensure only one instance is created
     SocketServer.instance = this;
-    this.io = new Server<ClientToServerEvents, ServerToClientEvents>(
-      httpServer,
-      {
-        cors: {
-          origin: [
-            'http://localhost:3000',
-            'https://sentinel-angkasa-pura.vercel.app',
-          ],
-          methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
-          allowedHeaders: ['Content-Type', 'Authorization'],
-        },
-      }
-    );
+    this.io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
+      cors: {
+        origin: ['http://localhost:3000', 'https://sentinel-angkasa-pura.vercel.app'],
+        methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+        allowedHeaders: ['Content-Type', 'Authorization'],
+      },
+    });
   }
 
   /**
@@ -35,9 +28,7 @@ export class SocketServer {
    */
   public init() {
     this.io.on('connection', (socket) => this.handleConnection(socket));
-    console.log(
-      '✅ Socket.IO server initialized and listening for connections.'
-    );
+    console.log('✅ Socket.IO server initialized and listening for connections.');
   }
 
   /**
@@ -55,9 +46,7 @@ export class SocketServer {
   /**
    * Menangani koneksi client baru
    */
-  private handleConnection(
-    socket: Socket<ClientToServerEvents, ServerToClientEvents>
-  ) {
+  private handleConnection(socket: Socket<ClientToServerEvents, ServerToClientEvents>) {
     console.log(`🔌 New client connected: ${socket.id}`);
 
     socket.on('join_room', (userId: string) => {
@@ -77,13 +66,9 @@ export class SocketServer {
   /**
    * Registrasi event custom dari client
    */
-  private registerSocketEvents(
-    socket: Socket<ClientToServerEvents, ServerToClientEvents>
-  ) {
+  private registerSocketEvents(socket: Socket<ClientToServerEvents, ServerToClientEvents>) {
     socket.on('send_message', (payload) => {
-      console.log(
-        `📩 Received message from ${payload.author}: ${payload.text}`
-      );
+      console.log(`📩 Received message from ${payload.author}: ${payload.text}`);
       this.io.emit('new_message', payload);
     });
   }

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { type Router } from 'express';
 import { machineLearningController } from '../../../controllers/intelligence/machineLearning.controller.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { authorize } from '../../../middleware/auth.middleware.js';
@@ -13,6 +13,6 @@ export default (router: Router) => {
     `${prefix}/run-prediction`,
     authorize('Admin', 'SuperAdmin'),
     validate(z.object({ body: z.object({ date: z.string().date() }) })),
-    asyncHandler(machineLearningController.runPrediction)
+    asyncHandler(machineLearningController.runPrediction),
   );
 };

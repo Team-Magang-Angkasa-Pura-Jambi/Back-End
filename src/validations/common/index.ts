@@ -9,12 +9,6 @@ export const PaginationRules = z.object({
 });
 
 export const DateRangeRules = z.object({
-  startDate: z
-    .string()
-    .datetime({ message: 'Start date must be a valid ISO string' })
-    .optional(),
-  endDate: z
-    .string()
-    .datetime({ message: 'End date must be a valid ISO string' })
-    .optional(),
+  startDate: z.string().datetime({ message: 'Start date must be a valid ISO string' }).optional(),
+  endDate: z.string().datetime({ message: 'End date must be a valid ISO string' }).optional(),
 });

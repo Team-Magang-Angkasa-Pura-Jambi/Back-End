@@ -7,16 +7,16 @@ import { GenericBaseService } from '../../utils/GenericBaseService.js';
 import type { UpdateNotificationSchemaBody } from '../../types/operations/notification.types.js';
 import { SocketServer } from '../../configs/socket.js';
 
-type CreateNotificationInput = {
+interface CreateNotificationInput {
   user_id: number;
   title: string;
   message: string;
   link?: string;
-};
+}
 
 export class NotificationService extends GenericBaseService<
   typeof prisma.notification,
-  Prisma.NotificationGetPayload<{}>,
+  Prisma.NotificationGetPayload<object>,
   CreateNotificationInput,
   UpdateNotificationSchemaBody,
   Prisma.NotificationFindManyArgs,
@@ -36,16 +36,12 @@ export class NotificationService extends GenericBaseService<
   public async create(data: CreateNotificationInput): Promise<any> {
     return this._handleCrudOperation(async () => {
       // 1. Simpan notifikasi ke database
-      const newNotification = this._handleCrudOperation(() =>
-        prisma.notification.create({ data })
-      );
+      const newNotification = this._handleCrudOperation(() => prisma.notification.create({ data }));
 
       // 2. Kirim sinyal ke client melalui WebSocket bahwa ada notifikasi baru.
       //    Client kemudian bisa melakukan fetch untuk mendapatkan notifikasi terbaru.
       // PERBAIKAN: Gunakan instance singleton yang benar untuk mengakses server socket.
-      SocketServer.instance.io
-        .to(String(data.user_id))
-        .emit('new_notification_available');
+      SocketServer.instance.io.to(String(data.user_id)).emit('new_notification_available');
 
       return newNotification;
     });
@@ -120,13 +116,13 @@ export class NotificationService extends GenericBaseService<
     return this._handleCrudOperation(() =>
       this._model.deleteMany({
         where: { user_id: userId },
-      })
+      }),
     );
   }
 
   public async deleteManyByIds(
     userId: number,
-    notificationIds: number[]
+    notificationIds: number[],
   ): Promise<Prisma.BatchPayload> {
     return this._handleCrudOperation(() =>
       this._model.deleteMany({
@@ -134,7 +130,7 @@ export class NotificationService extends GenericBaseService<
           user_id: userId,
           notification_id: { in: notificationIds },
         },
-      })
+      }),
     );
   }
 
@@ -147,7 +143,7 @@ export class NotificationService extends GenericBaseService<
             lt: olderThan,
           },
         },
-      })
+      }),
     );
   }
 }

@@ -1,9 +1,9 @@
-import { MeterCategory } from '../../generated/prisma/index.js';
+import { type MeterCategory } from '../../generated/prisma/index.js';
 import { MeterCategoryService } from '../../services/metering/meterCategory.service.js';
 import {
-  CreateMeterCategoryBody,
-  GetMeterCategoryQuery,
-  UpdateMeterCategoryBody,
+  type CreateMeterCategoryBody,
+  type GetMeterCategoryQuery,
+  type UpdateMeterCategoryBody,
 } from '../../types/metering/meterCategory.type.js';
 import { BaseController } from '../../utils/baseController.js';
 

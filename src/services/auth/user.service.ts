@@ -1,16 +1,10 @@
 import bcrypt from 'bcrypt';
 import prisma from '../../configs/db.js';
-import { Prisma, Role, RoleName, User } from '../../generated/prisma/index.js';
-import type {
-  CreateUserBody,
-  GetUsersQuery,
-  UpdateUserBody,
-} from '../../types/auth/user.type.js';
+import { type Prisma, RoleName, type User } from '../../generated/prisma/index.js';
+import type { CreateUserBody, GetUsersQuery, UpdateUserBody } from '../../types/auth/user.type.js';
 import { Error409 } from '../../utils/customError.js';
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
 import { notificationService } from '../notifications/notification.service.js';
-import { DefaultArgs } from '../../generated/prisma/runtime/library.js';
-import { CustomErrorMessages } from '../../utils/baseService.js';
 
 export interface userHistory {
   id: number;
@@ -46,7 +40,7 @@ export class UserService extends GenericBaseService<
         }
 
         console.log(
-          `[UserService] Pengguna tidak aktif '${data.username}' ditemukan. Mengaktifkan kembali dengan data baru.`
+          `[UserService] Pengguna tidak aktif '${data.username}' ditemukan. Mengaktifkan kembali dengan data baru.`,
         );
         const hashedPassword = await bcrypt.hash(data.password, 10);
 
@@ -106,10 +100,8 @@ export class UserService extends GenericBaseService<
    * @returns Daftar pengguna yang aktif.
    */
 
-  public override async findAll(
-    args?: Partial<GetUsersQuery>
-  ): Promise<User[]> {
-    const { roleName, isActive, search, ...restArgs } = args || {};
+  public override async findAll(args?: Partial<GetUsersQuery>): Promise<User[]> {
+    const { roleName, isActive, search } = args ?? {};
     const where: Prisma.UserWhereInput = {};
 
     if (roleName) {
@@ -124,14 +116,11 @@ export class UserService extends GenericBaseService<
     }
 
     return this._handleCrudOperation(() =>
-      this._model.findMany({ where, include: { role: true } })
+      this._model.findMany({ where, include: { role: true } }),
     );
   }
 
-  public override async update(
-    id: number,
-    data: UpdateUserBody
-  ): Promise<User> {
+  public override async update(id: number, data: UpdateUserBody): Promise<User> {
     return this._handleCrudOperation(async () => {
       const { role_id, password, ...restData } = data;
       const updateData: Prisma.UserUpdateInput = { ...restData };
@@ -161,18 +150,16 @@ export class UserService extends GenericBaseService<
       this._model.update({
         where: { user_id: id },
         data: { is_active: false },
-      })
+      }),
     );
   }
 
-  public async findByUsername(
-    username: string
-  ): Promise<(User & { role: any }) | null> {
+  public async findByUsername(username: string): Promise<(User & { role: any }) | null> {
     return this._handleCrudOperation(() =>
       this._model.findUnique({
         where: { username },
         include: { role: true },
-      })
+      }),
     );
   }
 
@@ -232,38 +219,34 @@ export class UserService extends GenericBaseService<
       },
     });
 
-    const readingHistory: userHistory[] =
-      userWithRelations.reading_sessions.map((session) => ({
-        id: session.session_id,
-        type: 'Pencatatan Meter',
-        timestamp: session.created_at.toISOString(),
-        description: `Melakukan pencatatan untuk meter ${session.meter.meter_code} (${session.meter.energy_type.type_name}).`,
-      }));
+    const readingHistory: userHistory[] = userWithRelations.reading_sessions.map((session) => ({
+      id: session.session_id,
+      type: 'Pencatatan Meter',
+      timestamp: session.created_at.toISOString(),
+      description: `Melakukan pencatatan untuk meter ${session.meter.meter_code} (${session.meter.energy_type.type_name}).`,
+    }));
 
-    const priceSchemeHistory: userHistory[] =
-      userWithRelations.price_schemes_set.map((scheme) => ({
-        id: scheme.scheme_id,
-        type: 'Pengaturan Harga',
-        timestamp: scheme.effective_date.toISOString(),
-        description: `Mengatur skema harga baru "${scheme.scheme_name}" untuk golongan tarif ${scheme.tariff_group.group_name}.`,
-      }));
+    const priceSchemeHistory: userHistory[] = userWithRelations.price_schemes_set.map((scheme) => ({
+      id: scheme.scheme_id,
+      type: 'Pengaturan Harga',
+      timestamp: scheme.effective_date.toISOString(),
+      description: `Mengatur skema harga baru "${scheme.scheme_name}" untuk golongan tarif ${scheme.tariff_group.group_name}.`,
+    }));
 
-    const efficiencyTargetHistory: userHistory[] =
-      userWithRelations.efficiency_targets_set.map((target) => ({
+    const efficiencyTargetHistory: userHistory[] = userWithRelations.efficiency_targets_set.map(
+      (target) => ({
         id: target.target_id,
         type: 'Pengaturan Target',
         timestamp: target.period_start.toISOString(),
         description: `Mengatur target "${target.kpi_name}" untuk meter ${target.meter.meter_code}.`,
-      }));
+      }),
+    );
 
     const fullHistory: userHistory[] = [
       ...readingHistory,
       ...priceSchemeHistory,
       ...efficiencyTargetHistory,
-    ].sort(
-      (a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
+    ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     return fullHistory;
   }

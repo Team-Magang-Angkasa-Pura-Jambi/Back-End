@@ -1,11 +1,7 @@
-import { Prisma, AlertStatus } from '../../generated/prisma/index.js';
+import { type Prisma, AlertStatus } from '../../generated/prisma/index.js';
 import prisma from '../../configs/db.js';
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
-import type {
-  Alert,
-  PrismaAlert,
-  UpdateAlertBody,
-} from '../../types/notifications/alert.types.js';
+import type { Alert, PrismaAlert, UpdateAlertBody } from '../../types/notifications/alert.types.js';
 
 export class AlertService extends GenericBaseService<
   typeof prisma.alert,
@@ -143,7 +139,7 @@ export class AlertService extends GenericBaseService<
           status: AlertStatus.NEW,
           ...(meterId && { meter_id: meterId }),
         },
-      })
+      }),
     );
   }
 
@@ -177,7 +173,7 @@ export class AlertService extends GenericBaseService<
           status: AlertStatus.READ,
           acknowledged_by_user_id: userId,
         },
-      })
+      }),
     );
   }
 
@@ -209,7 +205,7 @@ export class AlertService extends GenericBaseService<
   public async getLatest(
     scope?: 'system' | 'meters',
     limit = 5,
-    status?: AlertStatus
+    status?: AlertStatus,
   ): Promise<Alert[]> {
     return this._handleCrudOperation(async () => {
       const where: Prisma.AlertWhereInput = {};
@@ -250,9 +246,7 @@ export class AlertService extends GenericBaseService<
    * @param alertIds - Array dari ID alert yang akan dihapus.
    * @returns Hasil operasi deleteMany dari Prisma.
    */
-  public async deleteManyByIds(
-    alertIds: number[]
-  ): Promise<Prisma.BatchPayload> {
+  public async deleteManyByIds(alertIds: number[]): Promise<Prisma.BatchPayload> {
     return this._handleCrudOperation(() =>
       prisma.alert.deleteMany({
         where: {
@@ -260,7 +254,7 @@ export class AlertService extends GenericBaseService<
             in: alertIds,
           },
         },
-      })
+      }),
     );
   }
 }

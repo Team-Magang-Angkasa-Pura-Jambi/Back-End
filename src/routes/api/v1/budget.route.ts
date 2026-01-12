@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { type Router } from 'express';
 import { budgetController } from '../../../controllers/finance/budget.controller.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { authorize } from '../../../middleware/auth.middleware.js';
@@ -19,6 +19,6 @@ export default (router: Router) => {
     '/budget/process',
     authorize('SuperAdmin', 'Admin'),
     validate(processBudgetSchema),
-    asyncHandler(budgetController.processBudget)
+    asyncHandler(budgetController.processBudget),
   );
 };

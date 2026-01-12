@@ -1,9 +1,5 @@
 import z from 'zod';
-import {
-  positiveInt,
-  positiveNumber,
-  requiredString,
-} from '../../utils/schmeHelper.js';
+import { positiveInt, positiveNumber, requiredString } from '../../utils/schmeHelper.js';
 import { CrudSchemaBuilder } from '../../utils/shemaHandler.js';
 
 const defaultScheme = z.object({
@@ -33,6 +29,4 @@ const summaryDetailQueryFilters = z.object({
 });
 
 // Gabungkan filter kustom dengan metode getList dari builder Anda
-export const querySchema = summaryDetailScheme.getList(
-  summaryDetailQueryFilters
-);
+export const querySchema = summaryDetailScheme.getList(summaryDetailQueryFilters);

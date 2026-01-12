@@ -27,16 +27,16 @@ services:
       context: ./script
     ports:
       - '8000:8000'
-  
+
   db:
     # 👇 PERBAIKAN 2: Gunakan versi spesifik agar tidak error volume
-    image: postgres:16-alpine 
+    image: postgres:16-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: fluctlight
       POSTGRES_DB: sentinel
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
