@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { type z } from 'zod';
 import type { efficiencyScheme } from '../../validations/intelligence/efficiencyTargets.validation.js';
 
 export type CreateEfficiencyBody = z.infer<typeof efficiencyScheme.body>;

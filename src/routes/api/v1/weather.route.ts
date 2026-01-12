@@ -13,7 +13,7 @@ router.use(authMiddleware);
 router.get(
   '/today',
   authorize(RoleName.Technician, RoleName.Admin, RoleName.SuperAdmin),
-  asyncHandler(weatherController.getTodayWeather)
+  asyncHandler(weatherController.getTodayWeather),
 );
 
 export default router;

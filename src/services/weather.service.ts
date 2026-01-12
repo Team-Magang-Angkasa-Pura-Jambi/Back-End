@@ -3,12 +3,12 @@ import { Error400, Error500 } from '../utils/customError.js';
 import prisma from '../configs/db.js';
 import { weatherConfig } from '../configs/weather.js';
 
-type WeatherData = {
+interface WeatherData {
   suhu_rata?: number;
   suhu_max?: number;
   avg_temp?: number;
   max_temp?: number;
-};
+}
 
 class WeatherService {
   private apiKey: string;
@@ -34,7 +34,7 @@ class WeatherService {
     }
 
     const targetDate = new Date(
-      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
     );
 
     const cachedWeather = await prisma.weatherHistory.findUnique({
@@ -43,7 +43,7 @@ class WeatherService {
 
     if (cachedWeather) {
       console.log(
-        `[WeatherService] Data cuaca untuk ${targetDate.toISOString().split('T')[0]} ditemukan di cache.`
+        `[WeatherService] Data cuaca untuk ${targetDate.toISOString().split('T')[0]} ditemukan di cache.`,
       );
       return {
         suhu_rata: cachedWeather.avg_temp.toNumber(),
@@ -69,7 +69,7 @@ class WeatherService {
 
       if (dailyForecasts.length === 0) {
         console.warn(
-          `[WeatherService] Tidak ada data prakiraan cuaca yang ditemukan untuk tanggal ${targetDateString} dari API.`
+          `[WeatherService] Tidak ada data prakiraan cuaca yang ditemukan untuk tanggal ${targetDateString} dari API.`,
         );
 
         return null;
@@ -100,17 +100,17 @@ class WeatherService {
         },
       });
       console.log(
-        `[WeatherService] Data cuaca untuk ${targetDate.toISOString().split('T')[0]} diambil dari API dan disimpan ke cache.`
+        `[WeatherService] Data cuaca untuk ${targetDate.toISOString().split('T')[0]} diambil dari API dan disimpan ke cache.`,
       );
 
       return parsedData;
     } catch (error) {
       if (isAxiosError(error)) {
         const status = error.response?.status;
-        const message = error.response?.data?.message || error.message;
+        const message = error.response?.data?.message ?? error.message;
 
         console.error(
-          `[WeatherService] Gagal mengambil data dari OpenWeatherMap. Status: ${status}, Pesan: "${message}"`
+          `[WeatherService] Gagal mengambil data dari OpenWeatherMap. Status: ${status}, Pesan: "${message}"`,
         );
         console.error(`[WeatherService] URL: ${error.config?.url}`);
         console.error(`[WeatherService] Params:`, error.config?.params);
@@ -119,9 +119,7 @@ class WeatherService {
           throw new Error500('Kunci API untuk layanan cuaca tidak valid.');
         }
         if (status === 400) {
-          throw new Error400(
-            `Permintaan ke layanan cuaca tidak valid: ${message}`
-          );
+          throw new Error400(`Permintaan ke layanan cuaca tidak valid: ${message}`);
         }
       }
 

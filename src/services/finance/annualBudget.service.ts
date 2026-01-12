@@ -1,11 +1,6 @@
 import prisma from '../../configs/db.js';
-import {
-  BudgetAllocation,
-  Prisma,
-  type AnnualBudget,
-} from '../../generated/prisma/index.js';
+import { Prisma, type AnnualBudget } from '../../generated/prisma/index.js';
 import type {
-  AllocationData,
   CreateAnnualBudgetBody,
   UpdateAnnualBudgetBody,
 } from '../../types/finance/annualBudget.types.js';
@@ -36,9 +31,7 @@ export class AnnualBudgetService extends GenericBaseService<
         orderBy: { period_start: 'desc' },
       });
 
-      const dbYears = budgets.map((b) =>
-        new Date(b.period_start).getFullYear()
-      );
+      const dbYears = budgets.map((b) => new Date(b.period_start).getFullYear());
 
       const currentYear = new Date().getFullYear();
       const mandatoryYears = [currentYear, currentYear + 1];
@@ -70,7 +63,7 @@ export class AnnualBudgetService extends GenericBaseService<
             },
           },
         },
-        orderBy: args.orderBy || { period_start: 'asc' },
+        orderBy: args.orderBy ?? { period_start: 'asc' },
       });
 
       if (budgets.length === 0) return [];
@@ -80,14 +73,11 @@ export class AnnualBudgetService extends GenericBaseService<
       budgets.forEach((b) =>
         b.allocations.forEach((a) => {
           if (a.meter_id) allMeterIds.add(a.meter_id);
-        })
+        }),
       );
 
       // Cari range tanggal terluar
-      const dates = budgets.flatMap((b) => [
-        b.period_start.getTime(),
-        b.period_end.getTime(),
-      ]);
+      const dates = budgets.flatMap((b) => [b.period_start.getTime(), b.period_end.getTime()]);
       const minDate = new Date(Math.min(...dates));
       const maxDate = new Date(Math.max(...dates));
 
@@ -108,9 +98,7 @@ export class AnnualBudgetService extends GenericBaseService<
         // A. Hitung Realisasi PER METER (Allocation Level)
         const processedAllocations = budget.allocations.map((alloc) => {
           // Hitung Budget untuk meter ini (Total Budget * Bobot)
-          const allocBudget = budget.total_budget
-            .times(alloc.weight)
-            .toNumber();
+          const allocBudget = budget.total_budget.times(alloc.weight).toNumber();
 
           // Filter realisasi khusus untuk meter ini di rentang tanggal budget ini
           const allocRealization = rawRealisations
@@ -122,11 +110,10 @@ export class AnnualBudgetService extends GenericBaseService<
                 rDate <= budget.period_end
               );
             })
-            .reduce((sum, r) => sum + (r._sum.total_cost?.toNumber() || 0), 0);
+            .reduce((sum, r) => sum + (r._sum.total_cost?.toNumber() ?? 0), 0);
 
           const allocRemaining = allocBudget - allocRealization;
-          const allocPercentage =
-            allocBudget > 0 ? (allocRealization / allocBudget) * 100 : 0;
+          const allocPercentage = allocBudget > 0 ? (allocRealization / allocBudget) * 100 : 0;
 
           return {
             ...alloc,
@@ -146,13 +133,12 @@ export class AnnualBudgetService extends GenericBaseService<
         // Ini memastikan angka di header budget sinkron dengan total kartu-kartu di bawahnya
         const totalRealization = processedAllocations.reduce(
           (acc, curr) => acc + curr.totalRealization,
-          0
+          0,
         );
 
         const remainingBudget = totalBudget - totalRealization;
 
-        const realizationPercentage =
-          totalBudget > 0 ? (totalRealization / totalBudget) * 100 : 0;
+        const realizationPercentage = totalBudget > 0 ? (totalRealization / totalBudget) * 100 : 0;
 
         return {
           ...budget,
@@ -169,9 +155,7 @@ export class AnnualBudgetService extends GenericBaseService<
     });
   }
 
-  public override async create(
-    data: CreateAnnualBudgetBody
-  ): Promise<AnnualBudget> {
+  public override async create(data: CreateAnnualBudgetBody): Promise<AnnualBudget> {
     const { allocations, parent_budget_id, ...budgetData } = data;
 
     return this._handleCrudOperation(async () => {
@@ -186,7 +170,7 @@ export class AnnualBudgetService extends GenericBaseService<
           where: { budget_id: parent_budget_id },
         });
 
-        if (!parentBudget || parentBudget.parent_budget_id !== null) {
+        if (parentBudget?.parent_budget_id !== null) {
           throw new Error400('ID anggaran induk tidak valid.');
         }
 
@@ -200,9 +184,7 @@ export class AnnualBudgetService extends GenericBaseService<
         });
 
         if (overlapping) {
-          throw new Error400(
-            'Periode anggaran bertabrakan dengan yang sudah ada.'
-          );
+          throw new Error400('Periode anggaran bertabrakan dengan yang sudah ada.');
         }
       }
 
@@ -249,7 +231,7 @@ export class AnnualBudgetService extends GenericBaseService<
    */
   public override async update(
     budgetId: number,
-    data: UpdateAnnualBudgetBody
+    data: UpdateAnnualBudgetBody,
   ): Promise<AnnualBudget> {
     const { allocations, ...budgetData } = data;
 
@@ -305,13 +287,7 @@ export class AnnualBudgetService extends GenericBaseService<
         },
       });
 
-      const {
-        period_start,
-        period_end,
-        total_budget,
-        allocations,
-        child_budgets,
-      } = budget;
+      const { period_start, period_end, total_budget, allocations, child_budgets } = budget;
 
       const isParentBudget = !budget.parent_budget_id;
 
@@ -326,15 +302,11 @@ export class AnnualBudgetService extends GenericBaseService<
 
       if (!isParentBudget && allocations.length > 0) {
         const periodDays =
-          (period_end.getTime() - period_start.getTime()) /
-            (1000 * 60 * 60 * 24) +
-          1;
-        const budgetPerDay =
-          periodDays > 0 ? total_budget.div(periodDays) : new Prisma.Decimal(0);
+          (period_end.getTime() - period_start.getTime()) / (1000 * 60 * 60 * 24) + 1;
+        const budgetPerDay = periodDays > 0 ? total_budget.div(periodDays) : new Prisma.Decimal(0);
 
         const meterIds = allocations.map((alloc: any) => alloc.meter_id);
-        const monthlyRealisations: { month: number; total_cost: number }[] =
-          await prisma.$queryRaw`
+        const monthlyRealisations: { month: number; total_cost: number }[] = await prisma.$queryRaw`
               SELECT EXTRACT(MONTH FROM summary_date)::int as month, SUM(total_cost) as total_cost
               FROM "daily_summaries"
               WHERE meter_id = ANY(ARRAY[${Prisma.join(meterIds)}])
@@ -342,42 +314,24 @@ export class AnnualBudgetService extends GenericBaseService<
               GROUP BY month ORDER BY month;`;
 
         const monthlyRealizationMap = new Map(
-          monthlyRealisations.map((r) => [
-            r.month,
-            new Prisma.Decimal(r.total_cost),
-          ])
+          monthlyRealisations.map((r) => [r.month, new Prisma.Decimal(r.total_cost)]),
         );
 
-        for (
-          let d = new Date(period_start);
-          d <= period_end;
-          d.setUTCMonth(d.getUTCMonth() + 1)
-        ) {
+        for (let d = new Date(period_start); d <= period_end; d.setUTCMonth(d.getUTCMonth() + 1)) {
           const currentMonth = d.getUTCMonth();
           const currentYear = d.getUTCFullYear();
-          const monthStartDate = new Date(
-            Date.UTC(currentYear, currentMonth, 1)
-          );
-          const monthEndDate = new Date(
-            Date.UTC(currentYear, currentMonth + 1, 0)
-          );
+          const monthStartDate = new Date(Date.UTC(currentYear, currentMonth, 1));
+          const monthEndDate = new Date(Date.UTC(currentYear, currentMonth + 1, 0));
 
-          const overlapStart = new Date(
-            Math.max(monthStartDate.getTime(), period_start.getTime())
-          );
-          const overlapEnd = new Date(
-            Math.min(monthEndDate.getTime(), period_end.getTime())
-          );
+          const overlapStart = new Date(Math.max(monthStartDate.getTime(), period_start.getTime()));
+          const overlapEnd = new Date(Math.min(monthEndDate.getTime(), period_end.getTime()));
 
           if (overlapEnd >= overlapStart) {
             const daysInMonthOverlap =
-              (overlapEnd.getTime() - overlapStart.getTime()) /
-                (1000 * 60 * 60 * 24) +
-              1;
+              (overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24) + 1;
             const budgetForMonth = budgetPerDay.times(daysInMonthOverlap);
             const realizationForMonth =
-              monthlyRealizationMap.get(currentMonth + 1) ??
-              new Prisma.Decimal(0);
+              monthlyRealizationMap.get(currentMonth + 1) ?? new Prisma.Decimal(0);
             const remainingForMonth = budgetForMonth.minus(realizationForMonth);
             const percentageForMonth = budgetForMonth.isZero()
               ? null
@@ -392,9 +346,7 @@ export class AnnualBudgetService extends GenericBaseService<
               realizationCost: realizationForMonth.toNumber(),
               remainingBudget: remainingForMonth.toNumber(),
               realizationPercentage:
-                percentageForMonth !== null
-                  ? parseFloat(percentageForMonth.toFixed(2))
-                  : null,
+                percentageForMonth !== null ? parseFloat(percentageForMonth.toFixed(2)) : null,
             });
           }
         }
@@ -410,13 +362,13 @@ export class AnnualBudgetService extends GenericBaseService<
         _sum: { total_cost: true },
       });
       const meterRealizationMap = new Map(
-        meterRealisations.map((r: any) => [r.meter_id, r._sum.total_cost ?? 0])
+        meterRealisations.map((r: any) => [r.meter_id, r._sum.total_cost ?? 0]),
       );
 
       const detailedAllocations = allocations.map((alloc: any) => {
         const allocatedBudget = total_budget.times(alloc.weight);
         const totalRealization = new Prisma.Decimal(
-          meterRealizationMap.get(alloc.meter_id) ?? (0 as any)
+          meterRealizationMap.get(alloc.meter_id) ?? (0 as any),
         );
         const remainingBudget = allocatedBudget.minus(totalRealization);
         const realizationPercentage = allocatedBudget.isZero()
@@ -429,13 +381,11 @@ export class AnnualBudgetService extends GenericBaseService<
           totalRealization: totalRealization.toNumber(),
           remainingBudget: remainingBudget.toNumber(),
           realizationPercentage:
-            realizationPercentage !== null
-              ? parseFloat(realizationPercentage.toFixed(2))
-              : null,
+            realizationPercentage !== null ? parseFloat(realizationPercentage.toFixed(2)) : null,
         };
       });
 
-      let parentRealization = {
+      const parentRealization = {
         totalRealization: 0,
         remainingBudget: budget.total_budget.toNumber(),
         realizationPercentage: 0,
@@ -447,9 +397,7 @@ export class AnnualBudgetService extends GenericBaseService<
         for (const child of budget.child_budgets as Prisma.AnnualBudgetGetPayload<{
           include: { allocations: { select: { meter_id: true } } };
         }>[]) {
-          const childMeterIds = child?.allocations?.map(
-            (a: { meter_id: number }) => a.meter_id
-          );
+          const childMeterIds = child?.allocations?.map((a: { meter_id: number }) => a.meter_id);
           if (childMeterIds?.length > 0) {
             const childRealizationResult = await prisma.dailySummary.aggregate({
               _sum: { total_cost: true },
@@ -462,7 +410,7 @@ export class AnnualBudgetService extends GenericBaseService<
               },
             });
             totalRealization = totalRealization.plus(
-              childRealizationResult._sum.total_cost ?? new Prisma.Decimal(0)
+              childRealizationResult._sum.total_cost ?? new Prisma.Decimal(0),
             );
           }
         }
@@ -473,9 +421,7 @@ export class AnnualBudgetService extends GenericBaseService<
 
         parentRealization.totalRealization = totalRealization.toNumber();
         parentRealization.remainingBudget = remainingBudget.toNumber();
-        parentRealization.realizationPercentage = parseFloat(
-          realizationPercentage.toFixed(2)
-        );
+        parentRealization.realizationPercentage = parseFloat(realizationPercentage.toFixed(2));
       }
 
       return {
@@ -517,53 +463,48 @@ export class AnnualBudgetService extends GenericBaseService<
         return [];
       }
 
-      const detailedParentBudgetsPromises = parentBudgets.map(
-        async (budget: any) => {
-          const { total_budget } = budget;
+      const detailedParentBudgetsPromises = parentBudgets.map(async (budget: any) => {
+        const { total_budget } = budget;
 
-          let totalRealization = new Prisma.Decimal(0);
+        let totalRealization = new Prisma.Decimal(0);
 
-          for (const child of budget.child_budgets as Prisma.AnnualBudgetGetPayload<{
-            include: { allocations: { select: { meter_id: true } } };
-          }>[]) {
-            const childMeterIds = child.allocations.map((a) => a.meter_id);
+        for (const child of budget.child_budgets as Prisma.AnnualBudgetGetPayload<{
+          include: { allocations: { select: { meter_id: true } } };
+        }>[]) {
+          const childMeterIds = child.allocations.map((a) => a.meter_id);
 
-            if (childMeterIds.length > 0) {
-              const childRealizationResult =
-                await prisma.dailySummary.aggregate({
-                  _sum: { total_cost: true },
-                  where: {
-                    meter_id: { in: childMeterIds },
-                    summary_date: {
-                      gte: child.period_start,
-                      lte: child.period_end,
-                    },
-                  },
-                });
-              totalRealization = totalRealization.plus(
-                childRealizationResult._sum.total_cost ?? new Prisma.Decimal(0)
-              );
-            }
+          if (childMeterIds.length > 0) {
+            const childRealizationResult = await prisma.dailySummary.aggregate({
+              _sum: { total_cost: true },
+              where: {
+                meter_id: { in: childMeterIds },
+                summary_date: {
+                  gte: child.period_start,
+                  lte: child.period_end,
+                },
+              },
+            });
+            totalRealization = totalRealization.plus(
+              childRealizationResult._sum.total_cost ?? new Prisma.Decimal(0),
+            );
           }
-
-          const remainingBudget = total_budget.minus(totalRealization);
-          const realizationPercentage = total_budget.isZero()
-            ? null
-            : totalRealization.div(total_budget).times(100).toNumber();
-
-          return {
-            ...budget,
-            parentRealization: {
-              totalRealization: totalRealization.toNumber(),
-              remainingBudget: remainingBudget.toNumber(),
-              realizationPercentage:
-                realizationPercentage !== null
-                  ? parseFloat(realizationPercentage.toFixed(2))
-                  : null,
-            },
-          };
         }
-      );
+
+        const remainingBudget = total_budget.minus(totalRealization);
+        const realizationPercentage = total_budget.isZero()
+          ? null
+          : totalRealization.div(total_budget).times(100).toNumber();
+
+        return {
+          ...budget,
+          parentRealization: {
+            totalRealization: totalRealization.toNumber(),
+            remainingBudget: remainingBudget.toNumber(),
+            realizationPercentage:
+              realizationPercentage !== null ? parseFloat(realizationPercentage.toFixed(2)) : null,
+          },
+        };
+      });
 
       return Promise.all(detailedParentBudgetsPromises);
     });

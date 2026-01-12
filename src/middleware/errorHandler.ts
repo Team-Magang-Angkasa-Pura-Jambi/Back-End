@@ -3,25 +3,16 @@ import { HttpError } from '../utils/customError.js';
 import { ZodError } from 'zod';
 import { res500 } from '../utils/response.js';
 
-export const handleNotFound = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const handleNotFound = (req: Request, res: Response, next: NextFunction) => {
   const error = new HttpError(
     404,
     `Resource not found at ${req.method} ${req.originalUrl}`,
-    'NotFoundError'
+    'NotFoundError',
   );
   next(error);
 };
 
-export const errorHandler = (
-  error: Error,
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const errorHandler = (error: Error, req: Request, res: Response, next: NextFunction) => {
   console.error(error.stack || error);
 
   if (error instanceof HttpError) {
@@ -39,12 +30,11 @@ export const errorHandler = (
     return res.status(400).json({
       status: {
         code: 400,
-        message:
-          'Input tidak valid. Silakan periksa kembali data yang Anda kirim.',
+        message: 'Input tidak valid. Silakan periksa kembali data yang Anda kirim.',
       },
       errors: {
         formErrors: structuredErrors.formErrors,
-        fieldErrors: structuredErrors.fieldErrors,  
+        fieldErrors: structuredErrors.fieldErrors,
       },
     });
   }

@@ -24,15 +24,15 @@ export class SummaryDetailService extends GenericBaseService<
     super(prisma, prisma.summaryDetail, 'detail_id');
   }
 
-  public override async findAll(
-    query: GetSummaryDetailQuery = {}
-  ): Promise<SummaryDetail[]> {
+  public override async findAll(query: GetSummaryDetailQuery = {}): Promise<SummaryDetail[]> {
     const { month } = query;
     const where: Prisma.SummaryDetailWhereInput = {};
 
     if (month) {
-      const year = parseInt(month.split('-')[0]);
-      const monthIndex = parseInt(month.split('-')[1]) - 1;
+      const monthString =
+        typeof month === 'string' ? month : `${(month as any).year}-${(month as any).month}`;
+      const year = parseInt(monthString.split('-')[0]);
+      const monthIndex = parseInt(monthString.split('-')[1]) - 1;
       const startDate = new Date(Date.UTC(year, monthIndex, 1));
       const endDate = new Date(Date.UTC(year, monthIndex + 1, 0));
 
@@ -52,7 +52,7 @@ export class SummaryDetailService extends GenericBaseService<
       },
       orderBy: {
         summary: {
-          summary_date: 'asc',
+          summary_date: 'asc' as Prisma.SortOrder,
         },
       },
     };

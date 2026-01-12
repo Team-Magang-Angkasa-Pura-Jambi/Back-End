@@ -13,10 +13,9 @@ export function startNotificationCleanupScheduler() {
     async () => {
       const jobStartDate = new Date();
       console.log(
-        `[CRON - NotificationCleanup] Memulai tugas pada ${jobStartDate.toLocaleString(
-          'id-ID',
-          { timeZone: 'Asia/Jakarta' }
-        )}`
+        `[CRON - NotificationCleanup] Memulai tugas pada ${jobStartDate.toLocaleString('id-ID', {
+          timeZone: 'Asia/Jakarta',
+        })}`,
       );
 
       try {
@@ -27,15 +26,14 @@ export function startNotificationCleanupScheduler() {
         const result = await notificationService.deleteOldRead(threeDaysAgo);
 
         console.log(
-          `[CRON - NotificationCleanup] Tugas selesai. ${result.count} notifikasi lama telah dihapus.`
+          `[CRON - NotificationCleanup] Tugas selesai. ${result.count} notifikasi lama telah dihapus.`,
         );
       } catch (error) {
         console.error('[CRON - NotificationCleanup] Terjadi error:', error);
       }
     },
     {
-      scheduled: true,
       timezone: 'Asia/Jakarta',
-    }
+    },
   );
 }

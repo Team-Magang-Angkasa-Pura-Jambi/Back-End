@@ -1,7 +1,8 @@
-import { z } from 'zod';
-import { energyTypeSchema, queryEnergy } from '../../validations/metering/energy.validation.js';
-
-
+import { type z } from 'zod';
+import {
+  type energyTypeSchema,
+  type queryEnergy,
+} from '../../validations/metering/energy.validation.js';
 
 export type CreateEnergyTypeBody = z.infer<typeof energyTypeSchema.body>;
 

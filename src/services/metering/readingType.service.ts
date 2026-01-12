@@ -1,11 +1,12 @@
 import prisma from '../../configs/db.js';
-import { Prisma, type ReadingType } from '../../generated/prisma/index.js';
+import { type Prisma, type ReadingType } from '../../generated/prisma/index.js';
+import { type PaginationParams } from '../../types/common/index.js';
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
 import type {
   CreateReadingTypeBody,
-  GetReadingTypesQuery,
   UpdateReadingTypeBody,
 } from '../../types/metering/readingType.type.js';
+import { type CustomErrorMessages } from '../../utils/baseService.js';
 
 type ReadingTypeWithEnergyType = Prisma.ReadingTypeGetPayload<{
   include: { energy_type: true };
@@ -26,10 +27,12 @@ export class ReadingTypeService extends GenericBaseService<
     super(prisma, prisma.readingType, 'reading_type_id');
   }
 
-  public override async findAll(
-    query: GetReadingTypesQuery = {}
+  public async findAll(
+    args?: Prisma.ReadingTypeFindManyArgs &
+      PaginationParams & { meterId?: number; energyTypeId?: number },
+    customMessages?: CustomErrorMessages,
   ): Promise<ReadingTypeWithEnergyType[]> {
-    const { meterId, energyTypeId } = query;
+    const { meterId, energyTypeId, ...restArgs } = args ?? {};
     const where: Prisma.ReadingTypeWhereInput = {};
 
     // Bangun klausa 'where' secara dinamis
@@ -45,6 +48,7 @@ export class ReadingTypeService extends GenericBaseService<
     }
 
     const findArgs: Prisma.ReadingTypeFindManyArgs = {
+      ...restArgs,
       where,
       include: {
         energy_type: true,
@@ -55,10 +59,8 @@ export class ReadingTypeService extends GenericBaseService<
       },
     };
 
-    const result = this._handleCrudOperation(() =>
-      this._model.findMany(findArgs)
-    );
-    return result as unknown as ReadingTypeWithEnergyType[];
+    const result = await super.findAll(findArgs as any, customMessages);
+    return result as ReadingTypeWithEnergyType[];
   }
 
   // public async create(data: {

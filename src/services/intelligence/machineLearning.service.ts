@@ -1,94 +1,89 @@
 import axios, { isAxiosError } from 'axios';
 import { weatherService } from '../weather.service.js';
 
-type EvaluationInput = {
+interface EvaluationInput {
   pax: number;
   suhu_rata: number;
   suhu_max: number;
   is_hari_kerja: number;
   aktual_kwh_terminal: number;
   aktual_kwh_kantor: number;
-};
+}
 
-type EvaluationResult = {
+interface EvaluationResult {
   kinerja_terminal: string;
   deviasi_persen_terminal: number;
   kinerja_kantor: string;
   deviasi_persen_kantor: number;
-};
+}
 
-type EvaluationInputTerminal = {
+interface EvaluationInputTerminal {
   pax: number;
   suhu_rata: number;
   suhu_max: number;
   aktual_kwh_terminal: number;
-};
+}
 
-type EvaluationInputKantor = {
+interface EvaluationInputKantor {
   suhu_rata: number;
   suhu_max: number;
   is_hari_kerja: number;
   aktual_kwh_kantor: number;
-};
+}
 
-type TerminalEvaluationResult = {
+interface TerminalEvaluationResult {
   kinerja_terminal: string;
   deviasi_persen_terminal: number;
-};
+}
 
-type KantorEvaluationResult = {
+interface KantorEvaluationResult {
   kinerja_kantor: string;
   deviasi_persen_kantor: number;
-};
+}
 
-type PredictionResult = {
+interface PredictionResult {
   prediksi_pax: number;
   prediksi_kwh_terminal: number;
   prediksi_kwh_kantor: number;
   tanggal_prediksi: string;
   prediksi_listrik_kwh: number;
-};
+}
 
-type TerminalPredictionResult = {
+interface TerminalPredictionResult {
   prediksi_kwh_terminal: number;
-};
+}
 
-type KantorPredictionResult = {
+interface KantorPredictionResult {
   prediksi_kwh_kantor: number;
-};
+}
 
 class MachineLearningService {
   private baseURL: string;
 
   constructor() {
-    this.baseURL = process.env.ML_API_BASE_URL || 'http://127.0.0.1:8000';
+    this.baseURL = process.env.ML_API_BASE_URL ?? 'http://127.0.0.1:8000';
   }
 
   /**
    * Memanggil endpoint /evaluate pada API Python.
    */
-  public async evaluateDailyUsage(
-    data: EvaluationInput
-  ): Promise<EvaluationResult> {
+  public async evaluateDailyUsage(data: EvaluationInput): Promise<EvaluationResult> {
     try {
-      const response = await axios.post<EvaluationResult>(
-        `${this.baseURL}/evaluate`,
-        data
-      );
+      const response = await axios.post<EvaluationResult>(`${this.baseURL}/evaluate`, data);
       return response.data;
     } catch (error) {
       if (isAxiosError(error)) {
-        const status = error.response?.status || 'N/A';
+        const status = error.response?.status ?? 'N/A';
         const responseData = error.response?.data;
         let detailMessage = 'Tidak ada detail tambahan.';
 
-        if (responseData && responseData.detail) {
+        if (responseData?.detail) {
           detailMessage = JSON.stringify(responseData.detail);
         } else if (responseData) {
           detailMessage = JSON.stringify(responseData);
         }
         throw new Error(
-          `Gagal memanggil API evaluasi ML. Status: ${status}. Detail: ${detailMessage}`
+          `Gagal memanggil API evaluasi ML. Status: ${status}. Detail: ${detailMessage}`,
         );
       }
       throw error;
@@ -99,22 +94,22 @@ class MachineLearningService {
    * BARU: Memanggil endpoint /evaluate/terminal pada API Python.
    */
   public async evaluateTerminalUsage(
-    data: EvaluationInputTerminal
+    data: EvaluationInputTerminal,
   ): Promise<TerminalEvaluationResult> {
     try {
       const response = await axios.post<TerminalEvaluationResult>(
         `${this.baseURL}/evaluate/terminal`,
-        data
+        data,
       );
       return response.data;
     } catch (error) {
       if (isAxiosError(error)) {
-        const status = error.response?.status || 'N/A';
+        const status = error.response?.status ?? 'N/A';
         const responseData = error.response?.data;
         throw new Error(
           `Gagal memanggil API evaluasi terminal. Status: ${status}. Detail: ${JSON.stringify(
-            responseData
-          )}`
+            responseData,
+          )}`,
         );
       }
       throw error;
@@ -124,23 +119,21 @@ class MachineLearningService {
   /**
    * BARU: Memanggil endpoint /evaluate/kantor pada API Python.
    */
-  public async evaluateKantorUsage(
-    data: EvaluationInputKantor
-  ): Promise<KantorEvaluationResult> {
+  public async evaluateKantorUsage(data: EvaluationInputKantor): Promise<KantorEvaluationResult> {
     try {
       const response = await axios.post<KantorEvaluationResult>(
         `${this.baseURL}/evaluate/kantor`,
-        data
+        data,
       );
       return response.data;
     } catch (error) {
       if (isAxiosError(error)) {
-        const status = error.response?.status || 'N/A';
+        const status = error.response?.status ?? 'N/A';
         const responseData = error.response?.data;
         throw new Error(
           `Gagal memanggil API evaluasi kantor. Status: ${status}. Detail: ${JSON.stringify(
-            responseData
-          )}`
+            responseData,
+          )}`,
         );
       }
       throw error;
@@ -154,7 +147,7 @@ class MachineLearningService {
    */
   public async getDailyPrediction(
     date: Date,
-    weatherData?: { suhu_rata: number; suhu_max: number }
+    weatherData?: { suhu_rata: number; suhu_max: number },
   ): Promise<PredictionResult> {
     try {
       let suhu_rata = weatherData?.suhu_rata;
@@ -174,28 +167,25 @@ class MachineLearningService {
 
       const dateString = date.toISOString().split('T')[0];
 
-      const response = await axios.post<PredictionResult>(
-        `${this.baseURL}/predict`,
-        {
-          tanggal: dateString,
-          suhu_rata: finalSuhuRata,
-          suhu_max: finalSuhuMax,
-        }
-      );
+      const response = await axios.post<PredictionResult>(`${this.baseURL}/predict`, {
+        tanggal: dateString,
+        suhu_rata: finalSuhuRata,
+        suhu_max: finalSuhuMax,
+      });
       return response.data;
     } catch (error) {
       if (isAxiosError(error)) {
-        const status = error.response?.status || 'N/A';
+        const status = error.response?.status ?? 'N/A';
         const responseData = error.response?.data;
         let detailMessage = 'Tidak ada detail tambahan.';
 
-        if (responseData && responseData.detail) {
+        if (responseData?.detail) {
           detailMessage = JSON.stringify(responseData.detail);
         } else if (responseData) {
           detailMessage = JSON.stringify(responseData);
         }
         throw new Error(
-          `Gagal memanggil API prediksi ML. Status: ${status}. Detail: ${detailMessage}`
+          `Gagal memanggil API prediksi ML. Status: ${status}. Detail: ${detailMessage}`,
         );
       }
       throw error;
@@ -208,7 +198,7 @@ class MachineLearningService {
    */
   public async getTerminalPrediction(
     date: Date,
-    weatherData: { suhu_rata: number; suhu_max: number }
+    weatherData: { suhu_rata: number; suhu_max: number },
   ): Promise<TerminalPredictionResult> {
     try {
       const dateString = date.toISOString().split('T')[0];
@@ -219,17 +209,17 @@ class MachineLearningService {
           tanggal: dateString,
           suhu_rata: weatherData.suhu_rata,
           suhu_max: weatherData.suhu_max,
-        }
+        },
       );
       return response.data;
     } catch (error) {
       if (isAxiosError(error)) {
-        const status = error.response?.status || 'N/A';
+        const status = error.response?.status ?? 'N/A';
         const responseData = error.response?.data;
         throw new Error(
           `Gagal memanggil API prediksi terminal. Status: ${status}. Detail: ${JSON.stringify(
-            responseData
-          )}`
+            responseData,
+          )}`,
         );
       }
       throw error;
@@ -242,28 +232,25 @@ class MachineLearningService {
    */
   public async getKantorPrediction(
     date: Date,
-    weatherData: { suhu_rata: number; suhu_max: number }
+    weatherData: { suhu_rata: number; suhu_max: number },
   ): Promise<KantorPredictionResult> {
     try {
       const dateString = date.toISOString().split('T')[0];
 
-      const response = await axios.post<KantorPredictionResult>(
-        `${this.baseURL}/predict/kantor`,
-        {
-          tanggal: dateString,
-          suhu_rata: weatherData.suhu_rata,
-          suhu_max: weatherData.suhu_max,
-        }
-      );
+      const response = await axios.post<KantorPredictionResult>(`${this.baseURL}/predict/kantor`, {
+        tanggal: dateString,
+        suhu_rata: weatherData.suhu_rata,
+        suhu_max: weatherData.suhu_max,
+      });
       return response.data;
     } catch (error) {
       if (isAxiosError(error)) {
-        const status = error.response?.status || 'N/A';
+        const status = error.response?.status ?? 'N/A';
         const responseData = error.response?.data;
         throw new Error(
           `Gagal memanggil API prediksi kantor. Status: ${status}. Detail: ${JSON.stringify(
-            responseData
-          )}`
+            responseData,
+          )}`,
         );
       }
       throw error;

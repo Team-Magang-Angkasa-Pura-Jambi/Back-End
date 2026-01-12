@@ -2,7 +2,7 @@ import type { NextFunction, Response } from 'express';
 import type { TariffGroup } from '../../generated/prisma/index.js';
 import {
   tariffGroupService,
-  TariffGroupService,
+  type TariffGroupService,
 } from '../../services/finance/TariffGroup.service.js';
 import type {
   CreateTariffGroupBody,
@@ -22,11 +22,7 @@ export class TariffGroupController extends BaseController<
   constructor() {
     super(tariffGroupService, 'tariffGroupId');
   }
-  public findByType = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> => {
+  public findByType = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { typeId } = res.locals.validatedData.query;
 
     const result = await this.service.findByType(typeId);

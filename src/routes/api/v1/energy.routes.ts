@@ -1,8 +1,5 @@
 import type { Router } from 'express';
-import {
-  energyTypeSchema,
-  queryEnergy,
-} from '../../../validations/metering/energy.validation.js';
+import { energyTypeSchema, queryEnergy } from '../../../validations/metering/energy.validation.js';
 
 import { createCrudRouter } from '../../../utils/routerFactory.js';
 import { EnergyTypeService } from '../../../services/metering/energy.service.js';

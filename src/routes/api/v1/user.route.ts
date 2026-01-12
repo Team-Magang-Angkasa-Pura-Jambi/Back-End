@@ -1,14 +1,8 @@
 import type { Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
 import { UserService } from '../../../services/auth/user.service.js';
-import {
-  userController,
-  UserController,
-} from '../../../controllers/auth/user.controller.js';
-import {
-  userQuerySchema,
-  userSchemas,
-} from '../../../validations/auth/user.validation.js';
+import { userController, UserController } from '../../../controllers/auth/user.controller.js';
+import { userQuerySchema, userSchemas } from '../../../validations/auth/user.validation.js';
 import { authorize } from '../../../middleware/auth.middleware.js';
 import { validate } from '../../../utils/validate.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
@@ -40,7 +34,7 @@ export default (router: Router) => {
     prefix + '/:userId/activities',
     validate(userSchemas.byId),
     authorize('Admin', 'SuperAdmin', 'Technician'),
-    asyncHandler(userController.getActivityHistory)
+    asyncHandler(userController.getActivityHistory),
   );
 
   router.use(userRouter);

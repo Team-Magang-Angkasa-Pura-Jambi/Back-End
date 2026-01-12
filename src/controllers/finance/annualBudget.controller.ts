@@ -1,7 +1,7 @@
 import { type Request, type Response } from 'express';
 import {
   annualBudgetService,
-  AnnualBudgetService,
+  type AnnualBudgetService,
 } from '../../services/finance/annualBudget.service.js';
 import type {
   CreateAnnualBudgetBody,
@@ -9,7 +9,7 @@ import type {
   UpdateAnnualBudgetBody,
 } from '../../types/finance/annualBudget.types.js';
 import { BaseController } from '../../utils/baseController.js';
-import { AnnualBudget, Prisma } from '../../generated/prisma/index.js';
+import { type AnnualBudget, type Prisma } from '../../generated/prisma/index.js';
 import { res200 } from '../../utils/response.js';
 
 export class AnnualBudgetController extends BaseController<
@@ -37,11 +37,9 @@ export class AnnualBudgetController extends BaseController<
    */
 
   public override getAll = async (req: Request, res: Response) => {
-    const query = res.locals.validatedData?.query as
-      | GetAnnualBudgetQuery
-      | undefined;
+    const query = res.locals.validatedData?.query as GetAnnualBudgetQuery | undefined;
 
-    const targetYear = query?.year || new Date().getFullYear();
+    const targetYear = query?.year ?? new Date().getFullYear();
     const targetEnergyType = query?.energy_type;
 
     const startDate = new Date(Date.UTC(targetYear, 0, 1));
@@ -76,9 +74,7 @@ export class AnnualBudgetController extends BaseController<
    * BARU: Mengambil semua anggaran INDUK (tahunan) dengan data detail.
    */
   public getAllParents = async (req: Request, res: Response) => {
-    const query = res.locals.validatedData?.query as
-      | GetAnnualBudgetQuery
-      | undefined;
+    const query = res.locals.validatedData?.query as GetAnnualBudgetQuery | undefined;
     const date = query?.year;
 
     const where: Prisma.AnnualBudgetWhereInput = {};
@@ -103,13 +99,10 @@ export class AnnualBudgetController extends BaseController<
    */
   public override getById = async (req: Request, res: Response) => {
     // PERBAIKAN: Validasi dan type-safety yang lebih baik
-    const params = res.locals.validatedData?.params as
-      | { budgetId: number }
-      | undefined;
+    const params = res.locals.validatedData?.params as { budgetId: number } | undefined;
     const budgetId = params?.budgetId ?? 0;
 
-    const detailedBudget =
-      await annualBudgetService.getDetailedBudgetById(budgetId);
+    const detailedBudget = await annualBudgetService.getDetailedBudgetById(budgetId);
     res200({
       res,
       message: 'Successfully retrieved detailed annual budget',

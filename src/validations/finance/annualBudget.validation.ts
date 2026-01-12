@@ -26,7 +26,7 @@ const annualBudgetBodySchema = z
         meter_id: positiveInt('Meter ID dalam alokasi'),
         weight: positiveNumber('Bobot alokasi').min(0).max(1),
       }),
-      { message: 'Alokasi harus berupa array.' }
+      { message: 'Alokasi harus berupa array.' },
     ),
   })
   .refine((data) => data.period_end > data.period_start, {
@@ -39,10 +39,7 @@ const annualBudgetBodySchema = z
         if (data.allocations.length === 0) {
           return false;
         }
-        const totalWeight = data.allocations.reduce(
-          (sum, alloc) => sum + alloc.weight,
-          0
-        );
+        const totalWeight = data.allocations.reduce((sum, alloc) => sum + alloc.weight, 0);
 
         return Math.abs(totalWeight - 1) < 0.001;
       }
@@ -53,7 +50,7 @@ const annualBudgetBodySchema = z
       message:
         'Untuk anggaran periode (anak), minimal harus ada satu alokasi dan total bobotnya harus 100%.',
       path: ['allocations'],
-    }
+    },
   );
 
 export const annualBudgetSchema = new CrudSchemaBuilder({

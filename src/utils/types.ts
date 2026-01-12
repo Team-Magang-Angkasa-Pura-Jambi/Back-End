@@ -1,4 +1,4 @@
-import type { z, ZodObject, ZodRawShape } from 'zod';
+import type { ZodObject, ZodRawShape } from 'zod';
 
 /**
  * Konfigurasi awal untuk membuat CRUD Schema Builder
@@ -42,14 +42,12 @@ export interface CrudSchemas<
 /**
  * Tipe untuk method getList
  */
-export type GetListSchema<
-  TCustomFilters extends ZodObject<ZodRawShape> | undefined,
-> = {
+export interface GetListSchema<TCustomFilters extends ZodObject<ZodRawShape> | undefined> {
   query: TCustomFilters extends ZodObject<ZodRawShape>
-    ? ZodObject<TCustomFilters['shape'] & { [k: string]: any }>
+    ? ZodObject<TCustomFilters['shape'] & Record<string, any>>
     : ZodObject<any>;
-};
+}
 /**
  * Utility type untuk schema tambahan yang bisa ditambahkan via addCustomSchema
  */
-export type ExtendWithCustom<T, K extends string, V> = T & { [P in K]: V };
+export type ExtendWithCustom<T, K extends string, V> = T & Record<K, V>;

@@ -21,10 +21,7 @@ export class EfficiencyTargetController extends BaseController<
   constructor() {
     super(new EfficiencyTargetService(), 'targetId');
   }
-  public override create = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  public override create = async (req: Request, res: Response): Promise<void> => {
     const userId = req.user?.id;
 
     const dataWithUser = {

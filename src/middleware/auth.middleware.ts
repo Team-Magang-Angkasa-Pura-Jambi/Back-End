@@ -5,11 +5,7 @@ import { Error401, Error403 } from '../utils/customError.js';
 import type { CustomJwtPayload } from '../types/Express.type.js';
 import type { RoleName } from '../generated/prisma/index.js';
 
-export const authMiddleware = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
   try {
     const bearerToken = req.headers.authorization;
     if (!bearerToken) {
@@ -21,10 +17,7 @@ export const authMiddleware = (
       throw new Error401('Format token salah.');
     }
 
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET as string
-    ) as CustomJwtPayload;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as CustomJwtPayload;
 
     if (typeof decoded !== 'object' || !decoded.id || !decoded.role) {
       throw new Error401('Token tidak valid atau isinya tidak lengkap.');
@@ -47,17 +40,13 @@ export const authorize = (...allowedRoles: RoleName[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {
-        throw new Error403(
-          'Akses ditolak. Informasi otentikasi tidak lengkap.'
-        );
+        throw new Error403('Akses ditolak. Informasi otentikasi tidak lengkap.');
       }
 
       const userRole = req.user.role;
 
       if (!allowedRoles.includes(userRole)) {
-        throw new Error403(
-          'Akses ditolak. Anda tidak memiliki izin untuk melakukan aksi ini.'
-        );
+        throw new Error403('Akses ditolak. Anda tidak memiliki izin untuk melakukan aksi ini.');
       }
 
       next();

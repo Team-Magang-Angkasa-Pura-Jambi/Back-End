@@ -4,7 +4,7 @@ import type { Request, Response } from 'express';
 import type { PriceScheme } from '../../generated/prisma/index.js';
 import {
   priceSchemeService,
-  PriceSchemeService,
+  type PriceSchemeService,
 } from '../../services/finance/priceShcema.service.js';
 import type {
   CreatePriceSchemaBody,
@@ -26,12 +26,7 @@ export class PriceSchemeController extends BaseController<
     super(priceSchemeService, 'schemeId');
   }
 
-  public override create = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
-    console.log(`Mencoba membuat Price Scheme baru...`);
-
+  public override create = async (req: Request, res: Response): Promise<void> => {
     const userId = req.user?.id;
 
     const internalData = {

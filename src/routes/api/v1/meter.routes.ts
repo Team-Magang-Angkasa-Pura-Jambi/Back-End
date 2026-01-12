@@ -2,10 +2,7 @@ import type { Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
 import { MeterService } from '../../../services/metering/meter.service.js';
 import { MeterController } from '../../../controllers/metering/meter.controller.js';
-import {
-  meterSchema,
-  queryMeter,
-} from '../../../validations/metering/meter.validation.js';
+import { meterSchema, queryMeter } from '../../../validations/metering/meter.validation.js';
 
 export const meterRoutes = (router: Router) => {
   const meterRouter = createCrudRouter('/meters', {

@@ -1,9 +1,5 @@
 import { z } from 'zod';
-import {
-  optionalString,
-  positiveInt,
-  requiredString,
-} from '../../utils/schmeHelper.js';
+import { optionalString, positiveInt, requiredString } from '../../utils/schmeHelper.js';
 import { CrudSchemaBuilder } from '../../utils/shemaHandler.js';
 
 export const EnergyTypeBodySchema = z.object({

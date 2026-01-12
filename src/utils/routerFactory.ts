@@ -21,10 +21,7 @@ interface CrudRouterOptions {
 
 type CrudAction = 'getAll' | 'getById' | 'create' | 'update' | 'delete';
 
-export const createCrudRouter = (
-  prefix: string,
-  options: CrudRouterOptions
-) => {
+export const createCrudRouter = (prefix: string, options: CrudRouterOptions) => {
   const router = Router();
   const {
     ServiceClass,
@@ -42,12 +39,12 @@ export const createCrudRouter = (
     action: CrudAction,
     path: string,
     method: 'get' | 'post' | 'patch' | 'delete',
-    schema?: ZodObject<any>
+    schema?: ZodObject<any>,
   ) => {
     const middlewares: any[] = [];
 
     if (authorizations[action]) {
-      middlewares.push(authorize(...authorizations[action]!));
+      middlewares.push(authorize(...authorizations[action]));
     }
     if (schema) {
       middlewares.push(validate(schema));

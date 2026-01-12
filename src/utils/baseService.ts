@@ -1,12 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { Prisma } from '../generated/prisma/index.js';
-import {
-  Error400,
-  Error404,
-  Error409,
-  Error500,
-  HttpError,
-} from './customError.js';
+import { Error400, Error404, Error409, Error500, HttpError } from './customError.js';
 
 /**
  * Mendefinisikan struktur untuk pesan error kustom yang bisa dikirim
@@ -27,44 +21,37 @@ export abstract class BaseService {
   protected _prisma: PrismaClient;
 
   constructor(prisma: PrismaClient) {
-    prisma = prisma;
+    this._prisma = prisma;
   }
   /**
    * Menerjemahkan error teknis dari Prisma menjadi error bisnis yang lebih jelas.
    * @param error - Error yang ditangkap.
    * @param customMessages - Pesan kustom opsional dari service pemanggil.
    */
-  protected _handlePrismaError(
-    error: unknown,
-    customMessages: CustomErrorMessages = {}
-  ): never {
+  protected _handlePrismaError(error: unknown, customMessages: CustomErrorMessages = {}): never {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       switch (error.code) {
         case 'P2002': {
           throw new Error409(
-            customMessages.P2002 ||
-              'Data yang Anda masukkan sudah terdaftar di dalam sistem.'
+            customMessages.P2002 ?? 'Data yang Anda masukkan sudah terdaftar di dalam sistem.',
           );
         }
         case 'P2003': {
           const fieldName = error.meta?.field_name as string;
           throw new Error409(
-            customMessages.P2003 ||
-              `Operasi gagal karena data ini masih terhubung dengan data lain (pada relasi '${fieldName}').`
+            customMessages.P2003 ??
+              `Operasi gagal karena data ini masih terhubung dengan data lain (pada relasi '${fieldName}').`,
           );
         }
         case 'P2025': {
           throw new Error404(
-            customMessages.P2025 ||
-              'Data yang ingin Anda ubah atau hapus tidak ditemukan.'
+            customMessages.P2025 ?? 'Data yang ingin Anda ubah atau hapus tidak ditemukan.',
           );
         }
 
         case 'P2000': {
           const columnName = error.meta?.column_name as string;
-          throw new Error400(
-            `Nilai yang diberikan untuk kolom '${columnName}' terlalu panjang.`
-          );
+          throw new Error400(`Nilai yang diberikan untuk kolom '${columnName}' terlalu panjang.`);
         }
         case 'P2011': {
           const constraint = error.meta?.constraint as string;
@@ -73,7 +60,7 @@ export abstract class BaseService {
         default: {
           if (error.message.includes('planLimitReached')) {
             throw new Error500(
-              'Batas penggunaan paket Prisma telah tercapai. Silakan periksa dasbor akun Prisma Anda.'
+              'Batas penggunaan paket Prisma telah tercapai. Silakan periksa dasbor akun Prisma Anda.',
             );
           }
           console.error(`Prisma Error [${error.code}]:`, error.message);
@@ -95,7 +82,7 @@ export abstract class BaseService {
 
   protected async _handleCrudOperation<T>(
     operation: () => Promise<T>,
-    customMessages?: CustomErrorMessages
+    customMessages?: CustomErrorMessages,
   ): Promise<T> {
     try {
       return await operation();

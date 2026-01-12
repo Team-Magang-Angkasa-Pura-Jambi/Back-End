@@ -1,9 +1,6 @@
 import prisma from '../../configs/db.js';
 import { Prisma, UsageCategory } from '../../generated/prisma/index.js';
-import type {
-  GetAnalysisQuery,
-  DailyAnalysisRecord,
-} from '../../types/reports/analysis.types.js';
+import type { GetAnalysisQuery } from '../../types/reports/analysis.types.js';
 import { Error400, Error404 } from '../../utils/customError.js';
 import { BaseService } from '../../utils/baseService.js';
 import { weatherService } from '../weather.service.js';
@@ -11,57 +8,34 @@ import { differenceInDays } from 'date-fns';
 import { _classifyDailyUsage } from '../metering/helpers/forecast-calculator.js';
 import { machineLearningService } from '../intelligence/machineLearning.service.js';
 
-export type ClassificationSummary = {
-  [key in UsageCategory]?: number;
-} & {
+export type ClassificationSummary = Partial<Record<UsageCategory, number>> & {
   totalDaysInMonth: number;
   totalDaysWithData: number;
   totalDaysWithClassification: number;
 };
 
-type ElectricityClassificationSummary = {
+interface ElectricityClassificationSummary {
   terminal: ClassificationSummary;
   kantor: ClassificationSummary;
-};
+}
 
-type MonthlyBudgetAllocation = {
+interface MonthlyBudgetAllocation {
   month: number;
   monthName: string;
   allocatedBudget: number;
   realizationCost: number;
   remainingBudget: number;
   realizationPercentage: number | null;
-};
+}
 
-type BudgetSummaryByEnergy = {
-  energyTypeId: number;
-  energyTypeName: string;
-  budgetThisYear: number;
-  currentPeriod: {
-    budgetId: number;
-    periodStart: Date;
-    periodEnd: Date;
-    totalBudget: number;
-    totalRealization: number;
-    remainingBudget: number;
-    realizationPercentage: number | null;
-  } | null;
-};
-
-type MeterAnalysisData = {
-  meterId: number;
-  meterName: string;
-  data: DailyAnalysisRecord[];
-};
-
-type FuelStockSummaryRecord = {
+interface FuelStockSummaryRecord {
   meterId: number;
   meterName: string;
   remaining_stock: number | null;
   percentage: number | null;
   tank_volume: number | null;
   last_reading_date: Date | null;
-};
+}
 
 export interface NewDataCountNotification {
   summary_id: number;
@@ -81,11 +55,11 @@ export interface TodaySummaryResponse {
   };
   sumaries: NewDataCountNotification[];
 }
-type bodyRunBulkPrediction = {
+interface bodyRunBulkPrediction {
   startDate: Date;
   endDate: Date;
   userId: number;
-};
+}
 
 export class AnalysisService extends BaseService {
   constructor() {
@@ -97,15 +71,13 @@ export class AnalysisService extends BaseService {
    * @param query - Berisi bulan yang akan dianalisis (format YYYY-MM).
    */
   public async getMonthlyFuelStockAnalysis(
-    query: Pick<GetAnalysisQuery, 'month'>
+    query: Pick<GetAnalysisQuery, 'month'>,
   ): Promise<FuelStockSummaryRecord[]> {
     const { month: monthString } = query;
 
     const [year, month] = monthString.split('-').map(Number);
     const monthIndex = month - 1;
-    const endDate = new Date(
-      Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999)
-    );
+    const endDate = new Date(Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999));
 
     const fuelMeters = await prisma.meter.findMany({
       where: {
@@ -144,9 +116,7 @@ export class AnalysisService extends BaseService {
       let percentage: number | null = null;
 
       if (remainingStock !== null && tankVolume !== null && tankVolume > 0) {
-        percentage = parseFloat(
-          ((remainingStock / tankVolume) * 100).toFixed(2)
-        );
+        percentage = parseFloat(((remainingStock / tankVolume) * 100).toFixed(2));
       }
 
       return {
@@ -167,20 +137,16 @@ export class AnalysisService extends BaseService {
    * untuk periode dan filter yang diberikan.
    */
   public async getClassificationSummary(
-    query: Omit<GetAnalysisQuery, 'energyType' | 'meterId'>
+    query: Omit<GetAnalysisQuery, 'energyType' | 'meterId'>,
   ): Promise<ElectricityClassificationSummary> {
     const { month } = query;
 
-    const targetDate = month
-      ? new Date(`${month}-01T00:00:00.000Z`)
-      : new Date();
+    const targetDate = month ? new Date(`${month}-01T00:00:00.000Z`) : new Date();
     const year = targetDate.getUTCFullYear();
     const monthIndex = targetDate.getUTCMonth();
 
     const startDate = new Date(Date.UTC(year, monthIndex, 1));
-    const endDate = new Date(
-      Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999)
-    );
+    const endDate = new Date(Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999));
 
     const totalDaysInMonth = endDate.getUTCDate();
 
@@ -191,7 +157,7 @@ export class AnalysisService extends BaseService {
 
     if (!terminalMeter || !kantorMeter) {
       throw new Error404(
-        'Meteran listrik untuk Terminal atau Kantor tidak ditemukan. Pastikan meter dengan kode ELEC-TERM-01 dan ELEC-KANTOR-01 ada.'
+        'Meteran listrik untuk Terminal atau Kantor tidak ditemukan. Pastikan meter dengan kode ELEC-TERM-01 dan ELEC-KANTOR-01 ada.',
       );
     }
 
@@ -216,7 +182,7 @@ export class AnalysisService extends BaseService {
   private async _getSummaryForMeter(
     meterId: number,
     startDate: Date,
-    endDate: Date
+    endDate: Date,
   ): Promise<Omit<ClassificationSummary, 'totalDaysInMonth'>> {
     const [groupedData, distinctDaysWithData] = await Promise.all([
       prisma.dailyUsageClassification.groupBy({
@@ -225,11 +191,7 @@ export class AnalysisService extends BaseService {
           meter_id: meterId,
           classification_date: { gte: startDate, lte: endDate },
           classification: {
-            in: [
-              UsageCategory.BOROS,
-              UsageCategory.HEMAT,
-              UsageCategory.NORMAL,
-            ],
+            in: [UsageCategory.BOROS, UsageCategory.HEMAT, UsageCategory.NORMAL],
           },
         },
         _count: { classification: true },
@@ -264,7 +226,7 @@ export class AnalysisService extends BaseService {
   }
 
   public async getTodaySummary(
-    energyType?: 'Electricity' | 'Water' | 'Fuel'
+    energyType?: 'Electricity' | 'Water' | 'Fuel',
   ): Promise<TodaySummaryResponse> {
     const todayInJakarta = new Date();
 
@@ -307,28 +269,23 @@ export class AnalysisService extends BaseService {
       }),
     ]);
 
-    const formattedData: NewDataCountNotification[] = todaySummaries.map(
-      (item) => {
-        return {
-          summary_id: item.summary_id,
+    const formattedData: NewDataCountNotification[] = todaySummaries.map((item) => {
+      return {
+        summary_id: item.summary_id,
 
-          summary_date: item.summary_date,
+        summary_date: item.summary_date,
 
-          total_consumption: item.total_consumption?.toNumber() ?? 0,
-          total_cost: item.total_cost?.toNumber() ?? 0,
+        total_consumption: item.total_consumption?.toNumber() ?? 0,
+        total_cost: item.total_cost?.toNumber() ?? 0,
 
-          meter_code: item.meter.meter_code,
+        meter_code: item.meter.meter_code,
 
-          type_name: item.meter.energy_type.type_name as
-            | 'Electricity'
-            | 'Water'
-            | 'Fuel',
-          unit_of_measurement: item.meter.energy_type.unit_of_measurement,
+        type_name: item.meter.energy_type.type_name as 'Electricity' | 'Water' | 'Fuel',
+        unit_of_measurement: item.meter.energy_type.unit_of_measurement,
 
-          classification: item.classification?.classification ?? null,
-        };
-      }
-    );
+        classification: item.classification?.classification ?? null,
+      };
+    });
 
     return {
       meta: {
@@ -350,7 +307,7 @@ export class AnalysisService extends BaseService {
     const jobDescription = `bulk-predict-${userId}-${Date.now()}`;
 
     console.log(
-      `[BACKGROUND JOB - ${jobDescription}] Memulai prediksi massal dari ${startDate.toISOString()} hingga ${endDate.toISOString()}`
+      `[BACKGROUND JOB - ${jobDescription}] Memulai prediksi massal dari ${startDate.toISOString()} hingga ${endDate.toISOString()}`,
     );
 
     const notifyUser = (event: string, data: unknown) => {
@@ -365,11 +322,7 @@ export class AnalysisService extends BaseService {
 
     try {
       const datesToProcess = [];
-      for (
-        let d = new Date(startDate);
-        d <= endDate;
-        d.setUTCDate(d.getUTCDate() + 1)
-      ) {
+      for (let d = new Date(startDate); d <= endDate; d.setUTCDate(d.getUTCDate() + 1)) {
         datesToProcess.push(new Date(d));
       }
 
@@ -400,12 +353,8 @@ export class AnalysisService extends BaseService {
         message: `Prediksi massal selesai. ${processedCount} hari diproses.`,
       });
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error(
-        `[BACKGROUND JOB - ${jobDescription}] Error:`,
-        errorMessage
-      );
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[BACKGROUND JOB - ${jobDescription}] Error:`, errorMessage);
       notifyUser('prediction:error', { message: errorMessage });
     }
   }
@@ -415,19 +364,14 @@ export class AnalysisService extends BaseService {
    * Bisa dipanggil dari cron, bulk process, atau trigger lain.
    * @param baseDate - Tanggal yang datanya akan digunakan sebagai dasar prediksi.
    */
-  public async runPredictionForDate(
-    baseDate: Date,
-    targetMeterId?: number
-  ): Promise<void> {
+  public async runPredictionForDate(baseDate: Date, targetMeterId?: number): Promise<void> {
     const [terminalMeter, kantorMeter] = await Promise.all([
       prisma.meter.findUnique({ where: { meter_code: 'ELEC-TERM-01' } }),
       prisma.meter.findUnique({ where: { meter_code: 'ELEC-KANTOR-01' } }),
     ]);
 
     if (!terminalMeter || !kantorMeter) {
-      console.error(
-        '[Prediction] Gagal menemukan meter ELEC-TERM-01 atau ELEC-KANTOR-01.'
-      );
+      console.error('[Prediction] Gagal menemukan meter ELEC-TERM-01 atau ELEC-KANTOR-01.');
       return;
     }
 
@@ -437,7 +381,7 @@ export class AnalysisService extends BaseService {
       targetMeterId !== kantorMeter.meter_id
     ) {
       console.error(
-        `[Prediction] Prediksi tunggal hanya didukung untuk meter Terminal (${terminalMeter.meter_id}) atau Kantor (${kantorMeter.meter_id}). ID yang diberikan: ${targetMeterId}`
+        `[Prediction] Prediksi tunggal hanya didukung untuk meter Terminal (${terminalMeter.meter_id}) atau Kantor (${kantorMeter.meter_id}). ID yang diberikan: ${targetMeterId}`,
       );
       return;
     }
@@ -448,16 +392,13 @@ export class AnalysisService extends BaseService {
     const predictionDateStr = baseDate.toISOString().split('T')[0];
 
     try {
-      const weatherDataFromService =
-        await weatherService.getForecast(predictionDate);
+      const weatherDataFromService = await weatherService.getForecast(predictionDate);
       const weatherData = {
         suhu_rata: weatherDataFromService?.suhu_rata ?? 28.0,
         suhu_max: weatherDataFromService?.suhu_max ?? 32.0,
       };
 
-      console.log(
-        `[Prediction] Menjalankan prediksi untuk ${predictionDateStr}...`
-      );
+      console.log(`[Prediction] Menjalankan prediksi untuk ${predictionDateStr}...`);
 
       const predictionsToRun = [];
 
@@ -467,8 +408,8 @@ export class AnalysisService extends BaseService {
             predictionDate,
             terminalMeter.meter_id,
             modelVersion,
-            weatherData
-          )
+            weatherData,
+          ),
         );
       }
       if (!targetMeterId || targetMeterId === kantorMeter.meter_id) {
@@ -477,17 +418,14 @@ export class AnalysisService extends BaseService {
             predictionDate,
             kantorMeter.meter_id,
             modelVersion,
-            weatherData
-          )
+            weatherData,
+          ),
         );
       }
 
       await Promise.all(predictionsToRun);
     } catch (error) {
-      console.error(
-        `[Prediction] Gagal menjalankan prediksi untuk ${predictionDateStr}:`,
-        error
-      );
+      console.error(`[Prediction] Gagal menjalankan prediksi untuk ${predictionDateStr}:`, error);
     }
   }
 
@@ -495,11 +433,11 @@ export class AnalysisService extends BaseService {
     predictionDate: Date,
     meterId: number,
     modelVersion: string,
-    weatherData: { suhu_rata: number; suhu_max: number }
+    weatherData: { suhu_rata: number; suhu_max: number },
   ) {
     const predictionResult = await machineLearningService.getTerminalPrediction(
       predictionDate,
-      weatherData
+      weatherData,
     );
     if (predictionResult) {
       await prisma.consumptionPrediction.upsert({
@@ -521,7 +459,7 @@ export class AnalysisService extends BaseService {
         },
       });
       console.log(
-        `[Prediction] Hasil prediksi Terminal untuk ${predictionDate.toISOString().split('T')[0]} berhasil disimpan.`
+        `[Prediction] Hasil prediksi Terminal untuk ${predictionDate.toISOString().split('T')[0]} berhasil disimpan.`,
       );
     }
   }
@@ -530,11 +468,11 @@ export class AnalysisService extends BaseService {
     predictionDate: Date,
     meterId: number,
     modelVersion: string,
-    weatherData: { suhu_rata: number; suhu_max: number }
+    weatherData: { suhu_rata: number; suhu_max: number },
   ) {
     const predictionResult = await machineLearningService.getKantorPrediction(
       predictionDate,
-      weatherData
+      weatherData,
     );
     if (predictionResult) {
       await prisma.consumptionPrediction.upsert({
@@ -554,7 +492,7 @@ export class AnalysisService extends BaseService {
         },
       });
       console.log(
-        `[Prediction] Hasil prediksi Kantor untuk ${predictionDate.toISOString().split('T')[0]} berhasil disimpan.`
+        `[Prediction] Hasil prediksi Kantor untuk ${predictionDate.toISOString().split('T')[0]} berhasil disimpan.`,
       );
     }
   }
@@ -563,9 +501,7 @@ export class AnalysisService extends BaseService {
    * BARU: Menghitung alokasi anggaran tahunan dan membandingkannya dengan realisasi bulanan.
    * @param year - Tahun yang akan dianalisis.
    */
-  public async getBudgetAllocation(
-    year: number
-  ): Promise<MonthlyBudgetAllocation[]> {
+  public async getBudgetAllocation(year: number): Promise<MonthlyBudgetAllocation[]> {
     const yearStartDate = new Date(Date.UTC(year, 0, 1));
     const yearEndDate = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
 
@@ -581,30 +517,23 @@ export class AnalysisService extends BaseService {
     });
 
     if (budgetPeriods.length === 0) {
-      throw new Error404(
-        `Tidak ada data anggaran yang ditemukan untuk tahun ${year}.`
-      );
+      throw new Error404(`Tidak ada data anggaran yang ditemukan untuk tahun ${year}.`);
     }
 
-    const monthlyAllocations: MonthlyBudgetAllocation[] = Array.from(
-      { length: 12 },
-      (_, i) => ({
-        month: i + 1,
-        monthName: new Date(Date.UTC(year, i, 1)).toLocaleString('id-ID', {
-          month: 'long',
-        }),
-        allocatedBudget: 0,
-        realizationCost: 0,
-        remainingBudget: 0,
-        realizationPercentage: 0,
-      })
-    );
+    const monthlyAllocations: MonthlyBudgetAllocation[] = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      monthName: new Date(Date.UTC(year, i, 1)).toLocaleString('id-ID', {
+        month: 'long',
+      }),
+      allocatedBudget: 0,
+      realizationCost: 0,
+      remainingBudget: 0,
+      realizationPercentage: 0,
+    }));
 
     for (const budget of budgetPeriods) {
       const periodDays =
-        (budget.period_end.getTime() - budget.period_start.getTime()) /
-          (1000 * 60 * 60 * 24) +
-        1;
+        (budget.period_end.getTime() - budget.period_start.getTime()) / (1000 * 60 * 60 * 24) + 1;
       if (periodDays <= 0) continue;
 
       const budgetPerDay = budget.total_budget.dividedBy(periodDays);
@@ -614,26 +543,20 @@ export class AnalysisService extends BaseService {
         const monthEndDate = new Date(Date.UTC(year, i + 1, 0));
 
         const overlapStart = new Date(
-          Math.max(monthStartDate.getTime(), budget.period_start.getTime())
+          Math.max(monthStartDate.getTime(), budget.period_start.getTime()),
         );
-        const overlapEnd = new Date(
-          Math.min(monthEndDate.getTime(), budget.period_end.getTime())
-        );
+        const overlapEnd = new Date(Math.min(monthEndDate.getTime(), budget.period_end.getTime()));
 
         if (overlapEnd >= overlapStart) {
           const daysInMonthOverlap =
-            (overlapEnd.getTime() - overlapStart.getTime()) /
-              (1000 * 60 * 60 * 24) +
-            1;
+            (overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24) + 1;
           const budgetForMonth = budgetPerDay.times(daysInMonthOverlap);
           monthlyAllocations[i].allocatedBudget += budgetForMonth.toNumber();
         }
       }
     }
 
-    const realizationResult = await prisma.$queryRaw<
-      { month: number; total_cost: number }[]
-    >(
+    const realizationResult = await prisma.$queryRaw<{ month: number; total_cost: number }[]>(
       Prisma.sql`
       SELECT
         EXTRACT(MONTH FROM summary_date) as month,
@@ -645,27 +568,21 @@ export class AnalysisService extends BaseService {
         )
       GROUP BY month
       ORDER BY month;
-    `
+    `,
     );
 
     for (const realization of realizationResult) {
       const monthIndex = realization.month - 1;
       if (monthlyAllocations[monthIndex]) {
-        monthlyAllocations[monthIndex].realizationCost = Number(
-          realization.total_cost
-        );
+        monthlyAllocations[monthIndex].realizationCost = Number(realization.total_cost);
       }
     }
 
     for (const allocation of monthlyAllocations) {
-      allocation.remainingBudget =
-        allocation.allocatedBudget - allocation.realizationCost;
+      allocation.remainingBudget = allocation.allocatedBudget - allocation.realizationCost;
       if (allocation.allocatedBudget > 0) {
         allocation.realizationPercentage = parseFloat(
-          (
-            (allocation.realizationCost / allocation.allocatedBudget) *
-            100
-          ).toFixed(2)
+          ((allocation.realizationCost / allocation.allocatedBudget) * 100).toFixed(2),
         );
       } else {
         allocation.realizationPercentage = null;
@@ -685,8 +602,7 @@ export class AnalysisService extends BaseService {
     period_end: Date;
     allocations?: { meter_id: number; weight: number }[];
   }): Promise<any> {
-    const { parent_budget_id, period_start, period_end, allocations } =
-      budgetData;
+    const { parent_budget_id, period_start, period_end, allocations } = budgetData;
 
     const parentBudget = await prisma.annualBudget.findUnique({
       where: { budget_id: parent_budget_id },
@@ -699,9 +615,7 @@ export class AnalysisService extends BaseService {
     });
 
     if (!parentBudget) {
-      throw new Error404(
-        `Anggaran induk dengan ID ${parent_budget_id} tidak ditemukan.`
-      );
+      throw new Error404(`Anggaran induk dengan ID ${parent_budget_id} tidak ditemukan.`);
     }
 
     const availableMeters = await prisma.meter.findMany({
@@ -745,9 +659,7 @@ export class AnalysisService extends BaseService {
     }
 
     const monthlyBase = parentBudget.total_budget.div(12);
-    let suggestedBudgetForPeriod = monthlyBase
-      .times(diffMonths)
-      .times(efficiencyTag);
+    let suggestedBudgetForPeriod = monthlyBase.times(diffMonths).times(efficiencyTag);
 
     const remainingYearlyBudget = efficiencyBudget.minus(realizationToDate);
     if (suggestedBudgetForPeriod.gt(remainingYearlyBudget)) {
@@ -759,22 +671,15 @@ export class AnalysisService extends BaseService {
     const meterAllocationPreview = [];
     if (allocations && allocations.length > 0) {
       const periodDays =
-        Math.ceil(
-          (period_end.getTime() - period_start.getTime()) /
-            (1000 * 60 * 60 * 24)
-        ) + 1;
+        Math.ceil((period_end.getTime() - period_start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
       for (const alloc of allocations) {
-        const meterInfo = availableMeters.find(
-          (m) => m.meter_id === alloc.meter_id
-        );
-        const allocatedAmount = suggestedBudgetForPeriod.times(
-          new Prisma.Decimal(alloc.weight)
-        );
+        const meterInfo = availableMeters.find((m) => m.meter_id === alloc.meter_id);
+        const allocatedAmount = suggestedBudgetForPeriod.times(new Prisma.Decimal(alloc.weight));
 
         meterAllocationPreview.push({
           meterId: alloc.meter_id,
-          meterName: meterInfo?.meter_code || `Meter ${alloc.meter_id}`,
+          meterName: meterInfo?.meter_code ?? `Meter ${alloc.meter_id}`,
           allocatedBudget: allocatedAmount.toNumber(),
           dailyBudgetAllocation: allocatedAmount.div(periodDays).toNumber(),
           weight: alloc.weight,
@@ -852,7 +757,7 @@ export class AnalysisService extends BaseService {
 
     const meterCostMap = new Map<number, number>();
     rawRealisations.forEach((r) => {
-      meterCostMap.set(r.meter_id, r._sum.total_cost?.toNumber() || 0);
+      meterCostMap.set(r.meter_id, r._sum.total_cost?.toNumber() ?? 0);
     });
 
     const results = parentBudgets.map((budget) => {
@@ -868,13 +773,12 @@ export class AnalysisService extends BaseService {
       });
 
       budgetMeterIds.forEach((meterId) => {
-        totalRealization += meterCostMap.get(meterId) || 0;
+        totalRealization += meterCostMap.get(meterId) ?? 0;
       });
 
       const remainingBudget = totalBudget - totalRealization;
 
-      const realizationPercentage =
-        totalBudget > 0 ? (totalRealization / totalBudget) * 100 : 0;
+      const realizationPercentage = totalBudget > 0 ? (totalRealization / totalBudget) * 100 : 0;
 
       let status: 'SAFE' | 'WARNING' | 'DANGER' = 'SAFE';
       if (realizationPercentage >= 100) status = 'DANGER';
@@ -914,9 +818,7 @@ export class AnalysisService extends BaseService {
       });
 
       if (parentBudget.parent_budget_id !== null) {
-        throw new Error400(
-          'Anggaran yang diberikan bukan merupakan anggaran induk (tahunan).'
-        );
+        throw new Error400('Anggaran yang diberikan bukan merupakan anggaran induk (tahunan).');
       }
 
       let totalRealizationCost = new Prisma.Decimal(0);
@@ -937,13 +839,12 @@ export class AnalysisService extends BaseService {
             },
           });
           totalRealizationCost = totalRealizationCost.plus(
-            realizationResult._sum.total_cost ?? new Prisma.Decimal(0)
+            realizationResult._sum.total_cost ?? new Prisma.Decimal(0),
           );
         }
       }
 
-      const availableBudgetForNextPeriod =
-        parentBudget.total_budget.minus(totalRealizationCost);
+      const availableBudgetForNextPeriod = parentBudget.total_budget.minus(totalRealizationCost);
 
       return {
         parentBudgetId: parentBudget.budget_id,
@@ -954,10 +855,7 @@ export class AnalysisService extends BaseService {
     });
   }
 
-  public async runSingleClassification(
-    date: Date,
-    meterId: number
-  ): Promise<void> {
+  public async runSingleClassification(date: Date, meterId: number): Promise<void> {
     return this._handleCrudOperation(async () => {
       const summary = await prisma.dailySummary.findFirst({
         where: {
@@ -981,7 +879,7 @@ export class AnalysisService extends BaseService {
 
       if (!summary) {
         throw new Error404(
-          `Tidak ada data ringkasan (DailySummary) yang ditemukan untuk meter ID ${meterId} pada tanggal ${date.toISOString().split('T')[0]}.`
+          `Tidak ada data ringkasan (DailySummary) yang ditemukan untuk meter ID ${meterId} pada tanggal ${date.toISOString().split('T')[0]}.`,
         );
       }
 
@@ -1003,9 +901,7 @@ export class AnalysisService extends BaseService {
       }
       const totalDays = differenceInDays(periodEndDate, periodStartDate) + 1;
       if (totalDays <= 0) {
-        throw new Error400(
-          'Periode tidak valid, tanggal akhir harus setelah tanggal mulai.'
-        );
+        throw new Error400('Periode tidak valid, tanggal akhir harus setelah tanggal mulai.');
       }
 
       const meter = await prisma.meter.findUnique({
@@ -1031,22 +927,22 @@ export class AnalysisService extends BaseService {
       const activePriceScheme = meter.tariff_group?.price_schemes[0];
       if (!activePriceScheme) {
         throw new Error404(
-          `Tidak ada skema harga aktif yang ditemukan untuk golongan tarif meter '${meter.meter_code}'.`
+          `Tidak ada skema harga aktif yang ditemukan untuk golongan tarif meter '${meter.meter_code}'.`,
         );
       }
 
       let avgPricePerUnit: Prisma.Decimal;
       if (meter.energy_type.type_name === 'Electricity') {
         const wbpRate = activePriceScheme.rates.find(
-          (r: any) => r.reading_type.type_name === 'WBP'
+          (r: any) => r.reading_type.type_name === 'WBP',
         )?.value;
         const lwbpRate = activePriceScheme.rates.find(
-          (r: any) => r.reading_type.type_name === 'LWBP'
+          (r: any) => r.reading_type.type_name === 'LWBP',
         )?.value;
 
         if (!wbpRate || !lwbpRate) {
           throw new Error400(
-            'Skema harga untuk Listrik tidak lengkap. Tarif WBP atau LWBP tidak ditemukan.'
+            'Skema harga untuk Listrik tidak lengkap. Tarif WBP atau LWBP tidak ditemukan.',
           );
         }
 
@@ -1055,7 +951,7 @@ export class AnalysisService extends BaseService {
         const singleRate = activePriceScheme.rates[0]?.value;
         if (!singleRate) {
           throw new Error400(
-            `Skema harga untuk ${meter.energy_type.type_name} tidak memiliki tarif yang terdefinisi.`
+            `Skema harga untuk ${meter.energy_type.type_name} tidak memiliki tarif yang terdefinisi.`,
           );
         }
         avgPricePerUnit = singleRate;
@@ -1063,7 +959,7 @@ export class AnalysisService extends BaseService {
 
       if (avgPricePerUnit.isZero()) {
         throw new Error400(
-          'Harga rata-rata per unit adalah nol. Tidak dapat menghitung target dari anggaran.'
+          'Harga rata-rata per unit adalah nol. Tidak dapat menghitung target dari anggaran.',
         );
       }
 
@@ -1086,8 +982,9 @@ export class AnalysisService extends BaseService {
       let suggestion: object | null = null;
 
       if (budgetAllocation) {
-        const allocatedBudgetForMeter =
-          budgetAllocation.budget.total_budget.times(budgetAllocation.weight);
+        const allocatedBudgetForMeter = budgetAllocation.budget.total_budget.times(
+          budgetAllocation.weight,
+        );
 
         budgetInfo = {
           budgetId: budgetAllocation.budget_id,
@@ -1118,8 +1015,7 @@ export class AnalysisService extends BaseService {
             },
           });
 
-          realizedCost =
-            realizationResult._sum.total_cost ?? new Prisma.Decimal(0);
+          realizedCost = realizationResult._sum.total_cost ?? new Prisma.Decimal(0);
           remainingBudget = allocatedBudgetForMeter.minus(realizedCost);
 
           (budgetInfo as any).realizationToDate = realizedCost.toNumber();
@@ -1128,18 +1024,14 @@ export class AnalysisService extends BaseService {
 
         const childBudget = budgetAllocation.budget;
         const childPeriodDays =
-          differenceInDays(childBudget.period_end, childBudget.period_start) +
-          1;
+          differenceInDays(childBudget.period_end, childBudget.period_start) + 1;
         const childPeriodMonths =
-          (childBudget.period_end.getUTCFullYear() -
-            childBudget.period_start.getUTCFullYear()) *
+          (childBudget.period_end.getUTCFullYear() - childBudget.period_start.getUTCFullYear()) *
             12 +
-          (childBudget.period_end.getUTCMonth() -
-            childBudget.period_start.getUTCMonth()) +
+          (childBudget.period_end.getUTCMonth() - childBudget.period_start.getUTCMonth()) +
           1;
 
-        const dailyBudgetForMeter =
-          allocatedBudgetForMeter.div(childPeriodDays);
+        const dailyBudgetForMeter = allocatedBudgetForMeter.div(childPeriodDays);
 
         const suggestedDailyKwh = dailyBudgetForMeter.div(avgPricePerUnit);
 

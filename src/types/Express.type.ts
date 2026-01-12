@@ -1,11 +1,11 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { JwtPayload } from 'jsonwebtoken';
 
-export type ExpressHandlerContext = {
+export interface ExpressHandlerContext {
   req: Request;
   res: Response;
   next: NextFunction;
-};
+}
 declare module 'express-serve-static-core' {
   interface Request {
     user?: JwtPayload & { id: number };

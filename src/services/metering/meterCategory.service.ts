@@ -21,9 +21,7 @@ export class MeterCategoryService extends GenericBaseService<
     super(prisma, prisma.meterCategory, 'category_id');
   }
 
-  public override async findById(
-    id: number
-  ): Promise<{ name: string; category_id: number }> {
+  public override async findById(id: number): Promise<{ name: string; category_id: number }> {
     return this._handleCrudOperation(() =>
       this._model.findUniqueOrThrow({
         where: { category_id: id },
@@ -31,7 +29,7 @@ export class MeterCategoryService extends GenericBaseService<
           meters: true,
           _count: true,
         },
-      })
+      }),
     );
   }
 }

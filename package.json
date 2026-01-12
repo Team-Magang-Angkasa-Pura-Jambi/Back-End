@@ -8,12 +8,14 @@
     "start": "node dist/index.js",
     "dev": "tsx watch --inspect --clear-screen=false src/index.ts",
     "migrate:dev": "prisma migrate dev",
-    "lint": "eslint . --ext .ts",
-    "lint:fix": "eslint . --ext .ts --fix",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier . --write",
+    "lint:nibble": "eslint-nibble",
     "test": "vitest",
     "test:run": "vitest run",
     "postinstall": "npx prisma generate",
-    "import:csv": "tsx prisma/import.ts"
+    "import:csv": "tsx prisma/import.ts",
+    "typecheck": "tsc -p tsconfig.typecheck.json --noEmit"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts",
@@ -61,7 +63,9 @@
     "cross-env": "^10.1.0",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
+    "eslint-nibble": "^9.1.1",
     "eslint-plugin-prettier": "^5.5.4",
+    "eslint-plugin-unused-imports": "^4.3.0",
     "globals": "^17.0.0",
     "prettier": "^3.7.4",
     "prisma": "^6.16.2",
@@ -69,7 +73,7 @@
     "supertest": "^7.1.4",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.4",
-    "typescript": "^5.9.2",
+    "typescript": "^5.9.3",
     "typescript-eslint": "^8.52.0",
     "vitest": "^4.0.15",
     "vitest-mock-extended": "^3.1.0"

@@ -1,4 +1,4 @@
-import { date, z } from 'zod';
+import { z } from 'zod';
 import { isoDate, positiveInt } from '../../utils/schmeHelper.js';
 
 export const getLogbooksSchema = z.object({
@@ -28,10 +28,7 @@ export const updateLogbookSchema = z.object({
     logId: positiveInt('ID Logbook'),
   }),
   body: z.object({
-    manual_notes: z
-      .string()
-      .min(1, 'Catatan manual tidak boleh kosong.')
-      .trim(),
+    manual_notes: z.string().min(1, 'Catatan manual tidak boleh kosong.').trim(),
   }),
 });
 

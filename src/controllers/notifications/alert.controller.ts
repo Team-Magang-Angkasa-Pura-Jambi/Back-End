@@ -4,13 +4,8 @@ import { res200 } from '../../utils/response.js';
 import { Error401 } from '../../utils/customError.js';
 
 class AlertController {
-  public getSystemAlerts = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public getSystemAlerts = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const query = res.locals.validatedData.query;
       const { data, meta } = await alertService.getSystemAlerts();
 
       res200({
@@ -24,11 +19,7 @@ class AlertController {
     }
   };
 
-  public getMeterAlerts = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public getMeterAlerts = async (req: Request, res: Response, next: NextFunction) => {
     const { data, meta } = await alertService.getMetersAlerts();
     res200({
       res,
@@ -37,27 +28,7 @@ class AlertController {
     });
   };
 
-  public getAll = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      // PERBAIKAN: Panggil service yang sudah memiliki logika paginasi yang benar.
-      const query = res.locals.validatedData.query;
-      // const { data, meta } = await alertService.findAllWithQuery(query);
-      // res200({
-      //   res,
-      //   data, // Kembalikan data langsung
-      //   meta, // Kembalikan meta untuk info paginasi
-      //   message: 'Alerts berhasil diambil.',
-      // });
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  public getLatest = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public getLatest = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { scope, status } = res.locals.validatedData.query;
       const result = await alertService.getLatest(scope, 5, status);
@@ -70,11 +41,7 @@ class AlertController {
       next(error);
     }
   };
-  public getUnreadCount = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public getUnreadCount = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { meterId } = res.locals.validatedData.query;
       const count = await alertService.getUnreadCount(meterId);
@@ -88,11 +55,7 @@ class AlertController {
     }
   };
 
-  public acknowledge = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public acknowledge = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = (req as any).user;
       if (!user?.id) throw new Error401('User tidak terautentikasi.');
@@ -109,11 +72,7 @@ class AlertController {
     }
   };
 
-  public acknowledgeAll = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public acknowledgeAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = (req as any).user;
       if (!user?.id) throw new Error401('User tidak terautentikasi.');
@@ -129,11 +88,7 @@ class AlertController {
     }
   };
 
-  public bulkDelete = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public bulkDelete = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { alertIds } = res.locals.validatedData.body;
       const result = await alertService.deleteManyByIds(alertIds);
@@ -149,11 +104,7 @@ class AlertController {
     }
   };
 
-  public updateStatus = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public updateStatus = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { alertId } = res.locals.validatedData.params;
       const updatedAlert = await alertService.updateStatus(alertId);
@@ -168,15 +119,11 @@ class AlertController {
     }
   };
 
-  public bulkUpdateStatus = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public bulkUpdateStatus = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { alertIds } = res.locals.validatedData.body;
       const updatedAlerts = await Promise.all(
-        alertIds.map((alertId: number) => alertService.updateStatus(alertId))
+        alertIds.map((alertId: number) => alertService.updateStatus(alertId)),
       );
 
       res200({

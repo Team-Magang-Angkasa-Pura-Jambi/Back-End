@@ -1,24 +1,51 @@
 {
   "compilerOptions": {
+    /* Target & Module */
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
 
-    "rootDir": "./src",
+    /* Struktur Build */
+    "rootDir": "./",
     "outDir": "./dist",
-
-    "strict": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
-    "isolatedModules": true,
     "sourceMap": true,
 
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    /* Strictness */
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
 
-    "resolveJsonModule": true
+    /* Interop & Runtime */
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+
+    /* Performance */
+    "skipLibCheck": true,
+    "isolatedModules": true,
+
+    /* Lint-friendly */
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+
+    /* Decorators (OFF – aman kecuali pakai NestJS) */
+    "experimentalDecorators": false,
+    "emitDecoratorMetadata": false
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+
+  "include": ["src/**/*.ts", "prisma/**/*.ts", "__test__/**/*.ts", "**/*.test.ts"],
+
+  "exclude": [
+    "node_modules",
+    "dist",
+    "coverage",
+    "generated",
+    "src/generated",
+    "prisma/generated",
+    "**/*.d.ts"
+  ],
+  "types": ["vitest/globals"]
 }

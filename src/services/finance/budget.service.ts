@@ -1,8 +1,8 @@
-import { BudgetAllocation, Prisma } from '../../generated/prisma/index.js';
+import { type BudgetAllocation, Prisma } from '../../generated/prisma/index.js';
 import prisma from '../../configs/db.js';
 import { BaseService } from '../../utils/baseService.js';
 import { Error404 } from '../../utils/customError.js';
-import { Decimal } from '@prisma/client/runtime/library';
+import { type Decimal } from '@prisma/client/runtime/library';
 
 export class BudgetService extends BaseService {
   constructor() {
@@ -15,25 +15,22 @@ export class BudgetService extends BaseService {
    * @param year - Tahun anggaran yang akan dianalisis.
    * @param pjjRate - Rate Pajak Penerangan Jalan (e.g., 0.09 untuk 9%).
    */
-  public async processAnnualBudgetAndSetTargets(
-    pjjRate: number,
-    processDate?: Date
-  ): Promise<any> {
+  public async processAnnualBudgetAndSetTargets(pjjRate: number, processDate?: Date): Promise<any> {
     return this._handleCrudOperation(async () => {
       const referenceDate = processDate
         ? new Date(
             Date.UTC(
               processDate.getUTCFullYear(),
               processDate.getUTCMonth(),
-              processDate.getUTCDate()
-            )
+              processDate.getUTCDate(),
+            ),
           )
         : new Date(
             Date.UTC(
               new Date().getUTCFullYear(),
               new Date().getUTCMonth(),
-              new Date().getUTCDate()
-            )
+              new Date().getUTCDate(),
+            ),
           );
 
       const activeBudget = await prisma.annualBudget.findFirst({
@@ -52,9 +49,7 @@ export class BudgetService extends BaseService {
       });
 
       if (!activeBudget) {
-        throw new Error404(
-          `Tidak ada periode anggaran aktif yang ditemukan untuk hari ini.`
-        );
+        throw new Error404(`Tidak ada periode anggaran aktif yang ditemukan untuk hari ini.`);
       }
 
       const {
@@ -88,11 +83,9 @@ export class BudgetService extends BaseService {
           },
         },
       });
-      const realizationCost =
-        realizationResult._sum.total_cost ?? new Prisma.Decimal(0);
+      const realizationCost = realizationResult._sum.total_cost ?? new Prisma.Decimal(0);
       const historicalConsumption =
-        historicalConsumptionResult._sum.total_consumption ??
-        new Prisma.Decimal(0);
+        historicalConsumptionResult._sum.total_consumption ?? new Prisma.Decimal(0);
 
       const target95 = periodBudget.times(efficiencyTarget ?? 0);
 
@@ -104,14 +97,10 @@ export class BudgetService extends BaseService {
       const targetEndDate = budgetPeriodEnd;
 
       const remainingDays =
-        (targetEndDate.getTime() - targetStartDate.getTime()) /
-          (1000 * 60 * 60 * 24) +
-        1;
+        (targetEndDate.getTime() - targetStartDate.getTime()) / (1000 * 60 * 60 * 24) + 1;
 
       if (remainingDays <= 0) {
-        console.log(
-          'Periode anggaran telah berakhir. Tidak ada target baru yang dibuat.'
-        );
+        console.log('Periode anggaran telah berakhir. Tidak ada target baru yang dibuat.');
         return { message: 'Periode anggaran telah berakhir.' };
       }
 
@@ -128,17 +117,17 @@ export class BudgetService extends BaseService {
       const allocations = activeBudget.allocations;
       if (allocations.length === 0) {
         throw new Error404(
-          `Anggaran aktif ditemukan, tetapi tidak ada alokasi ke meteran manapun.`
+          `Anggaran aktif ditemukan, tetapi tidak ada alokasi ke meteran manapun.`,
         );
       }
 
       const totalWeight = allocations.reduce(
         (sum: Decimal, alloc: BudgetAllocation) => sum.plus(alloc.weight),
-        new Prisma.Decimal(0)
+        new Prisma.Decimal(0),
       );
       if (Math.abs(totalWeight.toNumber() - 1) > 0.001) {
         console.warn(
-          `[BudgetService] Peringatan: Total bobot alokasi untuk budget ID ${activeBudget.budget_id} adalah ${totalWeight.toFixed(4)}, bukan 1.`
+          `[BudgetService] Peringatan: Total bobot alokasi untuk budget ID ${activeBudget.budget_id} adalah ${totalWeight.toFixed(4)}, bukan 1.`,
         );
       }
 
@@ -154,8 +143,8 @@ export class BudgetService extends BaseService {
               Date.UTC(
                 referenceDate.getUTCFullYear(),
                 referenceDate.getUTCMonth(),
-                referenceDate.getUTCDate()
-              )
+                referenceDate.getUTCDate(),
+              ),
             ),
           },
         },

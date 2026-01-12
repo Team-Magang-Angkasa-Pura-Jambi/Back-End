@@ -32,5 +32,5 @@ export const queryMeter = meterSchema.getList(
   z.object({
     energyTypeId: positiveInt('energy type id').optional(),
     typeName: optionalString('type name'),
-  })
+  }),
 );

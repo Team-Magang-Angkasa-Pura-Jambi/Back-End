@@ -16,8 +16,8 @@ export function startDailyReportScheduler() {
       console.log(
         `[CRON - DailyReport] Memulai pembuatan laporan harian pada ${jobStartDate.toLocaleString(
           'id-ID',
-          { timeZone: 'Asia/Jakarta' }
-        )}`
+          { timeZone: 'Asia/Jakarta' },
+        )}`,
       );
 
       try {
@@ -28,31 +28,30 @@ export function startDailyReportScheduler() {
         yesterday.setDate(today.getDate() - 1);
 
         // 1. Kumpulkan data dari 24 jam terakhir
-        const [newAlertsCount, handledAlertsCount, cronReports] =
-          await Promise.all([
-            // Hitung alert baru yang dibuat kemarin
-            prisma.alert.count({
-              where: {
-                alert_timestamp: { gte: yesterday, lt: today },
-                NOT: { title: { startsWith: 'Laporan' } }, // Abaikan alert laporan itu sendiri
-              },
-            }),
-            // Hitung alert yang diselesaikan kemarin
-            prisma.alert.count({
-              where: {
-                status: 'HANDLED',
-                updated_at: { gte: yesterday, lt: today },
-              },
-            }),
-            // Ambil laporan kinerja dari cron job lain
-            prisma.alert.findMany({
-              where: {
-                title: { startsWith: 'Laporan Kinerja' },
-                alert_timestamp: { gte: yesterday, lt: today },
-              },
-              select: { title: true, description: true },
-            }),
-          ]);
+        const [newAlertsCount, handledAlertsCount, cronReports] = await Promise.all([
+          // Hitung alert baru yang dibuat kemarin
+          prisma.alert.count({
+            where: {
+              alert_timestamp: { gte: yesterday, lt: today },
+              NOT: { title: { startsWith: 'Laporan' } }, // Abaikan alert laporan itu sendiri
+            },
+          }),
+          // Hitung alert yang diselesaikan kemarin
+          prisma.alert.count({
+            where: {
+              status: 'HANDLED',
+              updated_at: { gte: yesterday, lt: today },
+            },
+          }),
+          // Ambil laporan kinerja dari cron job lain
+          prisma.alert.findMany({
+            where: {
+              title: { startsWith: 'Laporan Kinerja' },
+              alert_timestamp: { gte: yesterday, lt: today },
+            },
+            select: { title: true, description: true },
+          }),
+        ]);
 
         // 2. Susun deskripsi laporan
         let description = `Ringkasan aktivitas sistem untuk tanggal ${
@@ -75,14 +74,9 @@ export function startDailyReportScheduler() {
           description,
         });
 
-        console.log(
-          '[CRON - DailyReport] Laporan harian sistem berhasil dibuat.'
-        );
+        console.log('[CRON - DailyReport] Laporan harian sistem berhasil dibuat.');
       } catch (error) {
-        console.error(
-          '[CRON - DailyReport] Gagal membuat laporan harian:',
-          error
-        );
+        console.error('[CRON - DailyReport] Gagal membuat laporan harian:', error);
         // Jika gagal, buat alert error
         await alertService.create({
           title: 'Error Sistem: Laporan Harian Gagal',
@@ -93,6 +87,6 @@ export function startDailyReportScheduler() {
     {
       scheduled: true,
       timezone: 'Asia/Jakarta',
-    }
+    },
   );
 }

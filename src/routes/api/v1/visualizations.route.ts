@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { type Router } from 'express';
 import {
   EnergyOutlookController,
   getBudgetBurnRateController,
@@ -32,49 +32,46 @@ export default (router: Router) => {
   router.get(
     prefix + '/yearly-heatmap',
     validate(getYearlyHeatmapQuery),
-    asyncHandler(getYearlyHeatmapController)
+    asyncHandler(getYearlyHeatmapController),
   );
-  router.get(
-    prefix + '/budget-tracking',
-    asyncHandler(getBudgetTrackingController)
-  );
+  router.get(prefix + '/budget-tracking', asyncHandler(getBudgetTrackingController));
 
   router.get(
     prefix + '/yearly-analysis',
     validate(YearlyAnalysisQuery),
-    asyncHandler(getYearlyAnalysisController)
+    asyncHandler(getYearlyAnalysisController),
   );
   router.get(
     prefix + '/unified-comparison',
     validate(getUnifiedComparisonSchema),
-    asyncHandler(getUnifiedComparisonController)
+    asyncHandler(getUnifiedComparisonController),
   );
   router.get(
     prefix + '/efficiency-ratio',
     validate(getEfficiencyRatioSchema),
-    asyncHandler(getEfficiencyRatioController)
+    asyncHandler(getEfficiencyRatioController),
   );
 
   router.get(
     prefix + '/daily-average-pax',
     validate(getEfficiencyRatioSchema),
-    asyncHandler(getDailyAveragePaxController)
+    asyncHandler(getDailyAveragePaxController),
   );
 
   router.get(
     prefix + '/budget-burn-rate',
     validate(getBudgetBurnRateSchema),
-    asyncHandler(getBudgetBurnRateController)
+    asyncHandler(getBudgetBurnRateController),
   );
   router.get(
     prefix + '/fuel-refill-analysis',
     validate(getFuelRefillAnalysisQuery),
-    asyncHandler(getFuelRefillAnalysisController)
+    asyncHandler(getFuelRefillAnalysisController),
   );
 
   router.get(
     prefix + '/trent-consumption',
     validate(getTrentCounsumptionSchema),
-    asyncHandler(getTrentCounsumptionController)
+    asyncHandler(getTrentCounsumptionController),
   );
 };

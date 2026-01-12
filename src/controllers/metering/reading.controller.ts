@@ -30,10 +30,7 @@ export class ReadingController extends BaseController<
   constructor() {
     super(new ReadingService(), 'sessionId');
   }
-  public override getAll = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  public override getAll = async (req: Request, res: Response): Promise<void> => {
     const validatedQuery = res.locals.validatedData.query;
 
     const result = await this.service.findAll(validatedQuery);
@@ -41,12 +38,8 @@ export class ReadingController extends BaseController<
     res200({ res, message: 'success', data: result });
   };
 
-  public getLastReading = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
-    const { meterId, readingTypeId, readingDate } =
-      res.locals.validatedData.query;
+  public getLastReading = async (req: Request, res: Response): Promise<void> => {
+    const { meterId, readingTypeId, readingDate } = res.locals.validatedData.query;
 
     const result = await this.service.findLastReading({
       meterId,
@@ -57,10 +50,7 @@ export class ReadingController extends BaseController<
     res200({ res, message: 'success', data: result });
   };
 
-  public override create = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  public override create = async (req: Request, res: Response): Promise<void> => {
     const validatedBody = res.locals.validatedData.body;
     const user_id = req.user?.id;
     if (!user_id) {
@@ -70,9 +60,7 @@ export class ReadingController extends BaseController<
     const internalData: CreateReadingSessionInternal = {
       ...validatedBody,
       user_id,
-      reading_date: validatedBody.reading_date
-        ? new Date(validatedBody.reading_date)
-        : new Date(),
+      reading_date: validatedBody.reading_date ? new Date(validatedBody.reading_date) : new Date(),
     };
     const record = await this.service.create(internalData);
     res.status(201).json({ status: 'success', data: record });

@@ -9,9 +9,7 @@ export const getRecapSchema = z.object({
     startDate: isoDate('Tanggal Mulai'),
     endDate: isoDate('Tanggal Selesai'),
     meterId: positiveInt('ID Meter').optional(),
-    sortBy: z
-      .enum(['date', 'wbp', 'lwbp', 'consumption', 'target', 'pax', 'cost'])
-      .optional(),
+    sortBy: z.enum(['date', 'wbp', 'lwbp', 'consumption', 'target', 'pax', 'cost']).optional(),
     sortOrder: z.enum(['asc', 'desc']).optional(),
   }),
 });

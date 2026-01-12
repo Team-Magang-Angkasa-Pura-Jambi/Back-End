@@ -25,13 +25,8 @@ export const analysisQuerySchema = z.object({
 
 export const singlePredictionSchema = z.object({
   body: z.object({
-    date: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal harus YYYY-MM-DD'),
-    meterId: z.coerce
-      .number()
-      .int()
-      .positive('meterId harus berupa angka positif'),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal harus YYYY-MM-DD'),
+    meterId: z.coerce.number().int().positive('meterId harus berupa angka positif'),
   }),
 });
 
@@ -70,7 +65,7 @@ export const budgetPreviewSchema = z.object({
         z.object({
           meter_id: z.coerce.number().int().positive(),
           weight: z.coerce.number().min(0).max(1),
-        })
+        }),
       )
       .optional(),
   }),
@@ -78,9 +73,7 @@ export const budgetPreviewSchema = z.object({
 
 export const efficiencyTargetPreviewSchema = z.object({
   body: z.object({
-    target_value: z.coerce
-      .number()
-      .positive('Target value must be greater than 0'),
+    target_value: z.coerce.number().positive('Target value must be greater than 0'),
     meter_id: z.coerce.number().int().positive('Invalid Meter ID'),
     period_start: z.coerce.date({
       error: () => ({ message: 'Format tanggal mulai tidak valid' }),
@@ -93,10 +86,7 @@ export const efficiencyTargetPreviewSchema = z.object({
 
 export const prepareBudgetSchema = z.object({
   params: z.object({
-    parentBudgetId: z.coerce
-      .number()
-      .int()
-      .positive('ID Anggaran Induk tidak valid'),
+    parentBudgetId: z.coerce.number().int().positive('ID Anggaran Induk tidak valid'),
   }),
 });
 

@@ -2,11 +2,12 @@ import prisma from '../../configs/db.js';
 import type { PriceScheme, Prisma } from '../../generated/prisma/index.js';
 import type {
   CreatePriceSchemaBody,
-  GetPriceSchemasQuery,
   UpdatePriceSchemaBody,
 } from '../../types/finance/priceSchema.types.js';
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
 import { Error400 } from '../../utils/customError.js';
+import { type PaginationParams } from '../../types/common/index.js';
+import { type CustomErrorMessages } from '../../utils/baseService.js';
 
 type PriceSchemeWithRates = Prisma.PriceSchemeGetPayload<{
   include: { rates: true };
@@ -32,9 +33,10 @@ export class PriceSchemeService extends GenericBaseService<
   }
 
   public override async findAll(
-    query?: GetPriceSchemasQuery
+    args?: Prisma.PriceSchemeFindManyArgs & PaginationParams & { tarifGroupId?: number },
+    customMessages?: CustomErrorMessages,
   ): Promise<PriceSchemeWithRates[]> {
-    const { tarifGroupId } = query || {};
+    const { tarifGroupId } = args ?? {};
     const where: Prisma.PriceSchemeScalarWhereInput = {};
 
     if (tarifGroupId) {
@@ -50,16 +52,14 @@ export class PriceSchemeService extends GenericBaseService<
       },
     };
 
-    return this._handleCrudOperation(() =>
-      this._model.findMany(findArgs)
-    ) as any as PriceSchemeWithRates[];
+    return (await this._handleCrudOperation(
+      () => this._model.findMany(findArgs),
+      customMessages,
+    )) as any as PriceSchemeWithRates[];
   }
 
-  public override async create(
-    data: CreatePriceSchemaInternal
-  ): Promise<PriceScheme> {
-    const { tariff_group_id, set_by_user_id, rates, tax_ids, ...restOfData } =
-      data;
+  public override async create(data: CreatePriceSchemaInternal): Promise<PriceScheme> {
+    const { tariff_group_id, set_by_user_id, rates, tax_ids, ...restOfData } = data;
 
     const tariffGroupExists = await prisma.tariffGroup.findUnique({
       where: { tariff_group_id },
@@ -105,7 +105,7 @@ export class PriceSchemeService extends GenericBaseService<
 
   public override async update(
     schemeId: number,
-    data: UpdatePriceSchemaBody
+    data: UpdatePriceSchemaBody,
   ): Promise<PriceScheme> {
     const { rates, tax_ids, ...restOfData } = data;
 

@@ -7,15 +7,10 @@ class AnalysisController {
   private analysisService = new AnalysisService();
   // data untuk line chart
 
-  public getMonthlyFuelStockAnalysis = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public getMonthlyFuelStockAnalysis = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const query = res.locals.validatedData.query;
-      const result =
-        await this.analysisService.getMonthlyFuelStockAnalysis(query);
+      const result = await this.analysisService.getMonthlyFuelStockAnalysis(query);
       res200({
         res,
         data: result,
@@ -27,16 +22,10 @@ class AnalysisController {
   };
 
   // budget
-  public getBudgetAllocation = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public getBudgetAllocation = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { year } = res.locals.validatedData.query;
-      const result = await this.analysisService.getBudgetAllocation(
-        Number(year)
-      );
+      const result = await this.analysisService.getBudgetAllocation(Number(year));
       res200({
         res,
         data: result,
@@ -47,15 +36,10 @@ class AnalysisController {
     }
   };
 
-  public getBudgetPreview = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public getBudgetPreview = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const budgetData = res.locals.validatedData.body;
-      const result =
-        await this.analysisService.getBudgetAllocationPreview(budgetData);
+      const result = await this.analysisService.getBudgetAllocationPreview(budgetData);
       res200({
         res,
         data: result,
@@ -66,15 +50,11 @@ class AnalysisController {
     }
   };
 
-  public getBudgetSummary = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public getBudgetSummary = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const query = res.locals.validatedData?.query;
 
-      const targetYear = query?.year || new Date().getFullYear();
+      const targetYear = query?.year ?? new Date().getFullYear();
 
       const result = await this.analysisService.getBudgetSummary(targetYear);
 
@@ -88,15 +68,10 @@ class AnalysisController {
     }
   };
 
-  public prepareNextPeriodBudget = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public prepareNextPeriodBudget = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { parentBudgetId } = res.locals.validatedData.params;
-      const result =
-        await this.analysisService.prepareNextPeriodBudget(parentBudgetId);
+      const result = await this.analysisService.prepareNextPeriodBudget(parentBudgetId);
       res200({
         res,
         data: result,
@@ -107,11 +82,7 @@ class AnalysisController {
     }
   };
   // summary
-  public getTodaySummary = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public getTodaySummary = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { energyType } = res.locals.validatedData.query;
       const result = await this.analysisService.getTodaySummary(energyType);
@@ -126,11 +97,7 @@ class AnalysisController {
   };
 
   // prediction
-  public runSinglePrediction = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public runSinglePrediction = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { date, meterId } = res.locals.validatedData.body;
       const baseDate = new Date(date);
@@ -146,22 +113,16 @@ class AnalysisController {
     }
   };
 
-  public runBulkPredictions = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public runBulkPredictions = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = (req as any).user;
-      if (!user || !user.id) {
-        throw new Error401(
-          'Data pengguna tidak ditemukan. Sesi mungkin tidak valid.'
-        );
+      if (!user?.id) {
+        throw new Error401('Data pengguna tidak ditemukan. Sesi mungkin tidak valid.');
       }
 
       const { startDate, endDate } = res.locals.validatedData.body;
 
-      this.analysisService.runBulkPredictions({
+      await this.analysisService.runBulkPredictions({
         startDate: new Date(startDate),
         endDate: new Date(endDate),
         userId: Number(user.id),
@@ -177,11 +138,7 @@ class AnalysisController {
   };
 
   // classificatin
-  public getClassificationSummary = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public getClassificationSummary = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const query = res.locals.validatedData.query;
       const result = await this.analysisService.getClassificationSummary(query);
@@ -195,19 +152,12 @@ class AnalysisController {
     }
   };
 
-  public runSingleClassification = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public runSingleClassification = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { date, meterId } = res.locals.validatedData.body;
       const targetDate = new Date(date);
 
-      await this.analysisService.runSingleClassification(
-        targetDate,
-        Number(meterId)
-      );
+      await this.analysisService.runSingleClassification(targetDate, Number(meterId));
 
       res200({
         res,
@@ -219,14 +169,9 @@ class AnalysisController {
   };
 
   // efficient
-  public getEfficiencyTargetPreview = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
+  public getEfficiencyTargetPreview = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { target_value, meter_id, period_start, period_end } =
-        res.locals.validatedData.body;
+      const { target_value, meter_id, period_start, period_end } = res.locals.validatedData.body;
       const result = await this.analysisService.getEfficiencyTargetPreview({
         target_value,
         meterId: meter_id,

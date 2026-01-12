@@ -1,6 +1,6 @@
 import prisma from '../../configs/db.js';
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
-import { EfficiencyTarget, Prisma } from '../../generated/prisma/index.js';
+import { type EfficiencyTarget, Prisma } from '../../generated/prisma/index.js';
 import type {
   CreateEfficiencyBody,
   UpdateEfficiencyBody,
@@ -26,7 +26,7 @@ export class EfficiencyTargetService extends GenericBaseService<
   }
 
   public override async findAll(
-    args?: Prisma.EfficiencyTargetFindManyArgs<DefaultArgs>
+    args?: Prisma.EfficiencyTargetFindManyArgs<DefaultArgs>,
   ): Promise<EfficiencyTarget[]> {
     const queryArgs = {
       ...args,
@@ -50,9 +50,7 @@ export class EfficiencyTargetService extends GenericBaseService<
     return this._handleCrudOperation(() => this._model.findMany(queryArgs));
   }
 
-  public override async create(
-    data: CreateEfficiencyInternal
-  ): Promise<EfficiencyTarget> {
+  public override async create(data: CreateEfficiencyInternal): Promise<EfficiencyTarget> {
     const {
       meter_id,
       set_by_user_id,
@@ -97,9 +95,7 @@ export class EfficiencyTargetService extends GenericBaseService<
       });
 
       if (!meter || !meter.tariff_group?.price_schemes[0]) {
-        throw new Error400(
-          'Skema harga aktif tidak ditemukan untuk meter ini.'
-        );
+        throw new Error400('Skema harga aktif tidak ditemukan untuk meter ini.');
       }
 
       const activeScheme = meter.tariff_group.price_schemes[0];
@@ -108,11 +104,9 @@ export class EfficiencyTargetService extends GenericBaseService<
       // 3. Logika Kalkulasi Rata-rata Harga (WBP & LWBP untuk Listrik)
       if (meter.energy_type.type_name === 'Electricity') {
         const wbpRate =
-          activeScheme.rates.find((r) => r.reading_type.type_name === 'WBP')
-            ?.value || 0;
+          activeScheme.rates.find((r) => r.reading_type.type_name === 'WBP')?.value ?? 0;
         const lwbpRate =
-          activeScheme.rates.find((r) => r.reading_type.type_name === 'LWBP')
-            ?.value || 0;
+          activeScheme.rates.find((r) => r.reading_type.type_name === 'LWBP')?.value ?? 0;
 
         // Rata-rata harga = (WBP + LWBP) / 2
         avgPricePerUnit = new Prisma.Decimal(wbpRate).plus(lwbpRate).div(2);
@@ -123,9 +117,7 @@ export class EfficiencyTargetService extends GenericBaseService<
 
       // 4. Hitung Estimasi Total Cost
       // Total Cost = Target Value * Rata-rata Harga
-      const estimatedTotalCost = new Prisma.Decimal(target_value).mul(
-        avgPricePerUnit
-      );
+      const estimatedTotalCost = new Prisma.Decimal(target_value).mul(avgPricePerUnit);
 
       // 5. Simpan ke Database
       return prisma.efficiencyTarget.create({

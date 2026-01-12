@@ -17,13 +17,9 @@ export const validate =
       return next();
     } catch (err) {
       if (err instanceof ZodError) {
-        const { fieldErrors, formErrors } = err.flatten();
-        const errorMessages = [
-          ...Object.entries(fieldErrors).flatMap(
-            ([key, msgs]) => msgs?.map((m) => `${key}: ${m}`) ?? []
-          ),
-          ...formErrors,
-        ];
+        const errorMessages = err.issues.map(
+          (issue) => `${issue.path.join('.')}: ${issue.message}`,
+        );
 
         return next(new Error400(`Invalid input. ${errorMessages.join('; ')}`));
       }

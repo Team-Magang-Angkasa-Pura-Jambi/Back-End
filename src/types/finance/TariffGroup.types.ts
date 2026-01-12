@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { type z } from 'zod';
 import type {
   paramsTariffGroup,
   tariffGroupSchemas,
@@ -6,9 +6,7 @@ import type {
 
 export type CreateTariffGroupBody = z.infer<typeof tariffGroupSchemas.body>;
 
-export type UpdateTariffGroupBody = z.infer<
-  typeof tariffGroupSchemas.bodyPartial
->;
+export type UpdateTariffGroupBody = z.infer<typeof tariffGroupSchemas.bodyPartial>;
 
 export type TariffGroupParams = z.infer<typeof tariffGroupSchemas.params>;
 

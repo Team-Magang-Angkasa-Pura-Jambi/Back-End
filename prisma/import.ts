@@ -33,20 +33,14 @@ export async function runImport() {
   });
 
   console.log('✅ Data master awal berhasil diambil dari database:');
+  console.log(`   - Teknisi: ${technician.username} (ID: ${technician.user_id})`);
+  console.log(`   - Meter Kantor: ${meterKantor.meter_code} (ID: ${meterKantor.meter_id})`);
+  console.log(`   - Meter Terminal: ${meterTerminal.meter_code} (ID: ${meterTerminal.meter_id})`);
   console.log(
-    `   - Teknisi: ${technician.username} (ID: ${technician.user_id})`
+    `   - Meter Air Kantor: ${waterMeterKantor.meter_code} (ID: ${waterMeterKantor.meter_id})`,
   );
   console.log(
-    `   - Meter Kantor: ${meterKantor.meter_code} (ID: ${meterKantor.meter_id})`
-  );
-  console.log(
-    `   - Meter Terminal: ${meterTerminal.meter_code} (ID: ${meterTerminal.meter_id})`
-  );
-  console.log(
-    `   - Meter Air Kantor: ${waterMeterKantor.meter_code} (ID: ${waterMeterKantor.meter_id})`
-  );
-  console.log(
-    `   - Meter Air Terminal: ${waterMeterTerminal.meter_code} (ID: ${waterMeterTerminal.meter_id})`
+    `   - Meter Air Terminal: ${waterMeterTerminal.meter_code} (ID: ${waterMeterTerminal.meter_id})`,
   );
 
   // PERBAIKAN TOTAL: Ubah struktur untuk memastikan script menunggu semua proses selesai.
@@ -58,7 +52,7 @@ export async function runImport() {
       .pipe(
         csv({
           mapHeaders: ({ header }) => header.trim(),
-        })
+        }),
       )
       .on('data', (data) => results.push(data))
       .on('error', reject) // Tangani error saat membaca stream
@@ -67,9 +61,7 @@ export async function runImport() {
 
   console.log(results[0]);
 
-  console.log(
-    `✅ File CSV berhasil dibaca. Ditemukan ${results.length} baris data.`
-  );
+  console.log(`✅ File CSV berhasil dibaca. Ditemukan ${results.length} baris data.`);
 
   // 2. Filter dan urutkan data yang sudah ada di memori.
   const validResults = results
@@ -98,7 +90,7 @@ export async function runImport() {
 
     console.log(`\n🔄 Memproses data untuk tanggal ${row.Tanggal}...`);
     console.log(
-      `   - Data setelah parsing: Listrik Kantor=${pemakaianKantor} kWh (Rp${biayaKantor}), Listrik Terminal=${pemakaianTerminal} kWh (Rp${biayaTerminal}), Pax=${pax}, Air Kantor=${waterKantor} m³, Air Terminal=${waterTerminal} m³, Suhu=${weatherAvg}°C/${weatherMax}°C`
+      `   - Data setelah parsing: Listrik Kantor=${pemakaianKantor} kWh (Rp${biayaKantor}), Listrik Terminal=${pemakaianTerminal} kWh (Rp${biayaTerminal}), Pax=${pax}, Air Kantor=${waterKantor} m³, Air Terminal=${waterTerminal} m³, Suhu=${weatherAvg}°C/${weatherMax}°C`,
     );
 
     try {
@@ -154,14 +146,9 @@ export async function runImport() {
             });
             console.log(result);
 
-            console.log(
-              `   ✅ Data summary untuk meter Kantor berhasil dibuat/diperbarui.`
-            );
+            console.log(`   ✅ Data summary untuk meter Kantor berhasil dibuat/diperbarui.`);
           } catch (error: any) {
-            console.error(
-              `   ❌ Gagal menyimpan summary meter Kantor:`,
-              error.message
-            );
+            console.error(`   ❌ Gagal menyimpan summary meter Kantor:`, error.message);
           }
         }
 
@@ -187,23 +174,16 @@ export async function runImport() {
                 total_cost: new Prisma.Decimal(biayaTerminal),
               },
             });
-            console.log(
-              `   ✅ Data summary untuk meter Terminal berhasil dibuat/diperbarui.`
-            );
+            console.log(`   ✅ Data summary untuk meter Terminal berhasil dibuat/diperbarui.`);
           } catch (error: any) {
-            console.error(
-              `   ❌ Gagal menyimpan summary meter Terminal:`,
-              error.message
-            );
+            console.error(`   ❌ Gagal menyimpan summary meter Terminal:`, error.message);
           }
         }
 
         // BARU: 4. Langsung buat/update DailySummary untuk Meter Air Kantor
         // PERBAIKAN: Gunakan !isNaN untuk memastikan data selalu dibuat, bahkan jika konsumsi 0.
         if (!isNaN(waterKantor)) {
-          console.log(
-            `     -> Menyimpan DailySummary untuk Meter Air Kantor...`
-          );
+          console.log(`     -> Menyimpan DailySummary untuk Meter Air Kantor...`);
           try {
             await tx.dailySummary.upsert({
               where: {
@@ -223,23 +203,16 @@ export async function runImport() {
                 total_cost: 0,
               },
             });
-            console.log(
-              `   ✅ Data summary untuk meter Air Kantor berhasil dibuat/diperbarui.`
-            );
+            console.log(`   ✅ Data summary untuk meter Air Kantor berhasil dibuat/diperbarui.`);
           } catch (error: any) {
-            console.error(
-              `   ❌ Gagal menyimpan summary meter Air Kantor:`,
-              error.message
-            );
+            console.error(`   ❌ Gagal menyimpan summary meter Air Kantor:`, error.message);
           }
         }
 
         // BARU: 5. Langsung buat/update DailySummary untuk Meter Air Terminal
         // PERBAIKAN: Gunakan !isNaN untuk memastikan data selalu dibuat, bahkan jika konsumsi 0.
         if (!isNaN(waterTerminal)) {
-          console.log(
-            `     -> Menyimpan DailySummary untuk Meter Air Terminal...`
-          );
+          console.log(`     -> Menyimpan DailySummary untuk Meter Air Terminal...`);
           try {
             await tx.dailySummary.upsert({
               where: {
@@ -259,14 +232,9 @@ export async function runImport() {
                 total_cost: 0,
               },
             });
-            console.log(
-              `   ✅ Data summary untuk meter Air Terminal berhasil dibuat/diperbarui.`
-            );
+            console.log(`   ✅ Data summary untuk meter Air Terminal berhasil dibuat/diperbarui.`);
           } catch (error: any) {
-            console.error(
-              `   ❌ Gagal menyimpan summary meter Air Terminal:`,
-              error.message
-            );
+            console.error(`   ❌ Gagal menyimpan summary meter Air Terminal:`, error.message);
           }
         }
       });
@@ -274,13 +242,10 @@ export async function runImport() {
       // Tangani error duplikat dengan baik
       if (error.code === 'P2002') {
         console.warn(
-          `   ⚠️  Gagal karena duplikasi data untuk ${row.Tanggal}, seharusnya ditangani oleh upsert. Error: ${error.message}`
+          `   ⚠️  Gagal karena duplikasi data untuk ${row.Tanggal}, seharusnya ditangani oleh upsert. Error: ${error.message}`,
         );
       } else {
-        console.error(
-          `   ❌ Gagal memproses data untuk ${row.Tanggal}:`,
-          error.message
-        );
+        console.error(`   ❌ Gagal memproses data untuk ${row.Tanggal}:`, error.message);
       }
     }
   }

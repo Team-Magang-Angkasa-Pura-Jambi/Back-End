@@ -29,9 +29,7 @@ export class ConsumptionPredictionController extends BaseController<
   constructor() {
     super(new ConsumptionPredictionService(), 'predictionId');
   }
-  private async getDailyPrediction(
-    tanggal: string
-  ): Promise<PredictionResult | null> {
+  private async getDailyPrediction(tanggal: string): Promise<PredictionResult | null> {
     try {
       const response = await axios.post<PredictionResult>(ML_API_URL, {
         tanggal: tanggal,
@@ -39,10 +37,7 @@ export class ConsumptionPredictionController extends BaseController<
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        console.error(
-          'Error saat memanggil ML API:',
-          error.response?.data || error.message
-        );
+        console.error('Error saat memanggil ML API:', error.response?.data ?? error.message);
       } else {
         console.error('Terjadi error yang tidak terduga:', error);
       }

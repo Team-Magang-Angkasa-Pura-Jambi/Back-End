@@ -1,16 +1,10 @@
 import { z, type ZodObject, type ZodRawShape } from 'zod';
-import type {
-  CrudSchemaConfig,
-  CrudSchemas,
-  GetListSchema,
-  ExtendWithCustom,
-} from './types.js';
+import type { CrudSchemaConfig, CrudSchemas, ExtendWithCustom } from './types.js';
 
 export class CrudSchemaBuilder<
   TBodySchema extends ZodObject<any>,
   TParamsSchema extends ZodObject<any>,
-> implements CrudSchemas<TBodySchema, TParamsSchema>
-{
+> implements CrudSchemas<TBodySchema, TParamsSchema> {
   body: TBodySchema;
   bodyPartial: ReturnType<TBodySchema['partial']>;
   params: TParamsSchema;
@@ -24,9 +18,7 @@ export class CrudSchemaBuilder<
     const { bodySchema, paramsSchema } = config;
 
     this.body = bodySchema;
-    this.bodyPartial = bodySchema.partial() as ReturnType<
-      TBodySchema['partial']
-    >;
+    this.bodyPartial = bodySchema.partial() as ReturnType<TBodySchema['partial']>;
     this.params = paramsSchema;
 
     this.listQuery = z.object({
@@ -43,31 +35,24 @@ export class CrudSchemaBuilder<
   }
 
   getList<TCustomFilters extends ZodObject<ZodRawShape> | undefined>(
-    customFilters?: TCustomFilters
-  ): z.ZodObject<GetListSchema<TCustomFilters>> {
+    customFilters?: TCustomFilters,
+  ) {
     const baseQuerySchema = z.object({
       page: z.coerce.number().int().positive().default(1),
       limit: z.coerce.number().int().positive().default(10),
       search: z.string().optional(),
       sortBy: z.string().optional(),
-      sortOrder: z.enum(['asc', 'desc']).optional(),
+      sortOrder: z.enum(['asc', 'desc']).optional().default('asc'),
     });
 
-    const finalQuerySchema = customFilters
-      ? baseQuerySchema.merge(customFilters)
-      : baseQuerySchema;
+    const finalQuerySchema = customFilters ? baseQuerySchema.merge(customFilters) : baseQuerySchema;
 
-    return z.object({ query: finalQuerySchema }) as any;
+    return z.object({
+      query: finalQuerySchema,
+    });
   }
 
-  addCustomSchema<K extends string, V>(
-    name: K,
-    schema: V
-  ): ExtendWithCustom<this, K, V> {
-    return Object.assign(this, { [name]: schema }) as ExtendWithCustom<
-      this,
-      K,
-      V
-    >;
+  addCustomSchema<K extends string, V>(name: K, schema: V): ExtendWithCustom<this, K, V> {
+    return Object.assign(this, { [name]: schema }) as ExtendWithCustom<this, K, V>;
   }
 }

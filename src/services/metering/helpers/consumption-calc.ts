@@ -1,10 +1,10 @@
 import {
   Prisma,
-  ReadingDetail,
-  ReadingSession,
+  type ReadingDetail,
+  type ReadingSession,
   RoleName,
 } from '../../../generated/prisma/index.js';
-import { MeterWithRelations } from '../../../types/metering/meter.types-temp.js';
+import { type MeterWithRelations } from '../../../types/metering/meter.types-temp.js';
 import { Error400, Error404, Error500 } from '../../../utils/customError.js';
 import { alertService } from '../../notifications/alert.service.js';
 import { notificationService } from '../../notifications/notification.service.js';
@@ -20,19 +20,14 @@ export const _calculateSummaryDetails = async (
   tx: Prisma.TransactionClient,
   meter: MeterWithRelations,
   currentSession: SessionWithDetails,
-  previousSession: SessionWithDetails | null
-): Promise<
-  Omit<Prisma.SummaryDetailCreateInput, 'summary' | 'summary_id'>[]
-> => {
+  previousSession: SessionWithDetails | null,
+): Promise<Omit<Prisma.SummaryDetailCreateInput, 'summary' | 'summary_id'>[]> => {
   const activePriceScheme = await _getLatestPriceScheme(
     tx,
     meter.tariff_group_id,
-    currentSession.reading_date
+    currentSession.reading_date,
   );
-  const summaryDetails: Omit<
-    Prisma.SummaryDetailCreateInput,
-    'summary' | 'summary_id'
-  >[] = [];
+  const summaryDetails: Omit<Prisma.SummaryDetailCreateInput, 'summary' | 'summary_id'>[] = [];
 
   if (meter.energy_type.type_name === 'Electricity') {
     return _calculateElectricitySummary(
@@ -40,18 +35,12 @@ export const _calculateSummaryDetails = async (
       meter,
       currentSession,
       previousSession,
-      activePriceScheme
+      activePriceScheme,
     );
   }
 
   if (meter.energy_type.type_name === 'Water') {
-    return _calculateWaterSummary(
-      tx,
-      meter,
-      currentSession,
-      previousSession,
-      activePriceScheme
-    );
+    return _calculateWaterSummary(tx, meter, currentSession, previousSession, activePriceScheme);
   }
 
   return summaryDetails;
@@ -64,15 +53,13 @@ export const _calculateElectricitySummary = async (
   previousSession: SessionWithDetails | null,
   priceScheme: Prisma.PriceSchemeGetPayload<{
     include: { rates: { include: { reading_type: true } } };
-  }> | null
+  }> | null,
 ) => {
   if (!priceScheme) {
     throw new Error404(
-      `Konfigurasi harga untuk golongan tarif '${
-        meter.tariff_group.group_code
-      }' pada tanggal ${
+      `Konfigurasi harga untuk golongan tarif '${meter.tariff_group.group_code}' pada tanggal ${
         currentSession.reading_date.toISOString().split('T')[0]
-      } tidak ditemukan.`
+      } tidak ditemukan.`,
     );
   }
 
@@ -85,7 +72,7 @@ export const _calculateElectricitySummary = async (
 
   if (!wbpType || !lwbpType) {
     throw new Error500(
-      'Konfigurasi sistem error: Tipe bacaan WBP atau LWBP tidak ditemukan di database.'
+      'Konfigurasi sistem error: Tipe bacaan WBP atau LWBP tidak ditemukan di database.',
     );
   }
 
@@ -94,16 +81,12 @@ export const _calculateElectricitySummary = async (
 
   const faktorKali = new Prisma.Decimal(meter.tariff_group?.faktor_kali ?? 1);
 
-  const rateWbp = priceScheme.rates.find(
-    (r) => r.reading_type_id === wbpType.reading_type_id
-  );
-  const rateLwbp = priceScheme.rates.find(
-    (r) => r.reading_type_id === lwbpType.reading_type_id
-  );
+  const rateWbp = priceScheme.rates.find((r) => r.reading_type_id === wbpType.reading_type_id);
+  const rateLwbp = priceScheme.rates.find((r) => r.reading_type_id === lwbpType.reading_type_id);
 
   if (!rateWbp || !rateLwbp) {
     throw new Error404(
-      `Tarif WBP atau LWBP tidak terdefinisi dalam skema harga '${priceScheme.scheme_name}'.`
+      `Tarif WBP atau LWBP tidak terdefinisi dalam skema harga '${priceScheme.scheme_name}'.`,
     );
   }
 
@@ -113,30 +96,25 @@ export const _calculateElectricitySummary = async (
   const wbpConsumption = _calculateSafeConsumption(
     getDetailValue(currentSession, wbpType.reading_type_id),
     getDetailValue(previousSession, wbpType.reading_type_id),
-    meter.rollover_limit
+    meter.rollover_limit,
   );
 
   const lwbpConsumption = _calculateSafeConsumption(
     getDetailValue(currentSession, lwbpType.reading_type_id),
     getDetailValue(previousSession, lwbpType.reading_type_id),
-    meter.rollover_limit
+    meter.rollover_limit,
   );
   const wbpCost = wbpConsumption.times(faktorKali).times(HARGA_WBP);
   const lwbpCost = lwbpConsumption.times(faktorKali).times(HARGA_LWBP);
 
-  const summaryDetails: Omit<
-    Prisma.SummaryDetailCreateInput,
-    'summary' | 'summary_id'
-  >[] = [
+  const summaryDetails: Omit<Prisma.SummaryDetailCreateInput, 'summary' | 'summary_id'>[] = [
     {
       metric_name: 'Pemakaian WBP',
       energy_type: { connect: { energy_type_id: meter.energy_type_id } },
       current_reading:
-        getDetailValue(currentSession, wbpType.reading_type_id) ??
-        new Prisma.Decimal(0),
+        getDetailValue(currentSession, wbpType.reading_type_id) ?? new Prisma.Decimal(0),
       previous_reading:
-        getDetailValue(previousSession, wbpType.reading_type_id) ??
-        new Prisma.Decimal(0),
+        getDetailValue(previousSession, wbpType.reading_type_id) ?? new Prisma.Decimal(0),
       consumption_value: wbpConsumption,
       consumption_cost: wbpCost,
       wbp_value: wbpConsumption,
@@ -146,11 +124,9 @@ export const _calculateElectricitySummary = async (
       energy_type: { connect: { energy_type_id: meter.energy_type_id } },
 
       current_reading:
-        getDetailValue(currentSession, lwbpType.reading_type_id) ??
-        new Prisma.Decimal(0),
+        getDetailValue(currentSession, lwbpType.reading_type_id) ?? new Prisma.Decimal(0),
       previous_reading:
-        getDetailValue(previousSession, lwbpType.reading_type_id) ??
-        new Prisma.Decimal(0),
+        getDetailValue(previousSession, lwbpType.reading_type_id) ?? new Prisma.Decimal(0),
       consumption_value: lwbpConsumption,
       consumption_cost: lwbpCost,
       lwbp_value: lwbpConsumption,
@@ -176,25 +152,19 @@ export const _calculateFuelSummary = async (
   previousSession: SessionWithDetails | null,
   priceScheme: Prisma.PriceSchemeGetPayload<{
     include: { rates: true };
-  }> | null
+  }> | null,
 ) => {
   if (!priceScheme) {
     throw new Error404(
-      `Konfigurasi harga untuk golongan tarif '${
-        meter.tariff_group.group_code
-      }' pada tanggal ${
+      `Konfigurasi harga untuk golongan tarif '${meter.tariff_group.group_code}' pada tanggal ${
         currentSession.reading_date.toISOString().split('T')[0]
-      } tidak ditemukan.`
+      } tidak ditemukan.`,
     );
   }
 
-  if (
-    !meter.tank_height_cm ||
-    !meter.tank_volume_liters ||
-    meter.tank_height_cm.isZero()
-  ) {
+  if (!meter.tank_height_cm || !meter.tank_volume_liters || meter.tank_height_cm.isZero()) {
     throw new Error400(
-      `Konfigurasi tangki (tinggi & volume) untuk meter '${meter.meter_code}' belum diatur atau tidak valid.`
+      `Konfigurasi tangki (tinggi & volume) untuk meter '${meter.meter_code}' belum diatur atau tidak valid.`,
     );
   }
 
@@ -209,23 +179,21 @@ export const _calculateFuelSummary = async (
   const getDetailValue = (session: SessionWithDetails | null, typeId: number) =>
     session?.details.find((d) => d.reading_type_id === typeId)?.value ?? 0;
 
-  const rate = priceScheme.rates.find(
-    (r) => r.reading_type_id === mainType.reading_type_id
-  );
+  const rate = priceScheme.rates.find((r) => r.reading_type_id === mainType.reading_type_id);
 
   if (!rate) {
     throw new Error404(
-      `Tarif untuk '${mainType.type_name}' tidak terdefinisi dalam skema harga '${priceScheme.scheme_name}'.`
+      `Tarif untuk '${mainType.type_name}' tidak terdefinisi dalam skema harga '${priceScheme.scheme_name}'.`,
     );
   }
   const HARGA_SATUAN = new Prisma.Decimal(rate.value);
 
   const currentHeight = new Prisma.Decimal(
-    getDetailValue(currentSession, mainType.reading_type_id) ?? 0
+    getDetailValue(currentSession, mainType.reading_type_id) ?? 0,
   );
 
   const previousHeight = new Prisma.Decimal(
-    getDetailValue(previousSession, mainType.reading_type_id) ?? 0
+    getDetailValue(previousSession, mainType.reading_type_id) ?? 0,
   );
 
   const heightDifference = previousHeight.minus(currentHeight);
@@ -255,7 +223,7 @@ export const _calculateFuelSummary = async (
         },
       });
       console.log(
-        `[ReadingService] Resolved ${alertsToResolve.length} low fuel alerts for meter ${meter.meter_code} due to refill.`
+        `[ReadingService] Resolved ${alertsToResolve.length} low fuel alerts for meter ${meter.meter_code} due to refill.`,
       );
     }
 
@@ -271,9 +239,7 @@ export const _calculateFuelSummary = async (
       const title = `Info: Pengisian Penuh BBM Terdeteksi`;
       const message = `Telah terjadi pengisian penuh BBM untuk meter '${
         meter.meter_code
-      }'. Ketinggian mencapai kapasitas maksimal: ${currentHeight.toFixed(
-        2
-      )} cm.`;
+      }'. Ketinggian mencapai kapasitas maksimal: ${currentHeight.toFixed(2)} cm.`;
 
       for (const admin of admins) {
         await notificationService.create({
@@ -283,7 +249,7 @@ export const _calculateFuelSummary = async (
         });
       }
       console.log(
-        `[ReadingService] Full fuel refill detected for meter ${meter.meter_code}. Notification sent.`
+        `[ReadingService] Full fuel refill detected for meter ${meter.meter_code}. Notification sent.`,
       );
     }
   } else {
@@ -299,7 +265,7 @@ export const _calculateFuelSummary = async (
       const message = `Stok BBM untuk meter '${
         meter.meter_code
       }' telah mencapai level rendah (${currentHeight.toFixed(
-        2
+        2,
       )} cm). Mohon segera lakukan pengisian ulang.`;
 
       await alertService.create({
@@ -324,7 +290,7 @@ export const _calculateFuelSummary = async (
         });
       }
       console.log(
-        `[ReadingService] Low fuel level detected for meter ${meter.meter_code}. Alert sent.`
+        `[ReadingService] Low fuel level detected for meter ${meter.meter_code}. Alert sent.`,
       );
     }
   }
@@ -353,15 +319,13 @@ export const _calculateWaterSummary = async (
   previousSession: SessionWithDetails | null,
   priceScheme: Prisma.PriceSchemeGetPayload<{
     include: { rates: true };
-  }> | null
+  }> | null,
 ) => {
   if (!priceScheme) {
     throw new Error404(
-      `Konfigurasi harga untuk golongan tarif '${
-        meter.tariff_group.group_code
-      }' pada tanggal ${
+      `Konfigurasi harga untuk golongan tarif '${meter.tariff_group.group_code}' pada tanggal ${
         currentSession.reading_date.toISOString().split('T')[0]
-      } tidak ditemukan.`
+      } tidak ditemukan.`,
     );
   }
 
@@ -373,13 +337,11 @@ export const _calculateWaterSummary = async (
   const getDetailValue = (session: SessionWithDetails | null, typeId: number) =>
     session?.details.find((d) => d.reading_type_id === typeId)?.value;
 
-  const rate = priceScheme.rates.find(
-    (r) => r.reading_type_id === mainType.reading_type_id
-  );
+  const rate = priceScheme.rates.find((r) => r.reading_type_id === mainType.reading_type_id);
 
   if (!rate) {
     throw new Error404(
-      `Tarif untuk '${mainType.type_name}' tidak terdefinisi dalam skema harga '${priceScheme.scheme_name}'.`
+      `Tarif untuk '${mainType.type_name}' tidak terdefinisi dalam skema harga '${priceScheme.scheme_name}'.`,
     );
   }
   const HARGA_SATUAN = new Prisma.Decimal(rate.value);
@@ -387,7 +349,7 @@ export const _calculateWaterSummary = async (
   const consumption = _calculateSafeConsumption(
     getDetailValue(currentSession, mainType.reading_type_id),
     getDetailValue(previousSession, mainType.reading_type_id),
-    meter.rollover_limit
+    meter.rollover_limit,
   );
 
   return [
@@ -395,11 +357,9 @@ export const _calculateWaterSummary = async (
       metric_name: `Pemakaian Harian (${meter.energy_type.type_name})`,
       energy_type: { connect: { energy_type_id: meter.energy_type_id } },
       current_reading:
-        getDetailValue(currentSession, mainType.reading_type_id) ??
-        new Prisma.Decimal(0),
+        getDetailValue(currentSession, mainType.reading_type_id) ?? new Prisma.Decimal(0),
       previous_reading:
-        getDetailValue(previousSession, mainType.reading_type_id) ??
-        new Prisma.Decimal(0),
+        getDetailValue(previousSession, mainType.reading_type_id) ?? new Prisma.Decimal(0),
       consumption_value: consumption,
       consumption_cost: consumption.times(HARGA_SATUAN),
     },
@@ -409,7 +369,7 @@ export const _calculateWaterSummary = async (
 export const _calculateSafeConsumption = (
   currentValue?: Prisma.Decimal,
   previousValue?: Prisma.Decimal,
-  rolloverLimit?: Prisma.Decimal | null
+  rolloverLimit?: Prisma.Decimal | null,
 ) => {
   if (currentValue === undefined || currentValue === null) {
     return new Prisma.Decimal(0);
@@ -430,7 +390,7 @@ export const _calculateSafeConsumption = (
       return consumptionBeforeReset.plus(consumptionAfterReset);
     } else {
       throw new Error400(
-        `Nilai baru (${current}) tidak boleh lebih kecil dari nilai sebelumnya (${previous}) untuk meteran yang tidak memiliki batas reset (rollover).`
+        `Nilai baru (${current.toLocaleString()}) tidak boleh lebih kecil dari nilai sebelumnya (${previous.toLocaleString()}) untuk meteran yang tidak memiliki batas reset (rollover).`,
       );
     }
   }
@@ -441,42 +401,40 @@ export const _calculateAndDistributeFuelSummary = async (
   tx: Prisma.TransactionClient,
   meter: MeterWithRelations,
   currentSession: SessionWithDetails,
-  previousSession: SessionWithDetails | null
-): Promise<Prisma.DailySummaryGetPayload<{}>[]> => {
+  previousSession: SessionWithDetails | null,
+): Promise<Prisma.DailySummaryGetPayload<object>[]> => {
   const priceScheme = await _getLatestPriceScheme(
     tx,
     meter.tariff_group_id,
-    currentSession.reading_date
+    currentSession.reading_date,
   );
 
   if (!previousSession) {
     console.log(
-      `[ReadingService] First fuel entry for meter ${meter.meter_code}. Creating initial summary with 0 consumption.`
+      `[ReadingService] First fuel entry for meter ${meter.meter_code}. Creating initial summary with 0 consumption.`,
     );
     const initialSummaryDetails = await _calculateFuelSummary(
       tx,
       meter,
       currentSession,
       null,
-      priceScheme
+      priceScheme,
     );
 
     const summary = await _createOrUpdateDistributedSummary(
       tx,
       meter,
       currentSession.reading_date,
-      initialSummaryDetails
+      initialSummaryDetails,
     );
     return [summary];
   }
 
   if (previousSession.reading_date > currentSession.reading_date) {
-    const formattedPrevDate = new Date(
-      previousSession.reading_date
-    ).toLocaleDateString('id-ID');
+    const formattedPrevDate = new Date(previousSession.reading_date).toLocaleDateString('id-ID');
 
     throw new Error400(
-      `Kronologi tidak valid. Tanggal input harus setelah tanggal terakhir (${formattedPrevDate}).`
+      `Kronologi tidak valid. Tanggal input harus setelah tanggal terakhir (${formattedPrevDate}).`,
     );
   }
 
@@ -485,7 +443,7 @@ export const _calculateAndDistributeFuelSummary = async (
     meter,
     currentSession,
     previousSession,
-    priceScheme
+    priceScheme,
   );
 
   if (summaryDetails.length === 0) {
@@ -496,7 +454,7 @@ export const _calculateAndDistributeFuelSummary = async (
     tx,
     meter.meter_id,
     currentSession.reading_date,
-    summaryDetails
+    summaryDetails,
   );
 
   if (summary) {
@@ -518,34 +476,25 @@ export const _calculateAndDistributeFuelSummary = async (
   }
 
   console.log(
-    `[ReadingService] Created a single fuel summary for meter ${meter.meter_code} on ${currentSession.reading_date.toISOString().split('T')[0]}.`
+    `[ReadingService] Created a single fuel summary for meter ${meter.meter_code} on ${currentSession.reading_date.toISOString().split('T')[0]}.`,
   );
   return summary ? [summary] : [];
 };
 
-export const _recalculateKwhTotal = async (
-  tx: Prisma.TransactionClient,
-  sessionId: number
-) => {
+export const _recalculateKwhTotal = async (tx: Prisma.TransactionClient, sessionId: number) => {
   const sessionDetails = await tx.readingDetail.findMany({
     where: { session_id: sessionId },
     include: { reading_type: true },
   });
 
-  const wbpDetail = sessionDetails.find(
-    (d) => d.reading_type.type_name === 'WBP'
-  );
-  const lwbpDetail = sessionDetails.find(
-    (d) => d.reading_type.type_name === 'LWBP'
-  );
+  const wbpDetail = sessionDetails.find((d) => d.reading_type.type_name === 'WBP');
+  const lwbpDetail = sessionDetails.find((d) => d.reading_type.type_name === 'LWBP');
   const kwhTotalType = await tx.readingType.findFirst({
     where: { type_name: 'kWh_Total' },
   });
 
   if (wbpDetail && lwbpDetail && kwhTotalType) {
-    const newKwhTotal = new Prisma.Decimal(wbpDetail.value).plus(
-      lwbpDetail.value
-    );
+    const newKwhTotal = new Prisma.Decimal(wbpDetail.value).plus(lwbpDetail.value);
     await tx.readingDetail.upsert({
       where: {
         session_id_reading_type_id: {

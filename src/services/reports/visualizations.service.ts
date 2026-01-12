@@ -1,55 +1,55 @@
 import { Decimal } from '@prisma/client/runtime/library';
 import prisma from '../../configs/db.js';
-import { UsageCategory } from '../../generated/prisma/index.js';
+import { type UsageCategory } from '../../generated/prisma/index.js';
 import { Error400, Error404 } from '../../utils/customError.js';
 
-export type MeterRankInsightType = {
+export interface MeterRankInsightType {
   percentage_used: number;
   estimated_cost: number;
   avg_daily_consumption: number;
   trend: 'NAIK' | 'TURUN' | 'STABIL' | 'UNKNOWN';
   trend_percentage: number;
   recommendation: string;
-};
+}
 
-export type MeterRankType = {
+export interface MeterRankType {
   code: string;
   unit_of_measurement: string;
   consumption: number;
   budget: number;
   status: string;
   insight: MeterRankInsightType;
-};
+}
 
-export type EnergyOutlookType = {
+export interface EnergyOutlookType {
   meter_code: string;
   est: number;
   status: UsageCategory;
   over: number;
-};
+}
 
-export type YearlyHeatmapType = {
+export interface YearlyHeatmapType {
   classification_date: Date;
   classification: UsageCategory;
-  confidence_score?: Decimal;
-};
+  confidence_score?: number | null;
+}
 
-export type BudgetTrackingType = {
+export interface BudgetTrackingType {
   year: string;
   energyType: string;
   initial: number;
   used: number[];
   saved: number[];
-};
+}
 
-export type YearlyAnalysisType = {
+export interface YearlyAnalysisType {
   month: string;
   consumption: number;
   cost: number;
   budget: number;
-};
+}
 
-export type YearlyAnalysisResult = {
+export interface YearlyAnalysisResult {
   chartData: YearlyAnalysisType[];
   summary: {
     peakMonth: string;
@@ -64,16 +64,16 @@ export type YearlyAnalysisResult = {
     budgetUtilization: number;
     avgCostYTD: number;
   };
-};
+}
 
-export type UnifiedEnergyComparisonType = {
+export interface UnifiedEnergyComparisonType {
   category: string;
   unit: string;
   weekday_cons: number;
   holiday_cons: number;
   weekday_cost: number;
   holiday_cost: number;
-};
+}
 
 const MONTH_NAMES = [
   'Jan',
@@ -90,36 +90,39 @@ const MONTH_NAMES = [
   'Des',
 ];
 
-export type efficiencyRatioType = {
+export interface efficiencyRatioType {
   day: string;
   terminalRatio: Decimal;
   officeRatio: Decimal;
   pax: number;
-};
+}
 
-export type DailyAveragePaxType = { day: string; avgPax: number };
+export interface DailyAveragePaxType {
+  day: string;
+  avgPax: number;
+}
 
-export type BudgetBurnRateType = {
+export interface BudgetBurnRateType {
   dayDate: number;
   actual: number | null;
   idea: number;
   efficent: number;
-};
+}
 
-export type getFuelRefillAnalysisType = {
+export interface getFuelRefillAnalysisType {
   month: string;
   refill: number;
   remainingStock: number;
   consumption: number;
-};
+}
 
-export type GetAnalysisQuery = {
+export interface GetAnalysisQuery {
   energyType: string;
   month: string;
   meterId?: number;
-};
+}
 
-export type DailyAnalysisRecord = {
+export interface DailyAnalysisRecord {
   date: Date;
   actual_consumption: number | null;
   consumption_cost: number | null;
@@ -128,37 +131,23 @@ export type DailyAnalysisRecord = {
   confidence_score: Decimal | null;
   efficiency_target: number | null;
   efficiency_target_cost: number | null;
-};
+}
 
-export type MeterAnalysisData = {
+export interface MeterAnalysisData {
   meterId: number;
   meterName: string;
   data: DailyAnalysisRecord[];
-};
+}
 
 export const MeterRankService = async (): Promise<MeterRankType[]> => {
   try {
     const now = new Date();
 
     const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfCurrentMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0,
-      23,
-      59,
-      59
-    );
+    const endOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
     const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endOfPrevMonth = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      0,
-      23,
-      59,
-      59
-    );
+    const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
 
     const daysPassedCurrentMonth = now.getDate();
 
@@ -210,8 +199,8 @@ export const MeterRankService = async (): Promise<MeterRankType[]> => {
     const result: MeterRankType[] = data.map((meter) => {
       const allRates =
         meter.energy_type?.reading_types.flatMap((rt) =>
-          rt.rates.map((r) => new Decimal(r.value).toNumber())
-        ) || [];
+          rt.rates.map((r) => new Decimal(r.value).toNumber()),
+        ) ?? [];
 
       const specificAvgRate =
         allRates.length > 0
@@ -219,29 +208,26 @@ export const MeterRankService = async (): Promise<MeterRankType[]> => {
           : 1500;
 
       const currentMonthSummaries = meter.daily_summaries.filter(
-        (s) => new Date(s.summary_date) >= startOfCurrentMonth
+        (s) => new Date(s.summary_date) >= startOfCurrentMonth,
       );
 
       const prevMonthSummaries = meter.daily_summaries.filter(
         (s) =>
           new Date(s.summary_date) >= startOfPrevMonth &&
-          new Date(s.summary_date) < startOfCurrentMonth
+          new Date(s.summary_date) < startOfCurrentMonth,
       );
 
       const consumptionCurrent = currentMonthSummaries.reduce(
-        (acc, curr) =>
-          acc + new Decimal(curr.total_consumption ?? 0).toNumber(),
-        0
+        (acc, curr) => acc + new Decimal(curr.total_consumption ?? 0).toNumber(),
+        0,
       );
 
       const consumptionPrev = prevMonthSummaries.reduce(
-        (acc, curr) =>
-          acc + new Decimal(curr.total_consumption ?? 0).toNumber(),
-        0
+        (acc, curr) => acc + new Decimal(curr.total_consumption ?? 0).toNumber(),
+        0,
       );
 
-      const latestStatus =
-        currentMonthSummaries[0]?.classification?.classification ?? 'UNKNOWN';
+      const latestStatus = currentMonthSummaries[0]?.classification?.classification ?? 'UNKNOWN';
       const allocation = meter.budget_allocations[0];
       const budgetParent = allocation?.budget;
       let budgetInUnit = 0;
@@ -251,14 +237,10 @@ export const MeterRankService = async (): Promise<MeterRankType[]> => {
         const end = new Date(budgetParent.period_end);
 
         const monthDuration =
-          (end.getFullYear() - start.getFullYear()) * 12 +
-          (end.getMonth() - start.getMonth()) +
-          1;
+          (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1;
 
-        const totalBudgetInRp = new Decimal(
-          budgetParent.total_budget
-        ).toNumber();
-        const monthlyBudgetParent = totalBudgetInRp / (monthDuration || 1);
+        const totalBudgetInRp = new Decimal(budgetParent.total_budget).toNumber();
+        const monthlyBudgetParent = totalBudgetInRp / (monthDuration ?? 1);
         const meterMonthlyBudgetRp =
           monthlyBudgetParent * new Decimal(allocation.weight).toNumber();
 
@@ -267,15 +249,13 @@ export const MeterRankService = async (): Promise<MeterRankType[]> => {
 
       const estimatedCost = consumptionCurrent * specificAvgRate;
 
-      const percentageUsed =
-        budgetInUnit > 0 ? (consumptionCurrent / budgetInUnit) * 100 : 0;
+      const percentageUsed = budgetInUnit > 0 ? (consumptionCurrent / budgetInUnit) * 100 : 0;
 
-      const currentADC = consumptionCurrent / (daysPassedCurrentMonth || 1);
+      const currentADC = consumptionCurrent / (daysPassedCurrentMonth ?? 1);
 
       const daysInPrevMonth =
-        prevMonthSummaries.length ||
-        new Date(now.getFullYear(), now.getMonth(), 0).getDate();
-      const prevADC = consumptionPrev / (daysInPrevMonth || 1);
+        prevMonthSummaries.length ?? new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+      const prevADC = consumptionPrev / (daysInPrevMonth ?? 1);
 
       let trend: 'NAIK' | 'TURUN' | 'STABIL' | 'UNKNOWN' = 'STABIL';
       let trendDiffPercent = 0;
@@ -292,18 +272,15 @@ export const MeterRankService = async (): Promise<MeterRankType[]> => {
       }
 
       let recommendation = 'Pemakaian normal.';
-      if (percentageUsed > 100)
-        recommendation = 'Over Budget! Segera lakukan efisiensi.';
-      else if (percentageUsed > 80)
-        recommendation = 'Hati-hati, mendekati batas anggaran.';
+      if (percentageUsed > 100) recommendation = 'Over Budget! Segera lakukan efisiensi.';
+      else if (percentageUsed > 80) recommendation = 'Hati-hati, mendekati batas anggaran.';
       else if (trend === 'NAIK' && percentageUsed > 50)
         recommendation = 'Tren naik signifikan, cek potensi kebocoran.';
       else if (trend === 'TURUN') recommendation = 'Efisiensi berjalan baik.';
 
       return {
         code: meter.meter_code,
-        unit_of_measurement:
-          meter.energy_type?.unit_of_measurement ?? 'UNKNOWN',
+        unit_of_measurement: meter.energy_type?.unit_of_measurement ?? 'UNKNOWN',
         consumption: Number(consumptionCurrent.toFixed(2)),
         budget: Math.round(budgetInUnit),
         status: latestStatus as string,
@@ -333,14 +310,7 @@ export const EnergyOutlookService = async (): Promise<EnergyOutlookType[]> => {
   try {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0,
-      23,
-      59,
-      59
-    );
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
     const predictionsSummary = await prisma.consumptionPrediction.groupBy({
       by: ['meter_id'],
@@ -387,17 +357,15 @@ export const EnergyOutlookService = async (): Promise<EnergyOutlookType[]> => {
 
         const allRates =
           meterDetail.energy_type?.reading_types.flatMap((rt) =>
-            rt.rates.map((r) => new Decimal(r.value).toNumber())
-          ) || [];
+            rt.rates.map((r) => new Decimal(r.value).toNumber()),
+          ) ?? [];
 
         const specificAvgRate =
           allRates.length > 0
             ? allRates.reduce((acc, curr) => acc + curr, 0) / allRates.length
             : 1500;
 
-        const totalPredictedKwh = new Decimal(
-          p._sum.predicted_value || 0
-        ).toNumber();
+        const totalPredictedKwh = new Decimal(p._sum.predicted_value ?? 0).toNumber();
         const estCost = totalPredictedKwh * specificAvgRate;
 
         let budgetKwh = 0;
@@ -406,14 +374,12 @@ export const EnergyOutlookService = async (): Promise<EnergyOutlookType[]> => {
           const start = new Date(allocation.budget.period_start);
           const end = new Date(allocation.budget.period_end);
           const monthDuration =
-            (end.getFullYear() - start.getFullYear()) * 12 +
-              (end.getMonth() - start.getMonth()) || 1;
+            (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) ||
+            1;
 
           const monthlyBudgetRp =
-            new Decimal(allocation.budget.total_budget).toNumber() /
-            monthDuration;
-          const meterBudgetRp =
-            monthlyBudgetRp * new Decimal(allocation.weight).toNumber();
+            new Decimal(allocation.budget.total_budget).toNumber() / monthDuration;
+          const meterBudgetRp = monthlyBudgetRp * new Decimal(allocation.weight).toNumber();
 
           budgetKwh = meterBudgetRp / specificAvgRate;
         }
@@ -424,12 +390,10 @@ export const EnergyOutlookService = async (): Promise<EnergyOutlookType[]> => {
         return {
           meter_code: meterDetail.meter_code,
           est: Math.round(estCost),
-          status:
-            (meterDetail.daily_summaries[0]?.classification
-              ?.classification as UsageCategory) ?? 'NORMAL',
+          status: meterDetail.daily_summaries[0]?.classification?.classification ?? 'NORMAL',
           over: overPercentage,
         };
-      })
+      }),
     );
 
     return results.filter((item) => item !== null) as EnergyOutlookType[];
@@ -441,33 +405,30 @@ export const EnergyOutlookService = async (): Promise<EnergyOutlookType[]> => {
 
 export const getYearlyHeatmapService = async (
   meterId: number,
-  year: number
+  year: number,
 ): Promise<YearlyHeatmapType[]> => {
-  try {
-    return await prisma.dailyUsageClassification.findMany({
-      where: {
-        meter_id: meterId,
-        classification_date: {
-          gte: new Date(`${year}-01-01`),
-          lte: new Date(`${year}-12-31`),
-        },
-      },
-      select: {
-        classification_date: true,
-        classification: true,
-        confidence_score: true, // This is already Decimal from Prisma
-      },
-      orderBy: { classification_date: 'asc' },
-    });
-  } catch (error) {
-    console.error('Error in getYearlyHeatmapService:', error);
-    throw new Error('Gagal mengambil data heatmap tahunan.');
-  }
-};
+  const startDate = new Date(Date.UTC(year, 0, 1));
+  const endDate = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
 
-export const getBudgetTrackingService = async (): Promise<
-  BudgetTrackingType[]
-> => {
+  return prisma.dailyUsageClassification.findMany({
+    where: {
+      meter_id: meterId,
+      classification_date: {
+        gte: startDate,
+        lte: endDate,
+      },
+    },
+    select: {
+      classification_date: true,
+      classification: true,
+      confidence_score: true,
+    },
+    orderBy: {
+      classification_date: 'asc',
+    },
+  });
+};
+export const getBudgetTrackingService = async (): Promise<BudgetTrackingType[]> => {
   try {
     const budgets = await prisma.annualBudget.findMany({
       include: { energy_type: true },
@@ -497,7 +458,7 @@ export const getBudgetTrackingService = async (): Promise<
         const usedArray = new Array(12).fill(0);
         usageAggregates.forEach((record) => {
           const month = new Date(record.summary_date).getMonth();
-          usedArray[month] += Number(record._sum.total_cost || 0);
+          usedArray[month] += Number(record._sum.total_cost ?? 0);
         });
 
         const monthlyBudget = initialBudget / 12;
@@ -513,7 +474,7 @@ export const getBudgetTrackingService = async (): Promise<
           used: usedArray,
           saved: savedArray,
         };
-      })
+      }),
     );
 
     return result;
@@ -525,7 +486,7 @@ export const getBudgetTrackingService = async (): Promise<
 
 export const getYearlyAnalysisService = async (
   energyTypeName: string,
-  year: number
+  year: number,
 ): Promise<YearlyAnalysisResult> => {
   try {
     const parentBudget = await prisma.annualBudget.findFirst({
@@ -595,8 +556,7 @@ export const getYearlyAnalysisService = async (
             1;
 
           if (durationMonths > 0) {
-            calculatedMonthlyBudget =
-              Number(activeChild.total_budget) / durationMonths;
+            calculatedMonthlyBudget = Number(activeChild.total_budget) / durationMonths;
           }
         } else {
           const pStart = new Date(parentBudget.period_start);
@@ -611,8 +571,7 @@ export const getYearlyAnalysisService = async (
               1;
 
             if (parentDuration > 0) {
-              calculatedMonthlyBudget =
-                Number(parentBudget.total_budget) / parentDuration;
+              calculatedMonthlyBudget = Number(parentBudget.total_budget) / parentDuration;
             }
           }
         }
@@ -625,12 +584,9 @@ export const getYearlyAnalysisService = async (
 
       const totalConsumption = monthlySummaries.reduce(
         (sum, item) => sum + Number(item.total_consumption),
-        0
+        0,
       );
-      const totalCost = monthlySummaries.reduce(
-        (sum, item) => sum + Number(item.total_cost),
-        0
-      );
+      const totalCost = monthlySummaries.reduce((sum, item) => sum + Number(item.total_cost), 0);
 
       result.push({
         month: monthName,
@@ -661,15 +617,13 @@ export const getYearlyAnalysisService = async (
       totalRealizedCost += data.cost;
 
       if (data.cost > peakMonthObj.cost) peakMonthObj = data;
-      if (data.consumption > peakConsumptionObj.consumption)
-        peakConsumptionObj = data;
+      if (data.consumption > peakConsumptionObj.consumption) peakConsumptionObj = data;
 
       if (data.cost > data.budget && data.budget > 0) {
         overBudgetCount++;
       }
 
-      const isPassedMonth =
-        !isCurrentYear || (isCurrentYear && index <= currentMonthIndex);
+      const isPassedMonth = !isCurrentYear || (isCurrentYear && index <= currentMonthIndex);
 
       if (isPassedMonth) {
         totalRealizedBudget += data.budget;
@@ -680,9 +634,7 @@ export const getYearlyAnalysisService = async (
     const isDeficit = realizedSavings < 0;
 
     const budgetUtilization =
-      totalRealizedBudget > 0
-        ? (totalRealizedCost / totalRealizedBudget) * 100
-        : 0;
+      totalRealizedBudget > 0 ? (totalRealizedCost / totalRealizedBudget) * 100 : 0;
 
     const avgCostYTD = totalRealizedCost / validMonthsCount;
 
@@ -711,7 +663,7 @@ export const getYearlyAnalysisService = async (
 export const getUnifiedComparisonService = async (
   energyTypeName: string,
   year: number,
-  month: number
+  month: number,
 ): Promise<UnifiedEnergyComparisonType> => {
   try {
     const startDate = new Date(year, month - 1, 1);
@@ -748,7 +700,7 @@ export const getUnifiedComparisonService = async (
       Water: 'm³',
       Fuel: 'L',
     };
-    const unit = unitMap[energyTypeName] || 'Unit';
+    const unit = unitMap[energyTypeName] ?? 'Unit';
 
     for (const item of summaries) {
       const date = new Date(item.summary_date);
@@ -770,14 +722,10 @@ export const getUnifiedComparisonService = async (
       }
     }
 
-    const avgWeekdayCons =
-      weekdayCount > 0 ? weekdayTotalCons / weekdayCount : 0;
-    const avgHolidayCons =
-      holidayCount > 0 ? holidayTotalCons / holidayCount : 0;
-    const avgWeekdayCost =
-      weekdayCount > 0 ? weekdayTotalCost / weekdayCount : 0;
-    const avgHolidayCost =
-      holidayCount > 0 ? holidayTotalCost / holidayCount : 0;
+    const avgWeekdayCons = weekdayCount > 0 ? weekdayTotalCons / weekdayCount : 0;
+    const avgHolidayCons = holidayCount > 0 ? holidayTotalCons / holidayCount : 0;
+    const avgWeekdayCost = weekdayCount > 0 ? weekdayTotalCost / weekdayCount : 0;
+    const avgHolidayCost = holidayCount > 0 ? holidayTotalCost / holidayCount : 0;
 
     return {
       category: energyTypeName as any,
@@ -795,7 +743,7 @@ export const getUnifiedComparisonService = async (
 
 export const getEfficiencyRatioService = async (
   year: number,
-  month: number
+  month: number,
 ): Promise<efficiencyRatioType[]> => {
   try {
     const startDate = new Date(year, month - 1, 1);
@@ -862,11 +810,7 @@ export const getEfficiencyRatioService = async (
       },
     };
 
-    for (
-      let d = new Date(startDate);
-      d <= endDate;
-      d.setDate(d.getDate() + 1)
-    ) {
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
       const dayIndex = d.getDay();
       dayBuckets[dayIndex].occurrenceCount += 1;
     }
@@ -899,11 +843,11 @@ export const getEfficiencyRatioService = async (
       const dayIndex = new Date(item.summary_date).getDay();
       const kwh = Number(item.total_consumption);
 
-      const categoryName = item.meter.category?.name?.toLowerCase() || '';
+      const categoryName = item.meter.category?.name?.toLowerCase() ?? '';
       const meterName = item.meter.meter_code.toLowerCase();
       const isOffice =
-        categoryName.includes('office') ||
-        meterName.includes('office') ||
+        categoryName.includes('office') ??
+        meterName.includes('office') ??
         meterName.includes('kantor');
 
       if (isOffice) {
@@ -918,18 +862,13 @@ export const getEfficiencyRatioService = async (
     const results = orderOfDay.map((dayIndex) => {
       const bucket = dayBuckets[dayIndex];
 
-      const terminalRatioVal =
-        bucket.totalPax > 0 ? bucket.totalTerminal / bucket.totalPax : 0;
+      const terminalRatioVal = bucket.totalPax > 0 ? bucket.totalTerminal / bucket.totalPax : 0;
 
       const officeRatioVal =
-        bucket.occurrenceCount > 0
-          ? bucket.totalOffice / bucket.occurrenceCount
-          : 0;
+        bucket.occurrenceCount > 0 ? bucket.totalOffice / bucket.occurrenceCount : 0;
 
       const avgPax =
-        bucket.occurrenceCount > 0
-          ? Math.round(bucket.totalPax / bucket.occurrenceCount)
-          : 0;
+        bucket.occurrenceCount > 0 ? Math.round(bucket.totalPax / bucket.occurrenceCount) : 0;
 
       return {
         day: bucket.name,
@@ -948,7 +887,7 @@ export const getEfficiencyRatioService = async (
 
 export const getDailyAveragePaxService = async (
   year: number,
-  month: number
+  month: number,
 ): Promise<DailyAveragePaxType[]> => {
   try {
     const startDate = new Date(year, month - 1, 1);
@@ -967,10 +906,7 @@ export const getDailyAveragePaxService = async (
       },
     });
 
-    const dayBuckets: Record<
-      number,
-      { total: number; count: number; name: string }
-    > = {
+    const dayBuckets: Record<number, { total: number; count: number; name: string }> = {
       0: { total: 0, count: 0, name: 'Minggu' },
       1: { total: 0, count: 0, name: 'Senin' },
       2: { total: 0, count: 0, name: 'Selasa' },
@@ -1011,7 +947,7 @@ export const getDailyAveragePaxService = async (
 
 export const getBudgetBurnRateService = async (
   year: number,
-  month: number
+  month: number,
 ): Promise<BudgetBurnRateType[]> => {
   try {
     const startDate = new Date(year, month - 1, 1);
@@ -1038,8 +974,7 @@ export const getBudgetBurnRateService = async (
       },
     });
 
-    const totalAnnualBudget =
-      Number(childBudget.total_budget) + Number(parentBudget.total_budget);
+    const totalAnnualBudget = Number(childBudget.total_budget) + Number(parentBudget.total_budget);
     const monthlyBudget = totalAnnualBudget / 12;
     const dailyIdealBurn = monthlyBudget / totalDaysInMonth;
 
@@ -1069,7 +1004,7 @@ export const getBudgetBurnRateService = async (
     const dailyCostMap = new Map<number, number>();
     summaries.forEach((item) => {
       const day = new Date(item.summary_date).getDate();
-      const current = dailyCostMap.get(day) || 0;
+      const current = dailyCostMap.get(day) ?? 0;
       dailyCostMap.set(day, current + Number(item.total_cost));
     });
 
@@ -1078,8 +1013,7 @@ export const getBudgetBurnRateService = async (
     let cumulativeActual = 0;
 
     const today = new Date();
-    const isCurrentMonth =
-      today.getMonth() + 1 === month && today.getFullYear() === year;
+    const isCurrentMonth = today.getMonth() + 1 === month && today.getFullYear() === year;
     const currentDay = today.getDate();
 
     for (let day = 1; day <= totalDaysInMonth; day++) {
@@ -1087,7 +1021,7 @@ export const getBudgetBurnRateService = async (
 
       const cumulativeEfficient = dailyEfficientBurn * day;
 
-      const costToday = dailyCostMap.get(day) || 0;
+      const costToday = dailyCostMap.get(day) ?? 0;
 
       let actualValue: number | null = null;
 
@@ -1121,7 +1055,7 @@ export const getBudgetBurnRateService = async (
 };
 export const getFuelRefillAnalysisService = async (
   year: number,
-  meterId: number
+  meterId: number,
 ): Promise<getFuelRefillAnalysisType[]> => {
   try {
     const startDate = new Date(year, 0, 1);
@@ -1175,10 +1109,7 @@ export const getFuelRefillAnalysisService = async (
       }),
     ]);
 
-    const monthlyStats = new Map<
-      number,
-      { consumption: number; lastStock: number | null }
-    >();
+    const monthlyStats = new Map<number, { consumption: number; lastStock: number | null }>();
 
     for (let i = 0; i < 12; i++) {
       monthlyStats.set(i, { consumption: 0, lastStock: null });
@@ -1186,7 +1117,7 @@ export const getFuelRefillAnalysisService = async (
 
     consumptions.forEach((item) => {
       const idx = new Date(item.summary.summary_date).getMonth();
-      const val = Number(item.consumption_value || 0);
+      const val = Number(item.consumption_value ?? 0);
       if (monthlyStats.has(idx)) {
         monthlyStats.get(idx)!.consumption += val;
       }
@@ -1194,7 +1125,7 @@ export const getFuelRefillAnalysisService = async (
 
     stockLogs.forEach((item) => {
       const idx = new Date(item.summary.summary_date).getMonth();
-      const val = Number(item.remaining_stock || 0);
+      const val = Number(item.remaining_stock ?? 0);
       if (monthlyStats.has(idx)) {
         monthlyStats.get(idx)!.lastStock = val;
       }
@@ -1202,13 +1133,12 @@ export const getFuelRefillAnalysisService = async (
 
     const results: getFuelRefillAnalysisType[] = [];
 
-    let previousMonthStock = Number(lastYearStockData?.remaining_stock || 0);
+    let previousMonthStock = Number(lastYearStockData?.remaining_stock ?? 0);
 
     for (let i = 0; i < 12; i++) {
       const stats = monthlyStats.get(i)!;
 
-      const currentEndStock =
-        stats.lastStock !== null ? stats.lastStock : previousMonthStock;
+      const currentEndStock = stats.lastStock ?? previousMonthStock;
 
       const consumption = stats.consumption;
 
@@ -1237,7 +1167,7 @@ export const getTrentConsumptionService = async (
   energyTypeName: string,
   year: number, // [FIX] Tambahkan parameter year
   month: number, // Bulan 1-12
-  meterId?: number // [FIX] Opsional
+  meterId?: number, // [FIX] Opsional
 ): Promise<MeterAnalysisData[]> => {
   // [FIX] Gunakan Date.UTC untuk menghindari masalah Timezone server
   const monthIndex = month - 1;
@@ -1301,18 +1231,15 @@ export const getTrentConsumptionService = async (
   ]);
 
   // 3. Helper Types & Map Init
-  type TempData = {
+  interface TempData {
     actual?: number;
     cost?: number;
     prediction?: number;
     classification?: any;
     confidence?: any;
-  };
+  }
 
-  const meterMap = new Map<
-    number,
-    { name: string; dates: Map<string, TempData> }
-  >();
+  const meterMap = new Map<number, { name: string; dates: Map<string, TempData> }>();
 
   const getOrInitMeter = (id: number, name: string) => {
     if (!meterMap.has(id)) {
@@ -1362,14 +1289,14 @@ export const getTrentConsumptionService = async (
 
     while (currentDateIter <= endDate) {
       const dateKey = currentDateIter.toISOString().split('T')[0];
-      const dayData = mData.dates.get(dateKey) || {};
+      const dayData = mData.dates.get(dateKey) ?? {};
 
       // Cari target yang valid pada hari spesifik ini
       const activeTarget = targets.find(
         (t) =>
           t.meter_id === mId &&
           t.period_start <= currentDateIter &&
-          t.period_end >= currentDateIter
+          t.period_end >= currentDateIter,
       );
 
       timeSeries.push({
@@ -1382,9 +1309,7 @@ export const getTrentConsumptionService = async (
         efficiency_target: activeTarget
           ? Number(activeTarget.target_value) // Pastikan convert Decimal ke Number
           : null,
-        efficiency_target_cost: activeTarget?.target_cost
-          ? Number(activeTarget.target_cost)
-          : null,
+        efficiency_target_cost: activeTarget?.target_cost ? Number(activeTarget.target_cost) : null,
       });
 
       // Increment hari (UTC Safe)

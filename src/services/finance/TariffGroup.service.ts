@@ -5,7 +5,6 @@ import type {
   CreateTariffGroupBody,
   UpdateTariffGroupBody,
 } from '../../types/finance/TariffGroup.types.js';
-import type { CustomErrorMessages } from '../../utils/baseService.js';
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
 
 export class TariffGroupService extends GenericBaseService<
@@ -24,7 +23,7 @@ export class TariffGroupService extends GenericBaseService<
   }
 
   public override async findAll(
-    args?: Prisma.TariffGroupFindManyArgs<DefaultArgs> | undefined
+    args?: Prisma.TariffGroupFindManyArgs<DefaultArgs>,
   ): Promise<TariffGroup[]> {
     const queryArgs = {
       ...args,
@@ -48,13 +47,13 @@ export class TariffGroupService extends GenericBaseService<
           meters: { include: { energy_type: true, _count: true } },
           _count: true,
         },
-      })
+      }),
     );
   }
 
   public override async findById(
     id: number,
-    args?: Omit<Prisma.TariffGroupFindUniqueArgs<DefaultArgs>, 'where'>
+    args?: Omit<Prisma.TariffGroupFindUniqueArgs<DefaultArgs>, 'where'>,
   ): Promise<TariffGroup> {
     const queryArgs = {
       ...args,
@@ -65,9 +64,7 @@ export class TariffGroupService extends GenericBaseService<
         _count: true,
       },
     };
-    return this._handleCrudOperation(() =>
-      this._model.findUniqueOrThrow(queryArgs)
-    );
+    return this._handleCrudOperation(() => this._model.findUniqueOrThrow(queryArgs));
   }
 }
 

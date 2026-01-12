@@ -6,9 +6,5 @@ import { loginSchema } from '../../../validations/auth/auth.validation.js';
 
 export const authRoutes = (router: Router) => {
   const prefix = '/auth';
-  router.post(
-    prefix + '/login',
-    validate(loginSchema),
-    asyncHandler(authController.login)
-  );
+  router.post(prefix + '/login', validate(loginSchema), asyncHandler(authController.login));
 };

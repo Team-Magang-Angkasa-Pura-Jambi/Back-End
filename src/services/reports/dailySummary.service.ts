@@ -1,30 +1,28 @@
 import prisma from '../../configs/db.js';
 import type { DailySummary, Prisma } from '../../generated/prisma/index.js';
-import type { DefaultArgs } from '../../generated/prisma/runtime/library.js';
 import type {
   CreateSummaryBody,
   GetSummaryQuery,
   UpdateSummaryBody,
 } from '../../types/reports/dailySummary.type.js';
-import type { CustomErrorMessages } from '../../utils/baseService.js';
 
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
 import { weatherService } from '../weather.service.js';
 
-type ComparisonValue = {
+interface ComparisonValue {
   currentValue: number;
   previousValue: number;
   percentageChange: number | null;
-};
+}
 
-type EnergySummary = {
+interface EnergySummary {
   energyType: string;
   unit: string;
   totalConsumption: ComparisonValue;
   totalCost: ComparisonValue;
-};
+}
 
-type MonthlyComparisonReport = {
+interface MonthlyComparisonReport {
   reportPeriod: {
     year: number;
     month: number;
@@ -46,9 +44,9 @@ type MonthlyComparisonReport = {
     avg_temp?: number;
     max_temp?: number;
   } | null;
-};
+}
 
-type MonthlyData = {
+interface MonthlyData {
   totalPax: number;
   avgTemp: number;
   avgMaxTemp: number;
@@ -64,9 +62,9 @@ type MonthlyData = {
     totalConsumption: number;
     totalCost: number;
   }[];
-};
+}
 
-type DailySummaryQuery = Prisma.DailySummaryFindManyArgs & GetSummaryQuery;
+type DailySummaryQuery = GetSummaryQuery;
 export class DailySummaryService extends GenericBaseService<
   typeof prisma.dailySummary,
   DailySummary,
@@ -86,9 +84,11 @@ export class DailySummaryService extends GenericBaseService<
 
     const where: Prisma.DailySummaryWhereInput = {};
 
-    if (month) {
-      const year = parseInt(month.split('-')[0]);
-      const monthIndex = parseInt(month.split('-')[1]) - 1;
+    if (typeof month === 'string') {
+      const [yearStr, monthStr] = month.split('-');
+      const year = Number(yearStr);
+      const monthIndex = Number(monthStr) - 1;
+
       const startDate = new Date(Date.UTC(year, monthIndex, 1));
       const endDate = new Date(Date.UTC(year, monthIndex + 1, 0));
 
@@ -118,22 +118,16 @@ export class DailySummaryService extends GenericBaseService<
 
   public async getMonthlySummaryReport(
     year: number,
-    month: number
+    month: number,
   ): Promise<MonthlyComparisonReport> {
     const buildReport = async (): Promise<MonthlyComparisonReport> => {
       const currentStartDate = new Date(Date.UTC(year, month - 1, 1));
-      const currentEndDate = new Date(
-        Date.UTC(year, month, 0, 23, 59, 59, 999)
-      );
+      const currentEndDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
 
       const previousMonthDate = new Date(currentStartDate);
       previousMonthDate.setUTCMonth(previousMonthDate.getUTCMonth() - 1);
       const prevStartDate = new Date(
-        Date.UTC(
-          previousMonthDate.getUTCFullYear(),
-          previousMonthDate.getUTCMonth(),
-          1
-        )
+        Date.UTC(previousMonthDate.getUTCFullYear(), previousMonthDate.getUTCMonth(), 1),
       );
       const prevEndDate = new Date(
         Date.UTC(
@@ -143,8 +137,8 @@ export class DailySummaryService extends GenericBaseService<
           23,
           59,
           59,
-          999
-        )
+          999,
+        ),
       );
 
       const [currentData, previousData] = await Promise.all([
@@ -152,58 +146,41 @@ export class DailySummaryService extends GenericBaseService<
         this._getMonthlyData(prevStartDate, prevEndDate),
       ]);
 
-      const currentSummaryMap = new Map(
-        currentData.summary.map((s) => [s.energyType, s])
-      );
-      const previousSummaryMap = new Map(
-        previousData.summary.map((s) => [s.energyType, s])
-      );
+      const currentSummaryMap = new Map(currentData.summary.map((s) => [s.energyType, s]));
+      const previousSummaryMap = new Map(previousData.summary.map((s) => [s.energyType, s]));
 
-      const allEnergyTypes = new Set([
-        ...currentSummaryMap.keys(),
-        ...previousSummaryMap.keys(),
-      ]);
+      const allEnergyTypes = new Set([...currentSummaryMap.keys(), ...previousSummaryMap.keys()]);
 
-      const summary: EnergySummary[] = Array.from(allEnergyTypes).map(
-        (energyType) => {
-          const currentSummary = currentSummaryMap.get(energyType);
-          const previousSummary = previousSummaryMap.get(energyType);
+      const summary: EnergySummary[] = Array.from(allEnergyTypes).map((energyType) => {
+        const currentSummary = currentSummaryMap.get(energyType);
+        const previousSummary = previousSummaryMap.get(energyType);
 
-          const currentValue = currentSummary?.totalConsumption ?? 0;
-          const previousValue = previousSummary?.totalConsumption ?? 0;
-          const currentCost = currentSummary?.totalCost ?? 0;
-          const previousCost = previousSummary?.totalCost ?? 0;
+        const currentValue = currentSummary?.totalConsumption ?? 0;
+        const previousValue = previousSummary?.totalConsumption ?? 0;
+        const currentCost = currentSummary?.totalCost ?? 0;
+        const previousCost = previousSummary?.totalCost ?? 0;
 
-          return {
-            energyType: energyType,
-            unit: currentSummary?.unit || previousSummary?.unit || '',
-            totalConsumption: {
-              currentValue: currentValue,
-              previousValue: previousValue,
-              percentageChange: this._calculatePercentageChange(
-                currentValue,
-                previousValue
-              ),
-            },
-            totalCost: {
-              currentValue: currentCost,
-              previousValue: previousCost,
-              percentageChange: this._calculatePercentageChange(
-                currentCost,
-                previousCost
-              ),
-            },
-          };
-        }
-      );
+        return {
+          energyType: energyType,
+          unit: currentSummary?.unit ?? previousSummary?.unit ?? '',
+          totalConsumption: {
+            currentValue: currentValue,
+            previousValue: previousValue,
+            percentageChange: this._calculatePercentageChange(currentValue, previousValue),
+          },
+          totalCost: {
+            currentValue: currentCost,
+            previousValue: previousCost,
+            percentageChange: this._calculatePercentageChange(currentCost, previousCost),
+          },
+        };
+      });
 
       const finalReport: MonthlyComparisonReport = {
         reportPeriod: {
           year,
           month,
-          monthName: new Intl.DateTimeFormat('id-ID', { month: 'long' }).format(
-            currentStartDate
-          ),
+          monthName: new Intl.DateTimeFormat('id-ID', { month: 'long' }).format(currentStartDate),
           startDate: currentStartDate.toISOString(),
           endDate: currentEndDate.toISOString(),
         },
@@ -212,7 +189,7 @@ export class DailySummaryService extends GenericBaseService<
           previousValue: previousData.totalPax,
           percentageChange: this._calculatePercentageChange(
             currentData.totalPax,
-            previousData.totalPax
+            previousData.totalPax,
           ),
         },
 
@@ -221,7 +198,7 @@ export class DailySummaryService extends GenericBaseService<
           previousValue: previousData.avgTemp,
           percentageChange: this._calculatePercentageChange(
             currentData.avgTemp,
-            previousData.avgTemp
+            previousData.avgTemp,
           ),
         },
 
@@ -230,7 +207,7 @@ export class DailySummaryService extends GenericBaseService<
           previousValue: previousData.avgMaxTemp,
           percentageChange: this._calculatePercentageChange(
             currentData.avgMaxTemp,
-            previousData.avgMaxTemp
+            previousData.avgMaxTemp,
           ),
         },
 
@@ -244,10 +221,7 @@ export class DailySummaryService extends GenericBaseService<
     return this._handleCrudOperation(buildReport);
   }
 
-  private async _getMonthlyData(
-    startDate: Date,
-    endDate: Date
-  ): Promise<MonthlyData> {
+  private async _getMonthlyData(startDate: Date, endDate: Date): Promise<MonthlyData> {
     let todayWeather: {
       suhu_rata?: number;
       suhu_max?: number;
@@ -257,7 +231,7 @@ export class DailySummaryService extends GenericBaseService<
     const today = new Date();
 
     const todayUTC = new Date(
-      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
     );
     if (endDate >= todayUTC && startDate <= todayUTC) {
       todayWeather = await weatherService.getForecast(today);
@@ -313,7 +287,7 @@ export class DailySummaryService extends GenericBaseService<
       if (!meter) continue;
 
       const energyTypeName = meter.energy_type.type_name;
-      const current = summaryMap.get(energyTypeName) || {
+      const current = summaryMap.get(energyTypeName) ?? {
         totalConsumption: 0,
         totalCost: 0,
       };
@@ -348,10 +322,7 @@ export class DailySummaryService extends GenericBaseService<
     };
   }
 
-  private _calculatePercentageChange(
-    current: number,
-    previous: number
-  ): number | null {
+  private _calculatePercentageChange(current: number, previous: number): number | null {
     if (previous === 0) {
       return current > 0 ? null : 0;
     }

@@ -1,6 +1,6 @@
 // src/routes/priceScheme.routes.ts
 
-import { Router } from 'express';
+import { type Router } from 'express';
 import { createCrudRouter } from '../../../utils/routerFactory.js';
 import { PriceSchemeService } from '../../../services/finance/priceShcema.service.js';
 import {

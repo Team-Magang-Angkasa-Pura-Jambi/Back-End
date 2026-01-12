@@ -4,9 +4,7 @@ import { schedule } from 'node-cron';
 import { AnalysisService } from '../reports/analysis.service.js';
 
 async function runPredictionForTomorrow() {
-  console.log(
-    '[CRON - Prediction] Memulai tugas harian untuk menjalankan prediksi hari esok...'
-  );
+  console.log('[CRON - Prediction] Memulai tugas harian untuk menjalankan prediksi hari esok...');
 
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
@@ -18,7 +16,7 @@ async function runPredictionForTomorrow() {
   } catch (error) {
     console.error(
       '[CRON - Prediction] Terjadi error saat menjalankan tugas prediksi harian:',
-      error
+      error,
     );
   }
 }
