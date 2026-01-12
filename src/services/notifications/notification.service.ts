@@ -3,12 +3,8 @@
 import prisma from '../../configs/db.js';
 import type { Prisma } from '../../generated/prisma/index.js';
 // import { socketServer } from '../socket-instance.js';
-import type { GetNotificationSchemaQuery } from '../../types/operations/notification.types.js';
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
-import type {
-  NotificationSchemaBody,
-  UpdateNotificationSchemaBody,
-} from '../../types/operations/notification.types.js';
+import type { UpdateNotificationSchemaBody } from '../../types/operations/notification.types.js';
 import { SocketServer } from '../../configs/socket.js';
 
 type CreateNotificationInput = {
@@ -55,34 +51,34 @@ export class NotificationService extends GenericBaseService<
     });
   }
 
-  public async findAllWithQuery(
-    query: GetNotificationSchemaQuery & { userId: number }
-  ) {
-    return this._handleCrudOperation(async () => {
-      const { limit = 10, page = 1, userId, isRead } = query;
-      const where: Prisma.NotificationWhereInput = {
-        user_id: userId,
-        ...(isRead !== undefined && { is_read: isRead }),
-      };
+  public async getAllNotification(userId: number) {
+    try {
+      const [notifications, total] = await prisma.$transaction([
+        prisma.notification.findMany({
+          where: {
+            user_id: userId,
+          },
+          orderBy: {
+            created_at: 'desc',
+          },
+        }),
+        prisma.notification.count({
+          where: {
+            user_id: userId,
+          },
+        }),
+      ]);
 
-      return prisma.notification.findMany({
-        where,
-        take: limit,
-        skip: (page - 1) * limit,
-        orderBy: { created_at: 'desc' },
-      });
-    });
-  }
-
-  public async getUnreadCount(userId: number): Promise<number> {
-    return this._handleCrudOperation(async () => {
-      return prisma.notification.count({
-        where: {
-          user_id: userId,
-          is_read: false,
+      return {
+        data: notifications,
+        meta: {
+          total: total,
         },
-      });
-    });
+      };
+    } catch (error) {
+      console.error('Error fetching meter alerts:', error);
+      throw new Error('Gagal mengambil data alert meteran.');
+    }
   }
 
   public async markAsRead(notificationId: number) {
@@ -120,11 +116,6 @@ export class NotificationService extends GenericBaseService<
     });
   }
 
-  /**
-   * BARU: Menghapus semua notifikasi untuk pengguna tertentu.
-   * @param userId - ID pengguna yang notifikasinya akan dihapus.
-   * @returns Hasil dari operasi deleteMany.
-   */
   public async deleteAll(userId: number): Promise<Prisma.BatchPayload> {
     return this._handleCrudOperation(() =>
       this._model.deleteMany({
@@ -133,12 +124,6 @@ export class NotificationService extends GenericBaseService<
     );
   }
 
-  /**
-   * BARU: Menghapus beberapa notifikasi berdasarkan daftar ID.
-   * @param userId - ID pengguna yang terautentikasi.
-   * @param notificationIds - Array dari ID notifikasi yang akan dihapus.
-   * @returns Hasil dari operasi deleteMany.
-   */
   public async deleteManyByIds(
     userId: number,
     notificationIds: number[]
@@ -153,11 +138,6 @@ export class NotificationService extends GenericBaseService<
     );
   }
 
-  /**
-   * BARU: Menghapus notifikasi lama yang sudah dibaca.
-   * @param olderThan - Hapus notifikasi yang dibuat sebelum tanggal ini.
-   * @returns Hasil dari operasi deleteMany.
-   */
   public async deleteOldRead(olderThan: Date): Promise<Prisma.BatchPayload> {
     return this._handleCrudOperation(() =>
       this._model.deleteMany({

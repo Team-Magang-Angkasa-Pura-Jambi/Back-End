@@ -63,25 +63,24 @@ type FuelStockSummaryRecord = {
   last_reading_date: Date | null;
 };
 
-type TodaySummaryResponse = {
+export interface NewDataCountNotification {
+  summary_id: number;
+  summary_date: Date;
+  total_consumption: number;
+  total_cost: number;
+  meter_code: string;
+  type_name: 'Electricity' | 'Water' | 'Fuel';
+  unit_of_measurement: string;
+  classification: string | null;
+}
+
+export interface TodaySummaryResponse {
   meta: {
     date: Date;
     pax: number | null;
   };
-  data: Prisma.DailySummaryGetPayload<{
-    include: {
-      meter: {
-        select: {
-          meter_code: true;
-          energy_type: {
-            select: { type_name: true; unit_of_measurement: true };
-          };
-        };
-      };
-      classification: { select: { classification: true } };
-    };
-  }>[];
-};
+  sumaries: NewDataCountNotification[];
+}
 type bodyRunBulkPrediction = {
   startDate: Date;
   endDate: Date;
@@ -91,155 +90,6 @@ type bodyRunBulkPrediction = {
 export class AnalysisService extends BaseService {
   constructor() {
     super(prisma);
-  }
-
-  public async getMonthlyAnalysis(
-    query: GetAnalysisQuery
-  ): Promise<MeterAnalysisData[]> {
-    const { energyType, month: monthString, meterId } = query;
-
-    const [year, month] = monthString.split('-').map(Number);
-    const monthIndex = month - 1;
-
-    const startDate = new Date(Date.UTC(year, monthIndex, 1));
-
-    const endDate = new Date(
-      Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999)
-    );
-
-    const energyTypeRecord = await prisma.energyType.findUnique({
-      where: { type_name: energyType },
-    });
-    if (!energyTypeRecord) {
-      throw new Error(`Tipe energi '${energyType}' tidak ditemukan.`);
-    }
-
-    const whereClause: Prisma.DailySummaryWhereInput = {
-      meter: {
-        energy_type_id: energyTypeRecord.energy_type_id,
-        ...(meterId && { meter_id: meterId }),
-      },
-      summary_date: { gte: startDate, lte: endDate },
-    };
-
-    const summaries = await prisma.dailySummary.findMany({
-      where: whereClause,
-      include: {
-        meter: true,
-        classification: true,
-      },
-    });
-
-    const targets = await prisma.efficiencyTarget.findMany({
-      where: {
-        meter: {
-          energy_type_id: energyTypeRecord.energy_type_id,
-          ...(meterId && { meter_id: meterId }),
-        },
-        period_start: { lte: endDate },
-        period_end: { gte: startDate },
-      },
-    });
-
-    const targetsByMeter = new Map<
-      number,
-      { value: number | null; cost: number | null }
-    >();
-    for (const target of targets) {
-      targetsByMeter.set(target.meter_id, {
-        value: parseFloat(target.target_value.toString()),
-        cost: target.target_cost
-          ? parseFloat(target.target_cost.toString())
-          : null,
-      });
-    }
-
-    const predictions = await prisma.consumptionPrediction.findMany({
-      where: {
-        meter: {
-          energy_type_id: energyTypeRecord.energy_type_id,
-          ...(meterId && { meter_id: meterId }),
-        },
-        prediction_date: { gte: startDate, lte: endDate },
-      },
-    });
-
-    const dataByMeter = new Map<
-      number,
-      {
-        meterName: string;
-        dailyData: Map<string, Partial<DailyAnalysisRecord>>;
-      }
-    >();
-
-    for (const summary of summaries) {
-      const meterId = summary.meter_id;
-      const meterName = summary.meter.meter_code;
-      const dateString = summary.summary_date.toISOString().split('T')[0];
-
-      if (!dataByMeter.has(meterId)) {
-        dataByMeter.set(meterId, { meterName, dailyData: new Map() });
-      }
-
-      const totalConsumption = summary.total_consumption?.toNumber() ?? null;
-
-      const dayData = dataByMeter.get(meterId)!.dailyData.get(dateString) || {};
-      dayData.actual_consumption = totalConsumption;
-
-      dayData.consumption_cost = summary.total_cost?.toNumber() ?? null;
-      dayData.classification = summary.classification?.classification ?? null;
-      dayData.confidence_score =
-        summary.classification?.confidence_score ?? null;
-      dataByMeter.get(meterId)!.dailyData.set(dateString, dayData);
-    }
-
-    for (const prediction of predictions) {
-      const meterId = prediction.meter_id;
-      const dateString = prediction.prediction_date.toISOString().split('T')[0];
-
-      if (dataByMeter.has(meterId)) {
-        const dayData =
-          dataByMeter.get(meterId)!.dailyData.get(dateString) || {};
-        dayData.prediction = parseFloat(prediction.predicted_value.toString());
-        dataByMeter.get(meterId)!.dailyData.set(dateString, dayData);
-      }
-    }
-
-    const finalResults: MeterAnalysisData[] = [];
-
-    for (const [meterId, meterInfo] of dataByMeter.entries()) {
-      const timeSeries: DailyAnalysisRecord[] = [];
-
-      for (
-        let d = new Date(startDate);
-        d <= endDate;
-        d.setUTCDate(d.getUTCDate() + 1)
-      ) {
-        const currentDate = new Date(d);
-        const dateString = currentDate.toISOString().split('T')[0];
-
-        const dayData = meterInfo.dailyData.get(dateString);
-
-        timeSeries.push({
-          date: currentDate,
-          actual_consumption: dayData?.actual_consumption ?? null,
-          consumption_cost: dayData?.consumption_cost ?? null,
-          prediction: dayData?.prediction ?? null,
-          classification: dayData?.classification ?? null,
-          confidence_score: dayData?.confidence_score ?? null,
-          efficiency_target: targetsByMeter.get(meterId)?.value ?? null,
-          efficiency_target_cost: targetsByMeter.get(meterId)?.cost ?? null,
-        });
-      }
-
-      finalResults.push({
-        meterId,
-        meterName: meterInfo.meterName,
-        data: timeSeries,
-      });
-    }
-
-    return finalResults;
   }
 
   /**
@@ -413,27 +263,14 @@ export class AnalysisService extends BaseService {
     return summary;
   }
 
-  /**
-   * BARU: Mengambil ringkasan konsumsi untuk hari ini.
-   * @param energyType - (Opsional) Filter berdasarkan tipe energi.
-   */
   public async getTodaySummary(
     energyType?: 'Electricity' | 'Water' | 'Fuel'
   ): Promise<TodaySummaryResponse> {
     const todayInJakarta = new Date();
-    const year = todayInJakarta.toLocaleString('en-CA', {
-      year: 'numeric',
+
+    const dateString = todayInJakarta.toLocaleDateString('en-CA', {
       timeZone: 'Asia/Jakarta',
     });
-    const month = todayInJakarta.toLocaleString('en-CA', {
-      month: '2-digit',
-      timeZone: 'Asia/Jakarta',
-    });
-    const day = todayInJakarta.toLocaleString('en-CA', {
-      day: '2-digit',
-      timeZone: 'Asia/Jakarta',
-    });
-    const dateString = `${year}-${month}-${day}`;
 
     const today = new Date(dateString);
 
@@ -470,12 +307,35 @@ export class AnalysisService extends BaseService {
       }),
     ]);
 
+    const formattedData: NewDataCountNotification[] = todaySummaries.map(
+      (item) => {
+        return {
+          summary_id: item.summary_id,
+
+          summary_date: item.summary_date,
+
+          total_consumption: item.total_consumption?.toNumber() ?? 0,
+          total_cost: item.total_cost?.toNumber() ?? 0,
+
+          meter_code: item.meter.meter_code,
+
+          type_name: item.meter.energy_type.type_name as
+            | 'Electricity'
+            | 'Water'
+            | 'Fuel',
+          unit_of_measurement: item.meter.energy_type.unit_of_measurement,
+
+          classification: item.classification?.classification ?? null,
+        };
+      }
+    );
+
     return {
       meta: {
         date: today,
         pax: paxData?.total_pax ?? null,
       },
-      data: todaySummaries,
+      sumaries: formattedData,
     };
   }
 
@@ -828,7 +688,6 @@ export class AnalysisService extends BaseService {
     const { parent_budget_id, period_start, period_end, allocations } =
       budgetData;
 
-    // 1. Ambil Data Induk & Energy Type
     const parentBudget = await prisma.annualBudget.findUnique({
       where: { budget_id: parent_budget_id },
       include: {
@@ -845,8 +704,6 @@ export class AnalysisService extends BaseService {
       );
     }
 
-    // 2. Ambil Daftar Meter yang VALID untuk Energy Type ini
-    // Ini memastikan user hanya bisa mengalokasikan meter yang sesuai (misal: Listrik ke Listrik)
     const availableMeters = await prisma.meter.findMany({
       where: {
         energy_type_id: parentBudget.energy_type_id,
@@ -855,13 +712,11 @@ export class AnalysisService extends BaseService {
       select: { meter_id: true, meter_code: true },
     });
 
-    // 3. Kalkulasi Target Efisiensi (Saving)
     const efficiencyTag = parentBudget.efficiency_tag
       ? new Prisma.Decimal(parentBudget.efficiency_tag)
       : new Prisma.Decimal(1);
     const efficiencyBudget = parentBudget.total_budget.times(efficiencyTag);
 
-    // 4. Hitung Durasi Bulan secara Akurat
     const diffMonths =
       (period_end.getUTCFullYear() - period_start.getUTCFullYear()) * 12 +
       (period_end.getUTCMonth() - period_start.getUTCMonth()) +
@@ -869,7 +724,6 @@ export class AnalysisService extends BaseService {
 
     if (diffMonths <= 0) throw new Error400('Periode tidak valid.');
 
-    // 5. Hitung Realisasi Historis (Usage sebelum period_start)
     const meterIdsInParent = new Set<number>();
     parentBudget.child_budgets.forEach((child) => {
       child.allocations.forEach((a) => meterIdsInParent.add(a.meter_id));
@@ -890,14 +744,11 @@ export class AnalysisService extends BaseService {
       realizationToDate = aggregate._sum.total_cost ?? new Prisma.Decimal(0);
     }
 
-    // 6. PERBAIKAN LOGIKA: Saran Budget Proporsional (Anti-Saran 95 Miliar)
-    // Rumus: (Total Induk / 12) * Durasi Bulan * Tag Efisiensi
     const monthlyBase = parentBudget.total_budget.div(12);
     let suggestedBudgetForPeriod = monthlyBase
       .times(diffMonths)
       .times(efficiencyTag);
 
-    // Safety Check: Saran tidak boleh melebihi sisa uang tahunan
     const remainingYearlyBudget = efficiencyBudget.minus(realizationToDate);
     if (suggestedBudgetForPeriod.gt(remainingYearlyBudget)) {
       suggestedBudgetForPeriod = remainingYearlyBudget;
@@ -905,7 +756,6 @@ export class AnalysisService extends BaseService {
 
     const budgetPerMonth = suggestedBudgetForPeriod.div(diffMonths);
 
-    // 7. Preview Alokasi per Meter Berdasarkan Pilihan User
     const meterAllocationPreview = [];
     if (allocations && allocations.length > 0) {
       const periodDays =
@@ -942,7 +792,7 @@ export class AnalysisService extends BaseService {
         };
       }),
       meterAllocationPreview,
-      availableMeters, // Dikirim agar Frontend bisa render dropdown otomatis
+      availableMeters,
       calculationDetails: {
         parentTotalBudget: parentBudget.total_budget.toNumber(),
         efficiencyBudget: efficiencyBudget.toNumber(),
@@ -955,21 +805,13 @@ export class AnalysisService extends BaseService {
     };
   }
 
-  /**
-   * BARU: Mendapatkan ringkasan anggaran (tahunan, periode ini, realisasi)
-   * yang dikelompokkan per jenis energi.
-   */
   public async getBudgetSummary(year: number) {
-    // 1. Terima parameter tahun
-    // 2. Tentukan Range Tanggal (1 Jan - 31 Des tahun tersebut)
     const startDate = new Date(Date.UTC(year, 0, 1));
     const endDate = new Date(Date.UTC(year, 11, 31, 23, 59, 59));
 
-    // 3. Ambil Parent Annual Budgets untuk tahun tersebut
-    // Kita include allocations melalui child_budgets untuk tahu meter mana saja yang dipakai
     const parentBudgets = await prisma.annualBudget.findMany({
       where: {
-        parent_budget_id: null, // Hanya ambil Parent (Tahunan)
+        parent_budget_id: null,
         period_start: {
           gte: startDate,
           lte: endDate,
@@ -987,8 +829,6 @@ export class AnalysisService extends BaseService {
       },
     });
 
-    // 4. Optimasi: Kumpulkan semua Meter ID yang terlibat di tahun ini
-    // Agar kita bisa query ke dailySummary sekali jalan (Batching)
     const allMeterIds = new Set<number>();
     parentBudgets.forEach((budget) => {
       budget.child_budgets.forEach((child) => {
@@ -998,8 +838,6 @@ export class AnalysisService extends BaseService {
       });
     });
 
-    // 5. Ambil Data Realisasi (Daily Summary)
-    // Group by meter_id agar mudah dipetakan
     const rawRealisations = await prisma.dailySummary.groupBy({
       by: ['meter_id'],
       _sum: { total_cost: true },
@@ -1012,21 +850,16 @@ export class AnalysisService extends BaseService {
       },
     });
 
-    // Helper Map: MeterID -> TotalCost (untuk akses O(1))
     const meterCostMap = new Map<number, number>();
     rawRealisations.forEach((r) => {
       meterCostMap.set(r.meter_id, r._sum.total_cost?.toNumber() || 0);
     });
 
-    // 6. Mapping Hasil Akhir
     const results = parentBudgets.map((budget) => {
       const totalBudget = budget.total_budget.toNumber();
 
-      // Hitung Realisasi Spesifik untuk Budget ini
-      // Caranya: Ambil semua meter ID milik budget ini, lalu jumlahkan cost-nya dari Map
       let totalRealization = 0;
 
-      // Kumpulkan meter ID unik milik budget ini
       const budgetMeterIds = new Set<number>();
       budget.child_budgets.forEach((child) => {
         child.allocations.forEach((alloc) => {
@@ -1034,24 +867,19 @@ export class AnalysisService extends BaseService {
         });
       });
 
-      // Sum cost dari Map
       budgetMeterIds.forEach((meterId) => {
         totalRealization += meterCostMap.get(meterId) || 0;
       });
 
-      // Hitung Sisa & Persentase
       const remainingBudget = totalBudget - totalRealization;
 
-      // Hindari pembagian dengan nol
       const realizationPercentage =
         totalBudget > 0 ? (totalRealization / totalBudget) * 100 : 0;
 
-      // Tentukan Status untuk UI (Warna)
       let status: 'SAFE' | 'WARNING' | 'DANGER' = 'SAFE';
       if (realizationPercentage >= 100) status = 'DANGER';
       else if (realizationPercentage >= 80) status = 'WARNING';
 
-      // Return Format sesuai kebutuhan UI (BudgetSummaryItem)
       return {
         energyTypeName: budget.energy_type.type_name,
         energyTypeId: budget.energy_type_id,
@@ -1070,11 +898,6 @@ export class AnalysisService extends BaseService {
     return results;
   }
 
-  /**
-   * BARU: Menyiapkan data untuk pembuatan anggaran periode berikutnya.
-   * Fungsi ini akan menghitung sisa anggaran dari periode induk.
-   * @param parentBudgetId - ID dari anggaran induk (tahunan).
-   */
   public async prepareNextPeriodBudget(parentBudgetId: number) {
     return this._handleCrudOperation(async () => {
       const parentBudget = await prisma.annualBudget.findUniqueOrThrow({
@@ -1131,11 +954,6 @@ export class AnalysisService extends BaseService {
     });
   }
 
-  /**
-   * BARU: Menjalankan klasifikasi untuk satu meter pada tanggal tertentu.
-   * @param date - Tanggal data yang akan diklasifikasi.
-   * @param meterId - ID meter yang akan diklasifikasi.
-   */
   public async runSingleClassification(
     date: Date,
     meterId: number
@@ -1171,10 +989,6 @@ export class AnalysisService extends BaseService {
     });
   }
 
-  /**
-   * BARU: Menghitung pratinjau target efisiensi berdasarkan anggaran.
-   * @param data - Berisi totalBudget, meterId, dan periode.
-   */
   public async getEfficiencyTargetPreview(data: {
     target_value: number;
     meterId: number;

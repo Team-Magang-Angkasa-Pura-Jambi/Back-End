@@ -13,11 +13,10 @@ import {
  * dari service spesifik (seperti UserService) ke BaseService.
  */
 export interface CustomErrorMessages {
-  P2002?: string; // Data duplikat
-  P2003?: string; // Relasi terhubung
+  P2002?: string;
+  P2003?: string;
   P2025?: string;
-  message?: string; // Data tidak ditemukan
-  // Tambahkan kode error lain di sini jika perlu
+  message?: string;
 }
 
 /**
@@ -25,7 +24,7 @@ export interface CustomErrorMessages {
  * Menyediakan metode terpusat untuk penanganan error Prisma yang fleksibel.
  */
 export abstract class BaseService {
-  protected _prisma: PrismaClient; // Tambahkan properti ini
+  protected _prisma: PrismaClient;
 
   constructor(prisma: PrismaClient) {
     prisma = prisma;
@@ -60,7 +59,7 @@ export abstract class BaseService {
               'Data yang ingin Anda ubah atau hapus tidak ditemukan.'
           );
         }
-        // [BARU] Menambahkan case error umum lainnya
+
         case 'P2000': {
           const columnName = error.meta?.column_name as string;
           throw new Error400(
@@ -72,7 +71,6 @@ export abstract class BaseService {
           throw new Error400(`Kolom wajib '${constraint}' tidak boleh kosong.`);
         }
         default: {
-          // BARU: Tambahkan penanganan untuk error batas paket Prisma
           if (error.message.includes('planLimitReached')) {
             throw new Error500(
               'Batas penggunaan paket Prisma telah tercapai. Silakan periksa dasbor akun Prisma Anda.'
@@ -84,7 +82,6 @@ export abstract class BaseService {
       }
     }
 
-    // Untuk error yang tidak diketahui (bukan dari Prisma)
     console.error('Unexpected Error:', error);
     throw new Error500('Terjadi kesalahan tidak terduga pada server.');
   }
@@ -103,12 +100,10 @@ export abstract class BaseService {
     try {
       return await operation();
     } catch (error) {
-      // PERBAIKAN: Cek dulu apakah error ini adalah error kustom kita
       if (error instanceof HttpError) {
-        throw error; // Jika ya, lempar kembali apa adanya tanpa diubah
+        throw error;
       }
 
-      // Jika bukan, baru serahkan ke handler Prisma untuk diterjemahkan
       this._handlePrismaError(error, customMessages);
     }
   }

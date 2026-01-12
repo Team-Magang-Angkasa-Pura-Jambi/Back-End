@@ -1,29 +1,35 @@
-module.exports = {
-  parser: '@typescript-eslint/parser',
+import eslint from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import prettierConfig from 'eslint-config-prettier';
+import prettierPlugin from 'eslint-plugin-prettier';
+import globals from 'globals';
 
-  parserOptions: {
-    ecmaVersion: 2020,
-    sourceType: 'module',
+export default tseslint.config(
+  eslint.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.es2021,
+      },
+      parserOptions: {
+        project: './tsconfig.json',
+      },
+    },
+    plugins: {
+      prettier: prettierPlugin,
+    },
+    rules: {
+      'prettier/prettier': 'error',
+      'no-console': 'warn',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_' },
+      ],
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-floating-promises': 'error',
+    },
   },
-
-  extends: [
-    'eslint:recommended',
-    'plugin:@typescript-eslint/recommended',
-    'prettier',
-    'plugin:prettier/recommended',
-  ],
-
-  rules: {
-    '@typescript-eslint/explicit-function-return-type': 'off',
-
-    '@typescript-eslint/no-unused-vars': 'warn',
-
-    // Anda bisa menambahkan aturan custom lainnya di sini
-    // 'nama-aturan': 'off' | 'warn' | 'error'
-  },
-
-  env: {
-    node: true,
-    es2021: true,
-  },
-};
+  prettierConfig // Mematikan aturan ESLint yang bentrok dengan Prettier
+);

@@ -11,7 +11,6 @@ import type { CustomErrorMessages } from '../../utils/baseService.js';
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
 import { weatherService } from '../weather.service.js';
 
-// PERBAIKAN: Definisi tipe yang lebih jelas dan konsisten untuk laporan perbandingan.
 type ComparisonValue = {
   currentValue: number;
   previousValue: number;
@@ -42,8 +41,10 @@ type MonthlyComparisonReport = {
    * only populated if the report period includes today.
    */
   todayTemperature: {
-    avg_temp: number | null;
-    max_temp: number | null;
+    suhu_rata?: number;
+    suhu_max?: number;
+    avg_temp?: number;
+    max_temp?: number;
   } | null;
 };
 
@@ -51,7 +52,12 @@ type MonthlyData = {
   totalPax: number;
   avgTemp: number;
   avgMaxTemp: number;
-  todayTemp: { avg_temp: number | null; max_temp: number | null } | null;
+  todayTemp: {
+    suhu_rata?: number;
+    suhu_max?: number;
+    avg_temp?: number;
+    max_temp?: number;
+  } | null;
   summary: {
     energyType: string;
     unit: string;
@@ -76,20 +82,16 @@ export class DailySummaryService extends GenericBaseService<
     super(prisma, prisma.dailySummary, 'summary_id');
   }
   public async findAll(query: DailySummaryQuery = {}) {
-    // Ambil semua kemungkinan filter dari query
-    const { month, meterId } = query; // Contoh: tambahkan meterId
+    const { month, meterId } = query;
 
-    // PERBAIKAN: Buat klausa 'where' sebagai objek terpisah
     const where: Prisma.DailySummaryWhereInput = {};
 
-    // Bangun 'where' secara dinamis
     if (month) {
       const year = parseInt(month.split('-')[0]);
       const monthIndex = parseInt(month.split('-')[1]) - 1;
       const startDate = new Date(Date.UTC(year, monthIndex, 1));
       const endDate = new Date(Date.UTC(year, monthIndex + 1, 0));
 
-      // Tambahkan kondisi tanggal ke 'where'
       where.summary_date = {
         gte: startDate,
         lte: endDate,
@@ -97,13 +99,11 @@ export class DailySummaryService extends GenericBaseService<
     }
 
     if (meterId) {
-      // Tambahkan kondisi meterId ke 'where'
       where.meter_id = meterId;
     }
 
-    // Gabungkan 'where' yang sudah jadi dengan argumen lainnya
     const findArgs: Prisma.DailySummaryFindManyArgs = {
-      where, // Gunakan objek 'where' yang sudah dibangun
+      where,
       include: {
         details: true,
         meter: true,
@@ -120,9 +120,7 @@ export class DailySummaryService extends GenericBaseService<
     year: number,
     month: number
   ): Promise<MonthlyComparisonReport> {
-    // Jalankan semua logika di dalam error handler
     const buildReport = async (): Promise<MonthlyComparisonReport> => {
-      // LANGKAH 2: TENTUKAN PERIODE BULAN INI DAN BULAN SEBELUMNYA
       const currentStartDate = new Date(Date.UTC(year, month - 1, 1));
       const currentEndDate = new Date(
         Date.UTC(year, month, 0, 23, 59, 59, 999)
@@ -149,15 +147,11 @@ export class DailySummaryService extends GenericBaseService<
         )
       );
 
-      // LANGKAH 3: AMBIL DATA KEDUA PERIODE SECARA PARALEL
       const [currentData, previousData] = await Promise.all([
         this._getMonthlyData(currentStartDate, currentEndDate),
         this._getMonthlyData(prevStartDate, prevEndDate),
       ]);
 
-      // LANGKAH 4: BANDINGKAN DATA
-      // PERBAIKAN: Logika diubah untuk memastikan perbandingan tetap ada meskipun data bulan ini kosong.
-      // 1. Buat Map dari data bulan ini dan bulan lalu untuk pencarian cepat.
       const currentSummaryMap = new Map(
         currentData.summary.map((s) => [s.energyType, s])
       );
@@ -165,13 +159,11 @@ export class DailySummaryService extends GenericBaseService<
         previousData.summary.map((s) => [s.energyType, s])
       );
 
-      // 2. Dapatkan semua tipe energi unik dari kedua periode.
       const allEnergyTypes = new Set([
         ...currentSummaryMap.keys(),
         ...previousSummaryMap.keys(),
       ]);
 
-      // 3. Iterasi melalui semua tipe energi untuk membangun ringkasan perbandingan.
       const summary: EnergySummary[] = Array.from(allEnergyTypes).map(
         (energyType) => {
           const currentSummary = currentSummaryMap.get(energyType);
@@ -205,7 +197,6 @@ export class DailySummaryService extends GenericBaseService<
         }
       );
 
-      // LANGKAH 5: BANGUN LAPORAN AKHIR
       const finalReport: MonthlyComparisonReport = {
         reportPeriod: {
           year,
@@ -224,7 +215,7 @@ export class DailySummaryService extends GenericBaseService<
             previousData.totalPax
           ),
         },
-        // BARU: Tambahkan data perbandingan suhu rata-rata
+
         averageTemperature: {
           currentValue: currentData.avgTemp,
           previousValue: previousData.avgTemp,
@@ -233,7 +224,7 @@ export class DailySummaryService extends GenericBaseService<
             previousData.avgTemp
           ),
         },
-        // BARU: Tambahkan data perbandingan suhu maksimal rata-rata
+
         averageMaxTemperature: {
           currentValue: currentData.avgMaxTemp,
           previousValue: previousData.avgMaxTemp,
@@ -242,7 +233,7 @@ export class DailySummaryService extends GenericBaseService<
             previousData.avgMaxTemp
           ),
         },
-        // Tambahkan data suhu hari ini ke laporan akhir
+
         todayTemperature: currentData.todayTemp,
         summary,
       };
@@ -257,21 +248,21 @@ export class DailySummaryService extends GenericBaseService<
     startDate: Date,
     endDate: Date
   ): Promise<MonthlyData> {
-    let todayWeather: { suhu_rata: number; suhu_max: number } | null = null; // Tipe disesuaikan dengan return WeatherService
+    let todayWeather: {
+      suhu_rata?: number;
+      suhu_max?: number;
+      avg_temp?: number;
+      max_temp?: number;
+    } | null = null;
     const today = new Date();
 
-    // Jika periode laporan mencakup hari ini, ambil data cuaca spesifik hari ini.
-    // Ini memastikan laporan untuk bulan berjalan selalu menggunakan data suhu terbaru.
     const todayUTC = new Date(
       Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
     );
     if (endDate >= todayUTC && startDate <= todayUTC) {
-      todayWeather = await weatherService.getForecast(today); // getForecast akan mengisi cache jika perlu
+      todayWeather = await weatherService.getForecast(today);
     }
 
-    // PERBAIKAN TOTAL: Logika diubah untuk melakukan agregasi langsung pada DailySummary.
-    // Ini menghindari penghitungan ganda (WBP + LWBP + Total) yang terjadi saat
-    // melakukan agregasi pada SummaryDetail.
     const [aggregates, paxAggregate, weatherAggregate] = await Promise.all([
       prisma.dailySummary.groupBy({
         by: ['meter_id'],
@@ -287,21 +278,20 @@ export class DailySummaryService extends GenericBaseService<
         where: { data_date: { gte: startDate, lte: endDate } },
         _sum: { total_pax: true },
       }),
-      // BARU: Ambil data suhu rata-rata untuk periode yang sama
+
       prisma.weatherHistory.aggregate({
         where: { data_date: { gte: startDate, lte: endDate } },
-        _avg: { avg_temp: true, max_temp: true }, // BARU: Ambil juga rata-rata suhu maksimal
+        _avg: { avg_temp: true, max_temp: true },
       }),
     ]);
 
     if (aggregates.length === 0) {
-      // PERBAIKAN: Pastikan semua properti dari tipe MonthlyData dikembalikan
       return {
         totalPax: paxAggregate._sum.total_pax ?? 0,
         summary: [],
         avgTemp: weatherAggregate._avg.avg_temp?.toNumber() ?? 0,
         avgMaxTemp: weatherAggregate._avg.max_temp?.toNumber() ?? 0,
-        todayTemp: todayWeather // Gunakan hasil langsung
+        todayTemp: todayWeather
           ? {
               avg_temp: todayWeather.suhu_rata,
               max_temp: todayWeather.suhu_max,
@@ -310,7 +300,6 @@ export class DailySummaryService extends GenericBaseService<
       };
     }
 
-    // Ambil detail meter untuk mendapatkan tipe energi
     const meterIds = aggregates.map((agg) => agg.meter_id);
     const meters = await prisma.meter.findMany({
       where: { meter_id: { in: meterIds } },
@@ -318,7 +307,6 @@ export class DailySummaryService extends GenericBaseService<
     });
     const meterMap = new Map(meters.map((m) => [m.meter_id, m]));
 
-    // Gabungkan hasil agregasi berdasarkan tipe energi
     const summaryMap = new Map<string, any>();
     for (const agg of aggregates) {
       const meter = meterMap.get(agg.meter_id);
@@ -351,27 +339,24 @@ export class DailySummaryService extends GenericBaseService<
     return {
       totalPax: paxAggregate._sum.total_pax ?? 0,
       summary,
-      // PERBAIKAN: Tambahkan avgTemp ke objek yang dikembalikan
+
       avgTemp: weatherAggregate._avg.avg_temp?.toNumber() ?? 0,
       avgMaxTemp: weatherAggregate._avg.max_temp?.toNumber() ?? 0,
-      todayTemp: todayWeather // Gunakan hasil langsung
+      todayTemp: todayWeather
         ? { avg_temp: todayWeather.suhu_rata, max_temp: todayWeather.suhu_max }
         : null,
     };
   }
 
-  // HELPER BARU: Menghitung persentase perubahan dengan aman
   private _calculatePercentageChange(
     current: number,
     previous: number
   ): number | null {
     if (previous === 0) {
-      // Jika sebelumnya 0 dan sekarang ada nilainya, perubahan tidak terhingga.
-      // Kembalikan null untuk diinterpretasikan di frontend.
       return current > 0 ? null : 0;
     }
     const change = ((current - previous) / previous) * 100;
-    return parseFloat(change.toFixed(2)); // Bulatkan ke 2 desimal
+    return parseFloat(change.toFixed(2));
   }
 }
 

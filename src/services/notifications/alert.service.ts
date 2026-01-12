@@ -4,7 +4,6 @@ import { GenericBaseService } from '../../utils/GenericBaseService.js';
 import type {
   Alert,
   PrismaAlert,
-  GetAlertsQuery,
   UpdateAlertBody,
 } from '../../types/notifications/alert.types.js';
 
@@ -22,79 +21,119 @@ export class AlertService extends GenericBaseService<
   constructor() {
     super(prisma, prisma.alert, 'alert_id');
   }
-
-  public async findAllWithQuery(
-    query: GetAlertsQuery,
-    scope: 'all' | 'system' | 'meters' = 'all'
-  ): Promise<{
-    data: Alert[];
-    meta: { total: number; page: number; limit: number; last_page: number };
-  }> {
-    const { page, limit, startDate, endDate, status, meterId, search } = query;
-
-    const where: Prisma.AlertWhereInput = {};
-
-    if (scope === 'system') {
-      where.meter_id = null;
-    } else if (scope === 'meters') {
-      where.meter_id = {
-        not: null,
-      };
-    }
-
-    if (startDate && endDate) {
-      where.alert_timestamp = {
-        gte: new Date(startDate),
-        lte: new Date(endDate),
-      };
-    }
-    if (status) {
-      where.status = status;
-    }
-    if (meterId) {
-      where.meter_id = meterId;
-    }
-
-    if (search) {
-      where.OR = [
-        {
-          meter: { meter_code: { contains: search, mode: 'insensitive' } },
-        },
-      ];
-    }
-
-    const findArgs: Prisma.AlertFindManyArgs = {
-      where,
-      include: {
-        meter: {
-          select: {
-            meter_code: true,
-            energy_type: { select: { type_name: true } },
+  public async getMetersAlerts() {
+    try {
+      const [alerts, total] = await prisma.$transaction([
+        prisma.alert.findMany({
+          where: {
+            meter_id: { not: null },
           },
+          include: {
+            meter: {
+              select: {
+                meter_code: true,
+                energy_type: {
+                  select: { type_name: true },
+                },
+              },
+            },
+            acknowledged_by: {
+              select: {
+                username: true,
+              },
+            },
+          },
+          orderBy: {
+            alert_timestamp: 'desc',
+          },
+        }),
+        prisma.alert.count({
+          where: { meter_id: { not: null } },
+        }),
+      ]);
+
+      const formattedAlerts = alerts.map((alert) => ({
+        alert_id: alert.alert_id,
+        target_id: alert.target_id ?? null,
+        title: alert.title,
+        description: alert.description,
+        status: alert.status,
+        actual_value: alert.actual_value ? Number(alert.actual_value) : null,
+        target_value_at_trigger: alert.target_value_at_trigger
+          ? Number(alert.target_value_at_trigger)
+          : null,
+
+        meter_code: alert.meter?.meter_code ?? null,
+        acknowledged_by: alert.acknowledged_by_user_id ?? null,
+        username: alert.acknowledged_by?.username ?? null,
+
+        alert_timestamp: alert.alert_timestamp,
+      }));
+
+      return {
+        data: formattedAlerts,
+        meta: {
+          total: total,
         },
-        acknowledged_by: { select: { username: true } },
-      },
-      skip: (page - 1) * limit,
-      take: limit,
-      orderBy: {
-        alert_timestamp: 'desc',
-      },
-    };
-
-    const countWhere: Prisma.AlertWhereInput = { ...where };
-    if (search) {
-      delete countWhere.OR;
+      };
+    } catch (error) {
+      console.error('Error fetching meter alerts:', error);
+      throw new Error('Gagal mengambil data alert meteran.');
     }
+  }
 
-    const [total, data] = await prisma.$transaction([
-      this._model.count({ where: countWhere }),
-      this._model.findMany(findArgs),
-    ]);
+  public async getSystemAlerts() {
+    try {
+      const [alerts, total] = await prisma.$transaction([
+        prisma.alert.findMany({
+          where: {
+            meter_id: null,
+          },
+          include: {
+            acknowledged_by: {
+              select: {
+                username: true,
+              },
+            },
+          },
+          orderBy: {
+            alert_timestamp: 'desc',
+          },
+        }),
+        prisma.alert.count({
+          where: { meter_id: null },
+        }),
+      ]);
 
-    return {
-      data,
-      meta: { total, page, limit, last_page: Math.ceil(total / limit) },
-    };
+      const formattedAlerts = alerts.map((alert) => ({
+        alert_id: alert.alert_id,
+        target_id: alert.target_id ?? null,
+        title: alert.title,
+        description: alert.description,
+        status: alert.status,
+        actual_value: alert.actual_value ? Number(alert.actual_value) : null,
+        target_value_at_trigger: alert.target_value_at_trigger
+          ? Number(alert.target_value_at_trigger)
+          : null,
+
+        meter_code: null,
+
+        acknowledged_by: alert.acknowledged_by_user_id ?? null,
+        username: alert.acknowledged_by?.username ?? null,
+
+        alert_timestamp: alert.alert_timestamp,
+      }));
+
+      return {
+        data: formattedAlerts,
+        meta: {
+          total: total,
+        },
+      };
+    } catch (error) {
+      console.error('Error fetching system alerts:', error);
+      throw new Error('Gagal mengambil data alert sistem.');
+    }
   }
 
   public async getUnreadCount(meterId?: number): Promise<number> {
@@ -149,26 +188,13 @@ export class AlertService extends GenericBaseService<
    * @param userId - ID pengguna yang melakukan aksi (opsional, untuk acknowledge).
    * @returns Alert yang telah diperbarui.
    */
-  public async updateStatus(
-    alertId: number,
-    status: AlertStatus,
-    userId: number
-  ): Promise<Alert> {
+  public async updateStatus(alertId: number): Promise<Alert> {
     return this._handleCrudOperation(async () => {
-      const data: Prisma.AlertUpdateInput = { status };
-
-      if (status === AlertStatus.READ) {
-        const currentAlert = await this._model.findUnique({
-          where: { alert_id: alertId },
-        });
-        if (currentAlert && !currentAlert.acknowledged_by_user_id) {
-          data.acknowledged_by = { connect: { user_id: userId } };
-        }
-      }
-
       const updatedAlert = await this._model.update({
         where: { alert_id: alertId },
-        data,
+        data: {
+          status: 'READ',
+        },
       });
       return updatedAlert as Alert;
     });
@@ -228,7 +254,7 @@ export class AlertService extends GenericBaseService<
     alertIds: number[]
   ): Promise<Prisma.BatchPayload> {
     return this._handleCrudOperation(() =>
-      this._model.deleteMany({
+      prisma.alert.deleteMany({
         where: {
           alert_id: {
             in: alertIds,

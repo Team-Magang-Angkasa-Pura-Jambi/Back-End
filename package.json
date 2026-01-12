@@ -35,7 +35,6 @@
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
-    "globals": "^16.5.0",
     "ioredis": "^5.7.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
@@ -46,6 +45,7 @@
     "zod": "^4.1.5"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
     "@types/bcrypt": "^6.0.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
@@ -59,16 +59,18 @@
     "@typescript-eslint/eslint-plugin": "^8.42.0",
     "@typescript-eslint/parser": "^8.42.0",
     "cross-env": "^10.1.0",
-    "eslint": "^9.35.0",
+    "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
-    "prettier": "^3.6.2",
+    "globals": "^17.0.0",
+    "prettier": "^3.7.4",
     "prisma": "^6.16.2",
     "prisma-zod-generator": "^1.21.2",
     "supertest": "^7.1.4",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.4",
     "typescript": "^5.9.2",
+    "typescript-eslint": "^8.52.0",
     "vitest": "^4.0.15",
     "vitest-mock-extended": "^3.1.0"
   }

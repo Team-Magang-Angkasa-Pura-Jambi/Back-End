@@ -94,7 +94,7 @@ export class BudgetService extends BaseService {
         historicalConsumptionResult._sum.total_consumption ??
         new Prisma.Decimal(0);
 
-      const target95 = periodBudget.times(efficiencyTarget);
+      const target95 = periodBudget.times(efficiencyTarget ?? 0);
 
       const remainingBudgetWithPjj = target95.minus(realizationCost);
 

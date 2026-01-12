@@ -1,289 +1,277 @@
-# main.py
-# Server backend FastAPI untuk melayani model machine learning alokasi dana.
-# Versi ini mengintegrasikan model prediksi pax secara internal.
 
+
+
+
+import logging
+import warnings
+from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Dict, Any, Tuple
+
+import holidays
+import joblib
+import pandas as pd
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-import pandas as pd
-import joblib
-import logging
-from datetime import datetime
-import warnings
 from sklearn.exceptions import InconsistentVersionWarning
-import holidays
 
-# Mengabaikan warning versi scikit-learn saat memuat model.
+
+
+
 warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
 
-# --- 1. Pydantic Models (Untuk Validasi Input Otomatis) ---
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger("Sentinel-ML")
+
+
+MODEL_FILES = {
+    "prediksi_pax": "model_prediksi_pax.pkl",
+    "prediksi_terminal": "model_prediksi_terminal.pkl",
+    "prediksi_kantor": "model_prediksi_kantor.pkl",
+    "klasifikasi_terminal": "model_klasifikasi_terminal.pkl",
+    "klasifikasi_kantor": "model_klasifikasi_kantor.pkl"
+}
+
+
+models: Dict[str, Any] = {}
+
+
+holidays_id = holidays.Indonesia()
+
+
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Mengelola siklus hidup aplikasi.
+    Memuat model saat aplikasi mulai dan membersihkannya saat berhenti.
+    """
+    logger.info("🔄 Memulai proses pemuatan model ML...")
+    try:
+        loaded_count = 0
+        for key, filename in MODEL_FILES.items():
+            models[key] = joblib.load(filename)
+            loaded_count += 1
+            logger.debug(f"✅ Model dimuat: {key}")
+        
+        logger.info(f"🚀 Sistem siap! {loaded_count} model berhasil dimuat.")
+        yield 
+        
+    except FileNotFoundError as e:
+        logger.critical(f"❌ Gagal memuat file model: {e}. Cek path file .pkl Anda.")
+        raise e
+    except Exception as e:
+        logger.critical(f"❌ Error fatal saat startup: {e}")
+        raise e
+    finally:
+        
+        models.clear()
+        logger.info("🛑 Aplikasi dimatikan, resource dibersihkan.")
+
+
+
+
+app = FastAPI(
+    title="Sentinel Energy ML API",
+    description="Microservice untuk prediksi alokasi dana dan evaluasi efisiensi energi.",
+    version="3.2.0",
+    lifespan=lifespan
+)
+
+
+
+
 class PredictionInput(BaseModel):
-    """Struktur data untuk endpoint /predict."""
-    tanggal: str 
+    tanggal: str
     suhu_rata: float
     suhu_max: float
 
-class EvaluationInput(BaseModel):
-    """Struktur data untuk endpoint /evaluate."""
-    pax: int
-    suhu_rata: float
-    suhu_max: float
-    is_hari_kerja: int # Diharapkan 1 untuk hari kerja, 0 untuk lainnya
-    aktual_kwh_terminal: float
-    aktual_kwh_kantor: float
-
-# BARU: Model input untuk evaluasi spesifik
 class EvaluationInputTerminal(BaseModel):
-    """Struktur data untuk endpoint /evaluate/terminal."""
     pax: int
     suhu_rata: float
     suhu_max: float
     aktual_kwh_terminal: float
 
 class EvaluationInputKantor(BaseModel):
-    """Struktur data untuk endpoint /evaluate/kantor."""
     suhu_rata: float
     suhu_max: float
     is_hari_kerja: int
     aktual_kwh_kantor: float
 
-# --- 2. Inisialisasi Aplikasi dan Konfigurasi ---
+class EvaluationInputFull(BaseModel):
+    pax: int
+    suhu_rata: float
+    suhu_max: float
+    is_hari_kerja: int
+    aktual_kwh_terminal: float
+    aktual_kwh_kantor: float
 
-app = FastAPI(
-    title="API Alokasi Dana Energi",
-    description="API untuk prediksi dan evaluasi konsumsi energi dengan prediksi pax terintegrasi.",
-    version="3.1.0"
-)
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
-models = {}
 
-# Inisialisasi kalender hari libur Indonesia
-holidays_id = holidays.Indonesia()
-
-# --- Penanganan Error Terpusat ---
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Menangani semua error tak terduga dan mengembalikan respons JSON yang bersih."""
-    logger.error(f"Terjadi error tak terduga pada request: {request.method} {request.url}", exc_info=True)
+    logger.error(f"Unhandled Error di {request.method} {request.url}: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
         content={
             "error": "Internal Server Error",
-            "message": "Terjadi kesalahan pada server. Silakan hubungi administrator."
+            "message": "Terjadi kesalahan sistem. Silakan cek log server."
         },
     )
 
-@app.on_event("startup")
-def load_models():
-    """Memuat semua model .pkl saat aplikasi pertama kali dijalankan."""
-    model_files = [
-        'model_prediksi_pax.pkl', # Model untuk memprediksi penumpang
-        'model_prediksi_terminal.pkl',
-        'model_prediksi_kantor.pkl',
-        'model_klasifikasi_terminal.pkl',
-        'model_klasifikasi_kantor.pkl'
-    ]
+
+
+
+def _get_date_features(date_str: str) -> Tuple[datetime, int]:
+    """Mengubah string tanggal menjadi datetime dan mendeteksi is_workday."""
     try:
-        for file in model_files:
-            model_name = file.replace('.pkl', '')
-            models[model_name] = joblib.load(file)
-        logger.info("✅ Semua 5 model berhasil dimuat saat startup.")
-    except FileNotFoundError as e:
-        logger.error(f"❌ KRITIKAL: Gagal memuat file model: {e}. Aplikasi akan berhenti.")
-        exit(1)
+        target_date = pd.to_datetime(date_str)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Format tanggal salah: {e}")
 
-# --- 3. Helper Functions (Untuk Logika Prediksi yang Digunakan Ulang) ---
+    is_holiday = 1 if target_date in holidays_id else 0
+    
+    is_workday = 1 if target_date.dayofweek < 5 and not is_holiday else 0
+    
+    return target_date, is_workday
 
-def _predict_pax(target_date: datetime) -> tuple[float, int]:
-    """Helper untuk memprediksi jumlah penumpang (pax) dan status hari kerja."""
-    is_holiday_val = 1 if target_date in holidays_id else 0
-    is_workday_val = 1 if target_date.dayofweek < 5 and not is_holiday_val else 0
-
-    df_pred_pax = pd.DataFrame([{
+def _predict_pax_logic(target_date: datetime, is_workday: int) -> float:
+    """Logika prediksi jumlah penumpang."""
+    is_holiday = 1 if target_date in holidays_id else 0
+    
+    df_features = pd.DataFrame([{
         'dayofweek': target_date.dayofweek,
         'month': target_date.month,
         'dayofyear': target_date.dayofyear,
-        'is_hari_kerja': is_workday_val,
-        'is_holiday': is_holiday_val,
+        'is_hari_kerja': is_workday,
+        'is_holiday': is_holiday,
     }])
     
-    time_features = ['dayofweek', 'month', 'dayofyear', 'is_hari_kerja', 'is_holiday']
-    predicted_pax = float(models['model_prediksi_pax'].predict(df_pred_pax[time_features])[0])
-    
-    return predicted_pax, is_workday_val
+    features = ['dayofweek', 'month', 'dayofyear', 'is_hari_kerja', 'is_holiday']
+    return float(models['prediksi_pax'].predict(df_features[features])[0])
 
-def _predict_terminal_kwh(pax: float, suhu_rata: float, suhu_max: float) -> float:
-    """Helper untuk memprediksi konsumsi kWh Terminal."""
-    df_prakiraan = pd.DataFrame([{
-        'pax': pax,
-        'suhu_rata': suhu_rata,
-        'suhu_max': suhu_max
-    }])
-    features_terminal = ['pax', 'suhu_rata', 'suhu_max']
-    pred_terminal = float(models['model_prediksi_terminal'].predict(df_prakiraan[features_terminal])[0])
-    return pred_terminal
+def _predict_terminal_logic(pax: float, suhu_rata: float, suhu_max: float) -> float:
+    """Logika prediksi kWh Terminal."""
+    df_features = pd.DataFrame([{'pax': pax, 'suhu_rata': suhu_rata, 'suhu_max': suhu_max}])
+    return float(models['prediksi_terminal'].predict(df_features)[0])
 
-def _predict_kantor_kwh(suhu_rata: float, suhu_max: float, is_hari_kerja: int) -> float:
-    """Helper untuk memprediksi konsumsi kWh Kantor."""
-    df_prakiraan = pd.DataFrame([{
-        'suhu_rata': suhu_rata,
-        'suhu_max': suhu_max,
+def _predict_kantor_logic(suhu_rata: float, suhu_max: float, is_hari_kerja: int) -> float:
+    """Logika prediksi kWh Kantor."""
+    df_features = pd.DataFrame([{
+        'suhu_rata': suhu_rata, 
+        'suhu_max': suhu_max, 
         'Hari_Hari Kerja': is_hari_kerja
     }])
-    features_kantor = ['suhu_rata', 'suhu_max', 'Hari_Hari Kerja']
-    pred_kantor = float(models['model_prediksi_kantor'].predict(df_prakiraan[features_kantor])[0])
-    return pred_kantor
+    return float(models['prediksi_kantor'].predict(df_features)[0])
 
-# BARU: Helper Functions untuk Logika Evaluasi
-def _evaluate_terminal(pax: int, suhu_rata: float, suhu_max: float, aktual_kwh_terminal: float) -> dict:
-    """Helper untuk mengevaluasi kinerja Terminal."""
-    df_evaluasi = pd.DataFrame([{'pax': pax, 'suhu_rata': suhu_rata, 'suhu_max': suhu_max}])
+def _evaluate_terminal_logic(pax: int, suhu_rata: float, suhu_max: float, aktual_kwh: float) -> dict:
+    """Logika evaluasi efisiensi Terminal."""
     
-    features_terminal = ['pax', 'suhu_rata', 'suhu_max']
-    pred_normal_term = float(models['model_prediksi_terminal'].predict(df_evaluasi[features_terminal])[0])
+    pred_normal = _predict_terminal_logic(pax, suhu_rata, suhu_max)
     
-    deviasi_term = 0.0
-    if pred_normal_term > 0:
-        deviasi_term = ((aktual_kwh_terminal - pred_normal_term) / pred_normal_term) * 100
     
-    features_klas_term = pd.DataFrame([{'pax': pax, 'suhu_max': suhu_max, 'deviasi_persen': deviasi_term}])
-    klas_term_encoded = int(models['model_klasifikasi_terminal'].predict(features_klas_term)[0])
-
-    mapping_terminal = {0: 'Boros', 1: 'Layanan Tidak Maksimal / Sangat Efisien', 2: 'Normal'}
+    deviasi = 0.0
+    if pred_normal > 0:
+        deviasi = ((aktual_kwh - pred_normal) / pred_normal) * 100
+    
+    
+    df_klas = pd.DataFrame([{'pax': pax, 'suhu_max': suhu_max, 'deviasi_persen': deviasi}])
+    label_encoded = int(models['klasifikasi_terminal'].predict(df_klas)[0])
+    
+    mapping = {0: 'Boros', 1: 'Layanan Tidak Maksimal / Sangat Efisien', 2: 'Normal'}
     
     return {
-        "kinerja_terminal": mapping_terminal.get(klas_term_encoded, "Label Tidak Dikenal"),
-        "deviasi_persen_terminal": round(deviasi_term, 2),
+        "kinerja_terminal": mapping.get(label_encoded, "Unknown"),
+        "deviasi_persen_terminal": round(deviasi, 2),
+        "benchmark_kwh_terminal": round(pred_normal, 2) 
     }
 
-def _evaluate_kantor(suhu_rata: float, suhu_max: float, is_hari_kerja: int, aktual_kwh_kantor: float) -> dict:
-    """Helper untuk mengevaluasi kinerja Kantor."""
-    df_evaluasi = pd.DataFrame([{'suhu_rata': suhu_rata, 'suhu_max': suhu_max, 'Hari_Hari Kerja': is_hari_kerja}])
-
-    features_kantor = ['suhu_rata', 'suhu_max', 'Hari_Hari Kerja']
-    pred_normal_kantor = float(models['model_prediksi_kantor'].predict(df_evaluasi[features_kantor])[0])
-
-    deviasi_kantor = 0.0
-    if pred_normal_kantor > 0:
-        deviasi_kantor = ((aktual_kwh_kantor - pred_normal_kantor) / pred_normal_kantor) * 100
-
-    features_klas_kantor = pd.DataFrame([{'Hari_Hari Kerja': is_hari_kerja, 'suhu_max': suhu_max, 'deviasi_persen_kantor': deviasi_kantor}])
-    klas_kantor_encoded = int(models['model_klasifikasi_kantor'].predict(features_klas_kantor)[0])
-
-    mapping_kantor = {0: 'Boros', 1: 'Efisien', 2: 'Normal'}
+def _evaluate_kantor_logic(suhu_rata: float, suhu_max: float, is_workday: int, aktual_kwh: float) -> dict:
+    """Logika evaluasi efisiensi Kantor."""
+    
+    pred_normal = _predict_kantor_logic(suhu_rata, suhu_max, is_workday)
+    
+    
+    deviasi = 0.0
+    if pred_normal > 0:
+        deviasi = ((aktual_kwh - pred_normal) / pred_normal) * 100
+    
+    
+    df_klas = pd.DataFrame([{
+        'Hari_Hari Kerja': is_workday, 
+        'suhu_max': suhu_max, 
+        'deviasi_persen_kantor': deviasi
+    }])
+    label_encoded = int(models['klasifikasi_kantor'].predict(df_klas)[0])
+    
+    mapping = {0: 'Boros', 1: 'Efisien', 2: 'Normal'}
     
     return {
-        "kinerja_kantor": mapping_kantor.get(klas_kantor_encoded, "Label Tidak Dikenal"),
-        "deviasi_persen_kantor": round(deviasi_kantor, 2)
+        "kinerja_kantor": mapping.get(label_encoded, "Unknown"),
+        "deviasi_persen_kantor": round(deviasi, 2),
+        "benchmark_kwh_kantor": round(pred_normal, 2)
     }
 
-# --- 3. API Endpoints (URL) ---
+
+
 
 @app.get("/")
 def read_root():
-    """Endpoint dasar untuk mengecek apakah API berjalan."""
-    return {"status": "API Machine Learning Aktif"}
+    return {"status": "active", "service": "Sentinel ML API"}
 
-@app.post("/predict", summary="Prediksi Keseluruhan (Pax, Terminal, Kantor)")
-def predict_consumption(data: PredictionInput):
-    """
-    Membuat prediksi lengkap (Pax dan kWh) berdasarkan tanggal dan prakiraan suhu.
-    """
-    try:
-        target_date = pd.to_datetime(data.tanggal)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Format tanggal tidak valid: {e}")
-
-    # Langkah 1: Prediksi Pax dan dapatkan status hari kerja
-    predicted_pax, is_workday_val = _predict_pax(target_date)
-
-    # Langkah 2: Prediksi kWh Terminal dan Kantor menggunakan helper
-    pred_terminal = _predict_terminal_kwh(predicted_pax, data.suhu_rata, data.suhu_max)
-    pred_kantor = _predict_kantor_kwh(data.suhu_rata, data.suhu_max, is_workday_val)
-
-    # Langkah 3: Kembalikan semua hasil prediksi
+@app.post("/predict", summary="Prediksi Lengkap")
+def predict_all(data: PredictionInput):
+    target_date, is_workday = _get_date_features(data.tanggal)
+    
+    
+    pred_pax = _predict_pax_logic(target_date, is_workday)
+    pred_terminal = _predict_terminal_logic(pred_pax, data.suhu_rata, data.suhu_max)
+    pred_kantor = _predict_kantor_logic(data.suhu_rata, data.suhu_max, is_workday)
+    
     return {
-        "prediksi_pax": round(predicted_pax),
+        "prediksi_pax": round(pred_pax),
         "prediksi_kwh_terminal": round(pred_terminal, 2),
         "prediksi_kwh_kantor": round(pred_kantor, 2)
     }
 
-@app.post("/predict/terminal", summary="Prediksi Khusus Terminal")
-def predict_terminal_consumption(data: PredictionInput):
-    """Membuat prediksi kWh khusus untuk Terminal."""
-    try:
-        target_date = pd.to_datetime(data.tanggal)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Format tanggal tidak valid: {e}")
+@app.post("/predict/terminal", summary="Prediksi Terminal Saja")
+def predict_terminal(data: PredictionInput):
+    target_date, is_workday = _get_date_features(data.tanggal)
+    pred_pax = _predict_pax_logic(target_date, is_workday)
+    pred_terminal = _predict_terminal_logic(pred_pax, data.suhu_rata, data.suhu_max)
+    
+    return {"prediksi_kwh_terminal": round(pred_terminal, 2)}
 
-    predicted_pax, _ = _predict_pax(target_date)
-    pred_terminal = _predict_terminal_kwh(predicted_pax, data.suhu_rata, data.suhu_max)
+@app.post("/predict/kantor", summary="Prediksi Kantor Saja")
+def predict_kantor(data: PredictionInput):
+    target_date, is_workday = _get_date_features(data.tanggal)
+    pred_kantor = _predict_kantor_logic(data.suhu_rata, data.suhu_max, is_workday)
+    
+    return {"prediksi_kwh_kantor": round(pred_kantor, 2)}
 
-    return {
-        "prediksi_kwh_terminal": round(pred_terminal, 2)
-    }
+@app.post("/evaluate", summary="Evaluasi Lengkap")
+def evaluate_all(data: EvaluationInputFull):
+    term_res = _evaluate_terminal_logic(data.pax, data.suhu_rata, data.suhu_max, data.aktual_kwh_terminal)
+    kantor_res = _evaluate_kantor_logic(data.suhu_rata, data.suhu_max, data.is_hari_kerja, data.aktual_kwh_kantor)
+    
+    return {**term_res, **kantor_res}
 
-@app.post("/predict/kantor", summary="Prediksi Khusus Kantor")
-def predict_kantor_consumption(data: PredictionInput):
-    """Membuat prediksi kWh khusus untuk Kantor."""
-    try:
-        target_date = pd.to_datetime(data.tanggal)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Format tanggal tidak valid: {e}")
+@app.post("/evaluate/terminal", summary="Evaluasi Terminal Saja")
+def evaluate_terminal(data: EvaluationInputTerminal):
+    return _evaluate_terminal_logic(data.pax, data.suhu_rata, data.suhu_max, data.aktual_kwh_terminal)
 
-    # Model kantor tidak butuh pax, hanya status hari kerja
-    _, is_workday_val = _predict_pax(target_date)
-    pred_kantor = _predict_kantor_kwh(data.suhu_rata, data.suhu_max, is_workday_val)
+@app.post("/evaluate/kantor", summary="Evaluasi Kantor Saja")
+def evaluate_kantor(data: EvaluationInputKantor):
+    return _evaluate_kantor_logic(data.suhu_rata, data.suhu_max, data.is_hari_kerja, data.aktual_kwh_kantor)
 
-    return {
-        "prediksi_kwh_kantor": round(pred_kantor, 2)
-    }
 
-@app.post("/evaluate", summary="Evaluasi Keseluruhan (Terminal & Kantor)")
-def evaluate_performance(data: EvaluationInput):
-    """Mengevaluasi kinerja harian dengan metode dinamis."""
-    logger.info(f"Menerima request /evaluate: {data.dict()}")
-
-    # Panggil helper untuk evaluasi Terminal
-    terminal_result = _evaluate_terminal(
-        pax=data.pax,
-        suhu_rata=data.suhu_rata,
-        suhu_max=data.suhu_max,
-        aktual_kwh_terminal=data.aktual_kwh_terminal
-    )
-
-    # Panggil helper untuk evaluasi Kantor
-    kantor_result = _evaluate_kantor(
-        suhu_rata=data.suhu_rata,
-        suhu_max=data.suhu_max,
-        is_hari_kerja=data.is_hari_kerja,
-        aktual_kwh_kantor=data.aktual_kwh_kantor
-    )
-
-    # Gabungkan hasil dari kedua helper
-    result = {
-        **terminal_result,
-        **kantor_result
-    }
-
-    logger.info(f"Hasil evaluasi: {result}")
-    return result
-
-@app.post("/evaluate/terminal", summary="Evaluasi Khusus Terminal")
-def evaluate_terminal_performance(data: EvaluationInputTerminal):
-    """Mengevaluasi kinerja harian khusus untuk Terminal."""
-    logger.info(f"Menerima request /evaluate/terminal: {data.dict()}")
-    result = _evaluate_terminal(**data.dict())
-    logger.info(f"Hasil evaluasi terminal: {result}")
-    return result
-
-@app.post("/evaluate/kantor", summary="Evaluasi Khusus Kantor")
-def evaluate_kantor_performance(data: EvaluationInputKantor):
-    """Mengevaluasi kinerja harian khusus untuk Kantor."""
-    logger.info(f"Menerima request /evaluate/kantor: {data.dict()}")
-    result = _evaluate_kantor(**data.dict())
-    logger.info(f"Hasil evaluasi kantor: {result}")
-    return result
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -1,6 +1,6 @@
-// =============================================
-// KONFIGURASI PRISMA
-// =============================================
+
+
+
 
 generator client {
   provider = "prisma-client-js"
@@ -16,10 +16,10 @@ datasource db {
 }
 
 
-// =============================================
-// MODUL 1: AUTENTIKASI & MANAJEMEN PENGGUNA
-// - Mengelola pengguna, peran, dan hak akses.
-// =============================================
+
+
+
+
 
 model User {
   user_id           Int      @id @default(autoincrement())
@@ -57,10 +57,10 @@ enum RoleName {
 }
 
 
-// =============================================
-// MODUL 2: MANAJEMEN ASET
-// - Mendefinisikan aset fisik seperti meter, jenis energi, kategori, dan golongan tarif.
-// =============================================
+
+
+
+
 
 model Meter {
   meter_id        Int         @id @default(autoincrement())
@@ -73,16 +73,16 @@ model Meter {
   category_id     Int
   category        MeterCategory @relation(fields: [category_id], references: [category_id])
 
-  // Kunci: Setiap meter sekarang WAJIB memiliki golongan tarif untuk penentuan harga.
+  
   tariff_group_id Int
   tariff_group    TariffGroup @relation(fields: [tariff_group_id], references: [tariff_group_id])
 
-   // BARU: Properti khusus untuk meter tipe BBM (Fuel)
-  // Opsional karena tidak semua meter adalah tangki BBM.
+   
+  
   tank_height_cm    Decimal? @db.Decimal(10, 2)
   tank_volume_liters Decimal? @db.Decimal(10, 2)
-  // BARU: Properti untuk meter yang bisa reset (rollover)
-  // Opsional karena tidak semua meter memiliki fitur ini.
+  
+  
   rollover_limit    Decimal? @db.Decimal(12, 2)
   
   reading_sessions ReadingSession[]
@@ -92,9 +92,9 @@ model Meter {
   classifications  DailyUsageClassification[]
   efficiency_targets EfficiencyTarget[]
   daily_logbooks   DailyLogbook[]
-  // BARU: Tambahkan relasi balik ke model Alert
+  
   alerts           Alert[]
-  // BARU: Tambahkan relasi balik dari alokasi anggaran
+  
   budget_allocations BudgetAllocation[]
 
   @@map("meters")
@@ -102,7 +102,7 @@ model Meter {
 
 model MeterCategory {
   category_id Int    @id @default(autoincrement())
-  name        String @unique // e.g., "Listrik Terminal", "Listrik Perkantoran"
+  name        String @unique 
 
   allowed_reading_types ReadingType[] @relation("CategoryToReadingTypes")
   meters                Meter[]
@@ -112,53 +112,53 @@ model MeterCategory {
 
 model EnergyType {
   energy_type_id      Int      @id @default(autoincrement())
-  type_name           String   @unique // e.g., "Listrik", "Air", "BBM"
-  unit_of_measurement String   // e.g., "kWh", "m³", "Liter"
+  type_name           String   @unique 
+  unit_of_measurement String   
   is_active           Boolean  @default(true)
 
   meters          Meter[]
   reading_types   ReadingType[]
   summary_details SummaryDetail[]
-  // BARU: Tambahkan relasi balik dari AnnualBudget
+  
   annual_budgets  AnnualBudget[]
 
   @@map("energy_types")
 }
 
-// BARU: Model ini untuk menyimpan data master golongan tarif listrik (kunci dari skema harga).
+
 model TariffGroup {
   tariff_group_id Int     @id @default(autoincrement())
-  group_code      String  @unique // e.g., "B2", "B3", "I3"
-  group_name      String  // e.g., "Bisnis Tegangan Menengah"
+  group_code      String  @unique 
+  group_name      String  
   description     String?
-  daya_va         Int?     // Int     
+  daya_va         Int?     
   faktor_kali     Int     @default(2)
   price_schemes PriceScheme[]
   meters        Meter[]
-
+ 
   @@map("tariff_groups")
 }
 
-// BARU: Model untuk menyimpan data RKAP (Rencana Kerja dan Anggaran Perusahaan) tahunan.
+
 model AnnualBudget {
   budget_id      Int      @id @default(autoincrement())
-  // PERBAIKAN: Ganti 'year' dengan periode yang lebih fleksibel untuk mendukung anggaran semesteran, dll.
+  
   period_start   DateTime @db.Date
   period_end     DateTime @db.Date
-  total_budget   Decimal  @db.Decimal(20, 2) // Total anggaran untuk periode tersebut
-  efficiency_tag Decimal?  @db.Decimal(5, 4)  // Target efisiensi, e.g., 0.95 untuk 95%
-  // BARU: Tambahkan relasi ke EnergyType agar anggaran bisa spesifik per jenis energi.
+  total_budget   Decimal  @db.Decimal(20, 2) 
+  efficiency_tag Decimal?  @db.Decimal(5, 4)  
+  
   energy_type_id Int
   energy_type    EnergyType @relation(fields: [energy_type_id], references: [energy_type_id])
 
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
 
-  // BARU: Relasi ke alokasi yang memecah anggaran ini per meter.
+  
   allocations    BudgetAllocation[]
   @@map("annual_budgets")
 
-  // BARU: Relasi untuk mendukung anggaran induk-anak
+  
   parent_budget_id Int?
   parent_budget    AnnualBudget?  @relation("BudgetHierarchy", fields: [parent_budget_id], references: [budget_id])
   child_budgets    AnnualBudget[] @relation("BudgetHierarchy")
@@ -168,7 +168,7 @@ model AnnualBudget {
 
 model BudgetAllocation {
   allocation_id Int     @id @default(autoincrement())
-  weight        Decimal @db.Decimal(5, 4) // Bobot alokasi, e.g., 0.70 untuk 70%
+  weight        Decimal @db.Decimal(5, 4) 
 
   budget_id Int
   budget    AnnualBudget @relation(fields: [budget_id], references: [budget_id], onDelete: Cascade)
@@ -180,13 +180,13 @@ model BudgetAllocation {
   @@map("budget_allocations")
 }
 
-// BARU: Model untuk menyimpan data cuaca harian setelah diambil dari API.
-// Ini untuk mengurangi panggilan API yang berulang.
+
+
 model WeatherHistory {
   history_id Int      @id @default(autoincrement())
-  data_date  DateTime @unique @db.Date // Tanggal data cuaca
-  avg_temp   Decimal  @db.Decimal(5, 2) // Suhu rata-rata
-  max_temp   Decimal  @db.Decimal(5, 2) // Suhu maksimal
+  data_date  DateTime @unique @db.Date 
+  avg_temp   Decimal  @db.Decimal(5, 2) 
+  max_temp   Decimal  @db.Decimal(5, 2) 
   created_at DateTime @default(now())
 
   @@map("weather_history")
@@ -200,10 +200,10 @@ enum MeterStatus {
 }
 
 
-// =============================================
-// MODUL 3: PENCATATAN & PEMBACAAN METER
-// - Mengelola proses input data harian dari setiap meter.
-// =============================================
+
+
+
+
 
 model ReadingSession {
   session_id   Int      @id @default(autoincrement())
@@ -223,7 +223,7 @@ model ReadingSession {
 
 model ReadingDetail {
   detail_id       Int     @id @default(autoincrement())
-  value           Decimal @db.Decimal(12, 2) // Nilai angka yang tercatat di meter
+  value           Decimal @db.Decimal(12, 2) 
   session_id      Int
   reading_type_id Int
 
@@ -236,33 +236,33 @@ model ReadingDetail {
 
 model ReadingType {
   reading_type_id Int    @id @default(autoincrement())
-  type_name       String @unique // e.g., "WBP", "LWBP", "Stand Meter"
-  reading_unit    String // e.g., "kWh", "m³"
+  type_name       String @unique 
+  reading_unit    String 
   
   energy_type_id Int
   energy_type    EnergyType @relation(fields: [energy_type_id], references: [energy_type_id])
   
   session_details ReadingDetail[]
   applicable_to_categories MeterCategory[] @relation("CategoryToReadingTypes")
-  rates                      SchemeRate[] // Relasi baru ke tarif harga
+  rates                      SchemeRate[] 
 
   @@map("reading_types")
 }
 
 
-// =============================================
-// MODUL 4: LOGIKA BISNIS & PENETAPAN HARGA
-// - Mengelola skema harga, tarif, pajak, dan target efisiensi.
-// =============================================
+
+
+
+
 
 model PriceScheme {
   scheme_id       Int      @id @default(autoincrement())
-  scheme_name     String   // e.g., "Tarif Listrik B2 Tahun 2025"
+  scheme_name     String   
   effective_date  DateTime @db.Date
   is_active       Boolean  @default(true)
   set_by_user_id  Int
   
-  // MODIFIKASI: Skema harga sekarang spesifik untuk satu Golongan Tarif.
+  
   tariff_group_id Int
   tariff_group    TariffGroup @relation(fields: [tariff_group_id], references: [tariff_group_id])
   set_by_user     User        @relation(fields: [set_by_user_id], references: [user_id])
@@ -275,12 +275,12 @@ model PriceScheme {
 
 model SchemeRate {
   rate_id Int     @id @default(autoincrement())
-  value   Decimal @db.Decimal(12, 4) // Harga per unit (e.g., 1444.70 per kWh)
+  value   Decimal @db.Decimal(12, 4) 
   
   scheme_id       Int
   scheme          PriceScheme @relation(fields: [scheme_id], references: [scheme_id], onDelete: Cascade)
 
-  // MODIFIKASI: Harga terikat langsung ke jenis pencatatan (WBP/LWBP).
+  
   reading_type_id Int
   reading_type    ReadingType @relation(fields: [reading_type_id], references: [reading_type_id])
 
@@ -291,7 +291,7 @@ model SchemeRate {
 model Tax {
   tax_id        Int      @id @default(autoincrement())
   tax_name      String   @unique
-  rate          Decimal  @db.Decimal(5, 4) // e.g. 0.11 for 11%
+  rate          Decimal  @db.Decimal(5, 4) 
   is_active     Boolean  @default(true)
   price_schemes PriceSchemesOnTaxes[]
 
@@ -328,10 +328,10 @@ model EfficiencyTarget {
 }
 
 
-// =============================================
-// MODUL 5: DATA PENDUKUNG OPERASIONAL
-// - Menyimpan data kontekstual seperti jumlah penumpang (pax) dan logbook kejadian.
-// =============================================
+
+
+
+
 
 model PaxData {
   pax_id    Int      @id @default(autoincrement())
@@ -347,19 +347,19 @@ model DailyLogbook {
   meter_id                Int
   meter                   Meter    @relation(fields: [meter_id], references: [meter_id])
 
-  // PERBAIKAN: Kolom generik untuk perubahan konsumsi
+  
   consumption_change_percent Decimal? @db.Decimal(15, 2)
 
-  // BARU: Analisis penghematan/pemborosan vs target
-  savings_value           Decimal? @db.Decimal(12, 2) // Penghematan (kWh, m3)
-  savings_cost            Decimal? @db.Decimal(15, 2) // Penghematan (Rp)
-  overage_value           Decimal? @db.Decimal(12, 2) // Pemborosan (kWh, m3)
-  overage_cost            Decimal? @db.Decimal(15, 2) // Pemborosan (Rp)
+  
+  savings_value           Decimal? @db.Decimal(12, 2) 
+  savings_cost            Decimal? @db.Decimal(15, 2) 
+  overage_value           Decimal? @db.Decimal(12, 2) 
+  overage_cost            Decimal? @db.Decimal(15, 2) 
 
-  // Catatan ringkasan yang digenerate oleh sistem
+  
   summary_notes           String   @db.Text
   
-  // (Opsional) Jika ada pengguna yang menambahkan catatan manual
+  
   manual_notes            String?  @db.Text
   edited_by_user_id       Int?
   edited_by               User?    @relation(fields: [edited_by_user_id], references: [user_id])
@@ -367,20 +367,20 @@ model DailyLogbook {
   created_at              DateTime @default(now())
   updated_at              DateTime @updatedAt
 
-  @@unique([log_date, meter_id]) // PERBAIKAN: Constraint baru
+  @@unique([log_date, meter_id]) 
   @@map("daily_logbooks")
 }
 
 
-// =============================================
-// MODUL 6: ANALITIK, LAPORAN & NOTIFIKASI
-// - Hasil olahan data, seperti ringkasan harian, prediksi, alert, dan klasifikasi.
-// =============================================
+
+
+
+
 
 model DailySummary {
   summary_id   Int       @id @default(autoincrement())
   summary_date DateTime  @db.Date
-  total_consumption Decimal? @db.Decimal(12, 2) // BARU: Tambahkan kolom ini
+  total_consumption Decimal? @db.Decimal(12, 2) 
   total_cost   Decimal?  @db.Decimal(15, 2)
   meter_id     Int
   meter        Meter     @relation(fields: [meter_id], references: [meter_id])
@@ -400,7 +400,7 @@ model SummaryDetail {
   consumption_cost  Decimal  @db.Decimal(15, 2)
   wbp_value         Decimal? @db.Decimal(12, 2)
   lwbp_value        Decimal? @db.Decimal(12, 2)
-  // BARU: Tambahkan kolom untuk menyimpan sisa stok (khususnya untuk BBM)
+  
   remaining_stock   Decimal? @db.Decimal(12, 2)
   metric_name       String
   summary_id        Int
@@ -419,16 +419,11 @@ model Alert {
   description             String      @db.Text
   status                  AlertStatus @default(NEW)
   alert_timestamp         DateTime    @default(now())
-
-  // Opsional: untuk alert yang spesifik pada meter atau target
   meter_id                Int?
   target_id               Int?
   acknowledged_by_user_id Int?
-
-  // Data kontekstual saat alert dibuat
   actual_value            Decimal?    @db.Decimal(12, 2)
   target_value_at_trigger Decimal?    @db.Decimal(12, 2)
-
   meter           Meter?           @relation(fields: [meter_id], references: [meter_id])
   target          EfficiencyTarget? @relation(fields: [target_id], references: [target_id])
   acknowledged_by User?            @relation(fields: [acknowledged_by_user_id], references: [user_id])
@@ -504,7 +499,7 @@ model DailyUsageClassification {
   @@map("daily_usage_classifications")
 }
 
-// --- Kumpulan Enum untuk Modul Analitik ---
+
 enum AlertStatus {
   NEW
   READ

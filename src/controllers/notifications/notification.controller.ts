@@ -29,35 +29,19 @@ export class NotificationController extends BaseController<
     req: Request,
     res: Response
   ): Promise<void> => {
-    const validatedQuery = res.locals.validatedData.query;
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
     if (!userId) {
       throw new Error401('User not authenticated.');
     }
 
-    validatedQuery.userId = userId;
-
-    const data = await this.service.findAllWithQuery(validatedQuery);
+    const { data, meta } = await this.service.getAllNotification(userId);
     res200({
       res,
       message: 'Successfully retrieved notifications.',
-      data: { data },
-    });
-  };
-
-  public getUnreadCount = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
-    const userId = (req as any).user?.id;
-    if (!userId) {
-      throw new Error401('User not authenticated.');
-    }
-    const count = await this.service.getUnreadCount(userId);
-    res200({
-      res,
-      message: 'Successfully retrieved unread notification count.',
-      data: { count },
+      data: {
+        notifications: data,
+        data: { meters: data, meta },
+      },
     });
   };
 
@@ -74,19 +58,6 @@ export class NotificationController extends BaseController<
     }
     const result = await this.service.markAllAsRead(userId);
     res200({ res, message: 'All notifications marked as read.', data: result });
-  };
-
-  public getLatest = async (req: Request, res: Response): Promise<void> => {
-    const userId = (req as any).user?.id;
-    if (!userId) {
-      throw new Error401('User not authenticated.');
-    }
-    const result = await this.service.getLatest(userId);
-    res200({
-      res,
-      message: 'Successfully retrieved latest notifications.',
-      data: result,
-    });
   };
 
   public deleteAll = async (req: Request, res: Response): Promise<void> => {
@@ -117,6 +88,19 @@ export class NotificationController extends BaseController<
       data: {
         count: result.count,
       },
+    });
+  };
+
+  public getLatest = async (req: Request, res: Response): Promise<void> => {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      throw new Error401('User not authenticated.');
+    }
+    const result = await this.service.getLatest(userId);
+    res200({
+      res,
+      message: 'Successfully retrieved latest notifications.',
+      data: result,
     });
   };
 }
