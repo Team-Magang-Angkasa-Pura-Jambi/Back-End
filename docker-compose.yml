@@ -19,8 +19,8 @@ services:
       - ml-api
       - db
     volumes:
-      - .:/usr/src/app
-      - /usr/src/app/node_modules
+      - .:/src/app
+      - /src/app/node_modules
     command: npm run dev
 
 volumes:
