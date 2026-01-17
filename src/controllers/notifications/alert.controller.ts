@@ -112,7 +112,7 @@ class AlertController {
       res200({
         res,
         data: updatedAlert,
-        message: `Status alert berhasil diubah menjadi ${status}.`,
+        message: `Alert marked as read.`,
       });
     } catch (error) {
       next(error);

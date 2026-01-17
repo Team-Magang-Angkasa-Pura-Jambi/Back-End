@@ -6,7 +6,7 @@ import { startDataCheckCron } from './services/corn/dataChecker.js';
 import { startPredictionRunnerCron } from './services/corn/predictionRunner.js';
 
 const port = process.env.PORT || 8080;
-const host = process.env.HOST_LOCAL_AREA || 'localhost';
+const host = process.env.HOST_LOCAL_AREA || "0.0.0.0";
 
 const server = http.createServer(app);
 

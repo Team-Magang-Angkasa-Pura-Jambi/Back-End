@@ -18,19 +18,19 @@ export default (router: Router) => {
     authorize('Admin', 'SuperAdmin', 'Technician'),
     asyncHandler(alertController.getMeterAlerts),
   );
-  router.patch(
-    `${prefix}/`,
-    authorize('Admin', 'SuperAdmin', 'Technician'),
-    validate(updateAlertStatusSchema),
-    asyncHandler(alertController.updateStatus),
-  );
+
   router.patch(
     `${prefix}/bulk-update`,
     authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(bulkUpdateAlertsSchema),
     asyncHandler(alertController.bulkUpdateStatus),
   );
-
+  router.patch(
+    `${prefix}/:alertId`,
+    authorize('Admin', 'SuperAdmin', 'Technician'),
+    validate(updateAlertStatusSchema),
+    asyncHandler(alertController.updateStatus),
+  );
   router.post(
     `${prefix}/bulk-delete`,
     authorize('Admin', 'SuperAdmin', 'Technician'),

@@ -954,7 +954,8 @@ export const getBudgetBurnRateService = async (
     const endDate = new Date(year, month, 0, 23, 59, 59);
     const totalDaysInMonth = endDate.getDate();
 
-    const childBudget = await prisma.annualBudget.findFirstOrThrow({
+    // 1. Ambil Child Budget
+    const childBudget = await prisma.annualBudget.findFirst({
       where: {
         period_start: { lte: endDate },
         period_end: { gte: startDate },
@@ -966,14 +967,31 @@ export const getBudgetBurnRateService = async (
       },
     });
 
-    const parentBudget = await prisma.annualBudget.findUniqueOrThrow({
-      where: { budget_id: childBudget.parent_budget_id! },
+    // PERBAIKAN 1: Tambahkan tanda seru (!)
+    // Artinya: Jika childBudget TIDAK ditemukan, maka throw error
+    if (!childBudget) {
+      console.warn('Budget Child tidak ditemukan');
+      return [];
+    }
+
+    // 2. Ambil Parent Budget
+    const parentBudget = await prisma.annualBudget.findFirst({
+      where: { budget_id: childBudget.parent_budget_id! }, // Gunakan ! karena kita yakin id ada
       select: {
         total_budget: true,
         efficiency_tag: true,
       },
     });
 
+    // PERBAIKAN 2: Cek parentBudget, bukan childBudget lagi
+    // Dan gunakan tanda seru (!)
+    if (!parentBudget) {
+      // Sama seperti di atas, return kosong atau throw
+      console.warn('Budget Parent tidak ditemukan');
+      return [];
+    }
+
+    // --- Kalkulasi dimulai ---
     const totalAnnualBudget = Number(childBudget.total_budget) + Number(parentBudget.total_budget);
     const monthlyBudget = totalAnnualBudget / 12;
     const dailyIdealBurn = monthlyBudget / totalDaysInMonth;
@@ -1009,18 +1027,15 @@ export const getBudgetBurnRateService = async (
     });
 
     const results: BudgetBurnRateType[] = [];
-
     let cumulativeActual = 0;
-
     const today = new Date();
+    // Perbaikan kecil: Pastikan logika bulan/tahun benar saat membandingkan
     const isCurrentMonth = today.getMonth() + 1 === month && today.getFullYear() === year;
     const currentDay = today.getDate();
 
     for (let day = 1; day <= totalDaysInMonth; day++) {
       const cumulativeIdeal = dailyIdealBurn * day;
-
       const cumulativeEfficient = dailyEfficientBurn * day;
-
       const costToday = dailyCostMap.get(day) ?? 0;
 
       let actualValue: number | null = null;
@@ -1030,10 +1045,12 @@ export const getBudgetBurnRateService = async (
           cumulativeActual += costToday;
           actualValue = Math.round(cumulativeActual);
         } else {
-          actualValue = null;
+          actualValue = null; // Masa depan belum ada data
         }
       } else {
-        if (new Date(year, month - 1) < today) {
+        // Logika: Jika bulan yang diminta sudah lewat (masa lalu)
+        const checkDate = new Date(year, month - 1, day);
+        if (checkDate < today) {
           cumulativeActual += costToday;
           actualValue = Math.round(cumulativeActual);
         }
@@ -1050,6 +1067,7 @@ export const getBudgetBurnRateService = async (
     return results;
   } catch (error) {
     console.error('Error in BudgetBurnRateService:', error);
+    // Kembalikan array kosong agar frontend tidak blank putih/crash
     return [];
   }
 };

@@ -8,7 +8,10 @@ import { alertService } from '../notifications/alert.service.js';
  */
 export function startDailyReportScheduler() {
   console.log('⏰ Cron job untuk Laporan Harian Sistem diaktifkan.');
-
+  const options = {
+    scheduled: true,
+    timezone: 'Asia/Jakarta',
+  };
   schedule(
     '0 7 * * *', // Setiap hari jam 07:00
     async () => {
@@ -40,7 +43,7 @@ export function startDailyReportScheduler() {
           prisma.alert.count({
             where: {
               status: 'HANDLED',
-              updated_at: { gte: yesterday, lt: today },
+              alert_timestamp: { gte: yesterday, lt: today },
             },
           }),
           // Ambil laporan kinerja dari cron job lain
@@ -80,13 +83,10 @@ export function startDailyReportScheduler() {
         // Jika gagal, buat alert error
         await alertService.create({
           title: 'Error Sistem: Laporan Harian Gagal',
-          description: `Cron job untuk membuat laporan harian sistem gagal. Error: ${error.message}`,
+          description: `Cron job untuk membuat laporan harian sistem gagal.`,
         });
       }
     },
-    {
-      scheduled: true,
-      timezone: 'Asia/Jakarta',
-    },
+    options,
   );
 }
