@@ -278,7 +278,7 @@ import uvicorn
 # ... kode app Anda ...
 
 if __name__ == "__main__":
-    # Ambil PORT dari Railway, kalau tidak ada (di laptop) pakai 8000
+ # Ambil PORT dari Railway, kalau tidak ada (di laptop) pakai 8000
     port = int(os.environ.get("PORT", 8000))
     
     # Jalankan
