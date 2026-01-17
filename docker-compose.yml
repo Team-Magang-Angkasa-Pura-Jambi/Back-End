@@ -10,11 +10,35 @@ services:
       - '9229:9229'
     environment:
       PORT: 3000
-      # Pastikan pakai host.docker.internal jika ML ada di local laptop
-      ML_API_URL: http://host.docker.internal:8000
-      # URL Database Railway (Sudah Benar)
-      DATABASE_URL: postgresql://postgres:kNCECfGbXAxHUBugaJQaTIXDdHfOkeCc@hopper.proxy.rlwy.net:49027/railway
+      ML_API_URL: http://ml-api:8000
+      # 👇 PERBAIKAN 1: Ganti 'localhost' jadi 'db'
+      # Karena database ada di service bernama 'db' di bawah
+      DATABASE_URL: postgresql://postgres:fluctlight@db:5432/sentinel?schema=public
+    depends_on:
+      - ml-api
+      - db
     volumes:
       - .:/usr/src/app
       - /usr/src/app/node_modules
     command: npm run dev
+
+  # ml-api:
+  #   build:
+  #     context: ./script
+  #   ports:
+  #     - '8000:8000'
+  
+  # db:
+  #   # 👇 PERBAIKAN 2: Gunakan versi spesifik agar tidak error volume
+  #   image: postgres:16-alpine 
+  #   environment:
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: fluctlight
+  #     POSTGRES_DB: sentinel
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

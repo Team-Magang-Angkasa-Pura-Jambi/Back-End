@@ -1,49 +1,45 @@
 # --- STAGE 1: Build ---
+# Tahap ini digunakan untuk meng-install semua dependensi (termasuk dev)
+# dan membangun aplikasi TypeScript menjadi JavaScript.
 FROM node:20-alpine AS builder
 
+# Tetapkan direktori kerja
 WORKDIR /usr/src/app
 
-# Install OpenSSL (Wajib untuk Prisma)
+# Install OpenSSL yang dibutuhkan oleh Prisma
 RUN apk add --no-cache openssl
 
-# 1. Copy package.json DULU
+# Salin file package.json dan package-lock.json
 COPY package*.json ./
 
-# 2. PENTING: Copy folder prisma SEBELUM npm install
-# Agar saat 'postinstall' jalan, dia bisa nemu schema.prisma
-COPY prisma ./prisma
-
-# 3. Baru install (Postinstall 'prisma generate' akan sukses di sini)
+# Install semua dependensi. Skrip `postinstall` ("npx prisma generate") akan berjalan otomatis.
 RUN npm install
 
-# 4. Copy sisa codingan
+# Salin sisa kode sumber aplikasi
 COPY . .
 
-# 5. Build TypeScript
+# Jalankan skrip build dari package.json
 RUN npm run build
 
 # --- STAGE 2: Production ---
+# Tahap ini membuat image final yang lebih ramping untuk produksi.
 FROM node:20-alpine
 
 WORKDIR /usr/src/app
 
-# Install OpenSSL untuk production
-RUN apk add --no-cache openssl
-
-# 1. Copy package.json
+# Salin package.json dan package-lock.json untuk menginstall dependensi produksi saja
 COPY package*.json ./
-
-# 2. Copy folder prisma DULU (sama alasannya)
-COPY --from=builder /usr/src/app/prisma ./prisma
-
-# 3. Install dependencies production saja
-# (Otomatis menjalankan prisma generate lagi untuk environment prod)
 RUN npm install --omit=dev
 
-# 4. Copy hasil build JS dari stage builder
-COPY --from=builder /usr/src/app/dist ./dist
+# Install OpenSSL yang dibutuhkan oleh Prisma di image produksi
+RUN apk add --no-cache openssl
 
-# Ekspos port
+# Salin hasil build (folder 'dist') dan skema prisma dari tahap 'builder'
+COPY --from=builder /usr/src/app/dist ./dist
+COPY --from=builder /usr/src/app/prisma ./prisma
+
+# Ekspos port yang digunakan aplikasi
 EXPOSE 3000
 
-CMD [ "npm", "run", "start" ]
+# Perintah untuk menjalankan aplikasi dari file hasil build
+CMD [ "node", "dist/index.js" ]
