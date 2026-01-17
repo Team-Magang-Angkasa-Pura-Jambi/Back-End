@@ -5,8 +5,8 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
 
-    /* Struktur Build */
-    "rootDir": ".",
+    /* Struktur Build - INI YANG DIPERBAIKI */
+    "rootDir": "./src" /* 👈 Ubah dari "." menjadi "./src" */,
     "outDir": "./dist",
     "sourceMap": true,
 
@@ -31,19 +31,22 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
 
-    /* Decorators (OFF – aman kecuali pakai NestJS) */
+    /* Decorators */
     "experimentalDecorators": false,
     "emitDecoratorMetadata": false
   },
 
-  "include": ["src/**/*.ts", "prisma/**/*.ts"],
+  /* Include & Exclude */
+  /* 👈 Hapus "prisma" dari sini agar tidak error "File not under rootDir" */
+  "include": ["src/**/*.ts"],
+
   "exclude": [
     "node_modules",
     "dist",
     "coverage",
     "generated",
     "src/generated",
-    "prisma/generated",
+    "prisma" /* 👈 Tambahkan prisma ke exclude build production */,
     "**/*.d.ts",
     "**/__test__/**/*",
     "**/*.test.ts"
