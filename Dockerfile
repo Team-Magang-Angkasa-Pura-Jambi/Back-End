@@ -46,5 +46,5 @@ COPY --from=builder /usr/src/app/dist ./dist
 # Ekspos port
 EXPOSE 3000
 
-# Jalankan
+RUN echo "=== CEK STRUKTUR FOLDER DIST ===" && ls -R dist
 CMD [ "node", "dist/src/index.js" ]
