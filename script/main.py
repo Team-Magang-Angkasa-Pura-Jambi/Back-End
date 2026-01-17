@@ -272,6 +272,14 @@ def evaluate_kantor(data: EvaluationInputKantor):
     return _evaluate_kantor_logic(data.suhu_rata, data.suhu_max, data.is_hari_kerja, data.aktual_kwh_kantor)
 
 
+import os
+import uvicorn
+
+# ... kode app Anda ...
+
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Ambil PORT dari Railway, kalau tidak ada (di laptop) pakai 8000
+    port = int(os.environ.get("PORT", 8000))
+    
+    # Jalankan
+    uvicorn.run(app, host="0.0.0.0", port=port)
