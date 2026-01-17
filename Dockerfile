@@ -1,29 +1,19 @@
-FROM node:20-alpine AS builder
+# Gunakan base image Node.js yang sesuai dengan versi di log Anda
+FROM node:20-alpine
 
+# Tetapkan direktori kerja di dalam container
 WORKDIR /usr/src/app
 
+# Install OpenSSL yang mungkin dibutuhkan oleh Prisma
 RUN apk add --no-cache openssl
 
+# Salin file package.json, package-lock.json, dan skema Prisma SEBELUM install
 COPY package*.json ./
+
+COPY prisma ./prisma
+
 
 RUN npm install
 
-COPY . .
-
-RUN npm run build
-
-FROM node:20-alpine
-
-WORKDIR /usr/src/app
-
-COPY package*.json ./
-RUN npm install --omit=dev
-
-RUN apk add --no-cache openssl
-
-COPY --from=builder /usr/src/app/dist ./dist
-COPY --from=builder /usr/src/app/prisma ./prisma
-
+# Ekspos port aplikasi
 EXPOSE 3000
-
-CMD [ "node", "dist/index.js" ]
