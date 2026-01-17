@@ -11,21 +11,23 @@ RUN apk add --no-cache openssl libc6-compat
 # 1. Copy package files
 COPY package*.json ./
 
-# 2. Install dependencies tapi LEWATI script postinstall
-# Ini mencegah error "schema not found" karena folder prisma belum dicopy
-RUN npm install --ignore-scripts
+# 2. FIX UTAMA: Copy folder prisma SEBELUM npm install
+# Ini agar script 'postinstall' prisma bisa menemukan schema.prisma
+COPY prisma ./prisma
 
-# 3. Copy source code (termasuk folder prisma)
+# 3. Install dependencies secara normal
+# Script 'postinstall' (npx prisma generate) akan berjalan otomatis di sini
+# dan karena folder prisma sudah ada, generate akan SUKSES.
+RUN npm install
+
+# 4. Copy sisa source code aplikasi
 COPY . .
 
-# 4. Sekarang baru jalankan generate (karena file schema sudah ada)
-RUN npx prisma generate
-
 # 5. Build TypeScript
+# Karena step 3 sudah sukses generate, error "no exported member" akan hilang.
 RUN npm run build
 
-# 6. Bersihkan devDependencies untuk persiapan production
-# Ini akan menghapus typescript, ts-node, dll dari node_modules
+# 6. Bersihkan devDependencies
 RUN npm prune --omit=dev
 
 
@@ -36,20 +38,18 @@ FROM node:20-alpine
 
 WORKDIR /usr/src/app
 
-# Install OpenSSL (Wajib di runtime)
+# Install OpenSSL & libc6-compat (Wajib di runtime Alpine)
 RUN apk add --no-cache openssl libc6-compat
 
-# --- PENTING: Copy node_modules yang sudah bersih dari builder ---
-# Kita TIDAK melakukan 'npm install' lagi di sini untuk menghindari error gyp/python
+# Copy node_modules bersih dari builder
 COPY --from=builder /usr/src/app/node_modules ./node_modules
 
 # Copy hasil build JS
 COPY --from=builder /usr/src/app/dist ./dist
 
-# Copy folder prisma (untuk akses schema jika diperlukan runtime)
+# Copy folder prisma (untuk runtime schema access)
 COPY --from=builder /usr/src/app/prisma ./prisma
 
-# Copy package.json (opsional, kadang dibutuhkan untuk membaca versi/script)
 COPY --from=builder /usr/src/app/package.json ./package.json
 
 EXPOSE 3000
