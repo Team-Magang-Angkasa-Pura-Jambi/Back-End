@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  ml-service:
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
+    container_name: ml_container
+    ports:
+      - '8000:8000'
+    environment:
+      - PORT=8000
+      - ENV=development
+    volumes:
+      # Fitur HOT RELOAD:
+      # Menghubungkan folder laptop ke dalam container.
+      # Jadi kalau Anda edit codingan, server langsung update.
+      - .:/app
+    # Restart otomatis kalau crash
+    restart: always
