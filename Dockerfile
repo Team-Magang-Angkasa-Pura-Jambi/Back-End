@@ -31,4 +31,6 @@ COPY --from=builder /usr/src/app/dist ./dist
 
 EXPOSE 3000
 
+RUN ls -R dist
+
 CMD [ "node", "dist/src/index.js" ]
