@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "tsc && npx copyfiles -u 1 src/generated/**/* dist",
+    "build": "tsc && npx copyfiles src/generated/**/* dist",
     "build:force": "tsc || true && npx copyfiles -u 1 src/generated/**/* dist",
     "start": "node dist/index.js",
     "dev": "tsx watch --inspect --clear-screen=false src/index.ts",
