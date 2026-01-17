@@ -10,5 +10,5 @@ services:
       - '8080:3000'
     environment:
       PORT: 3000
-      ML_API_URL: http://ml-api:8000
-      DATABASE_URL: postgresql://postgres:fluctlight@db:5432/sentinel?schema=public
+      ML_API_URL: https://ml-production-e7e7.up.railway.app
+      DATABASE_URL: postgresql://postgres:kNCECfGbXAxHUBugaJQaTIXDdHfOkeCc@hopper.proxy.rlwy.net:49027/railway
