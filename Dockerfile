@@ -23,7 +23,7 @@ RUN apk add --no-cache openssl
 
 COPY package*.json ./
 
-COPY --from=builder /usr/src/app/prisma ./prisma
+COPY --from=builder /usr/src/app/prisma ./prisma    
 
 RUN npm install --omit=dev
 
