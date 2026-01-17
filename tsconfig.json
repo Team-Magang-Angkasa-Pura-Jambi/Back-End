@@ -6,7 +6,7 @@
     "moduleResolution": "NodeNext",
 
     /* Struktur Build */
-    "rootDir": "./",
+    "rootDir": "./src",
     "outDir": "./dist",
     "sourceMap": true,
 
