@@ -1,13 +1,10 @@
 version: '3.8'
-
 services:
   backend-ts:
-    # Menggunakan Dockerfile production
     build:
       context: .
       dockerfile: Dockerfile
     ports:
       - '8080:3000'
-      
     env_file:
-      - .env
+      - .env # Docker akan membaca semua variabel dari file .env
