@@ -11,10 +11,4 @@ services:
     environment:
       PORT: 3000
       ML_API_URL: http://ml-api:8000
-      # CATATAN: Karena service 'db' dihapus, aplikasi mungkin akan error
-      # saat mencoba koneksi ke database kecuali Anda punya DB eksternal/host.
       DATABASE_URL: postgresql://postgres:fluctlight@db:5432/sentinel?schema=public
-
-    # Bagian depends_on dihapus karena service 'db' sudah tidak ada
-    # depends_on:
-    #   - db
