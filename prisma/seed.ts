@@ -4,11 +4,23 @@ import bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🚀 Seeding minimal master data (Admin + Energy Types)...');
+  console.log('🚀 Seeding minimal master data...');
 
   /**
-   * 1️⃣ ROLE: Admin
+   * 1️⃣ ROLES: SuperAdmin, Admin, Technician
+   * Kita gunakan upsert agar tidak error jika data sudah ada.
    */
+
+  // A. Role SuperAdmin
+  const superAdminRole = await prisma.role.upsert({
+    where: { role_name: RoleName.SuperAdmin },
+    update: {},
+    create: {
+      role_name: RoleName.SuperAdmin,
+    },
+  });
+
+  // B. Role Admin (Kita simpan ke variabel untuk dipakai user admin di bawah)
   const adminRole = await prisma.role.upsert({
     where: { role_name: RoleName.Admin },
     update: {},
@@ -17,21 +29,31 @@ async function main() {
     },
   });
 
+  // C. Role Technician
+  const technician = await prisma.role.upsert({
+    where: { role_name: RoleName.Technician },
+    update: {},
+    create: {
+      role_name: RoleName.Technician,
+    },
+  });
+
   /**
    * 2️⃣ USER: admin
+   * User ini dikaitkan dengan role 'Admin' (sesuai variabel adminRole di atas)
    */
   const passwordHash = await bcrypt.hash('password123', 10);
 
   await prisma.user.upsert({
-    where: { username: 'admin' },
+    where: { username: 'superdmin' },
     update: {
       password_hash: passwordHash,
-      role_id: adminRole.role_id,
+      role_id: superAdminRole.role_id,
     },
     create: {
       username: 'admin',
       password_hash: passwordHash,
-      role_id: adminRole.role_id,
+      role_id: superAdminRole.role_id,
     },
   });
 
@@ -68,7 +90,7 @@ async function main() {
     },
   });
 
-  console.log('✅ Admin user & default energy types seeded successfully');
+  console.log('✅ Roles (SuperAdmin, Admin, Technician), User, & Energy types seeded successfully');
 }
 
 main()

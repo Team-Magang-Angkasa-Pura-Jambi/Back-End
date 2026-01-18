@@ -93,13 +93,7 @@ export class UserService extends GenericBaseService<
     });
   }
 
-  /**
-   * BARU: Mengambil semua pengguna dengan filter `is_active: true` secara default.
-   * Ini akan menimpa metode `findAll` dari GenericBaseService.
-   * @param args - Argumen query dari Prisma, seperti `where`, `orderBy`, dll.
-   * @returns Daftar pengguna yang aktif.
-   */
-
+  
   public override async findAll(args?: Partial<GetUsersQuery>): Promise<User[]> {
     const { roleName, isActive, search } = args ?? {};
     const where: Prisma.UserWhereInput = {};

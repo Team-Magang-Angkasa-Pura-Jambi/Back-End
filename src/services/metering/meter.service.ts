@@ -1,7 +1,7 @@
 import prisma from '../../configs/db.js';
 import { type Prisma, type Meter } from '../../generated/prisma/index.js';
 import { GenericBaseService } from '../../utils/GenericBaseService.js';
-import { Error400 } from '../../utils/customError.js';
+import { Error400, Error404 } from '../../utils/customError.js';
 import type { CreateMeterBody, UpdateMeterBody } from '../../types/metering/meter.types-temp.js';
 import { type CustomErrorMessages } from '../../utils/baseService.js';
 import { type DefaultArgs } from '../../generated/prisma/runtime/library.js';
@@ -49,10 +49,14 @@ export class MeterService extends GenericBaseService<
     const { energyTypeId, typeName, search, sortBy, sortOrder, page, limit, ...restArgs } =
       args ?? {};
 
-    const user = await prisma.user.findFirstOrThrow({
+    const user = await prisma.user.findFirst({
       where: { user_id: userId },
       select: { role: { select: { role_name: true } } },
     });
+
+    if (!user) {
+      throw new Error404('pengguna tidak ditemukan');
+    }
 
     const roleName = user.role.role_name;
 
@@ -95,7 +99,7 @@ export class MeterService extends GenericBaseService<
         restArgs.orderBy ?? (sortBy ? { [sortBy]: sortOrder ?? 'asc' } : { meter_id: 'asc' }),
     };
 
-    return super.findAll({ ...findArgs, page, limit } as any, customMessages);
+    return this._handleCrudOperation(() => prisma.meter.findMany({ ...findArgs } as any));
   }
 
   public override async create(data: CreateMeterBody): Promise<Meter> {
