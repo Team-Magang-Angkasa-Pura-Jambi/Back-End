@@ -35,7 +35,7 @@ export const optionalString = (fieldName: string) =>
   z
     .string({ error: `${fieldName} wajib diisi.` })
     .trim()
-    .min(1, { message: `${fieldName} tidak boleh kosong.` })
+
     .optional();
 
 export const isoDate = (fieldName: string) =>
