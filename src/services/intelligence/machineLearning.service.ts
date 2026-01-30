@@ -57,6 +57,19 @@ interface KantorPredictionResult {
   prediksi_kwh_kantor: number;
 }
 
+export interface BulkPredictionResult {
+  tanggal: string;
+  prediksi_pax: number;
+  prediksi_kwh_terminal: number;
+  prediksi_kwh_kantor: number;
+}
+
+export interface BulkPredictionInput {
+  tanggal: string;
+  suhu_rata: number;
+  suhu_max: number;
+}
+
 class MachineLearningService {
   private baseURL: string;
 
@@ -252,6 +265,25 @@ class MachineLearningService {
             responseData,
           )}`,
         );
+      }
+      throw error;
+    }
+  }
+
+  public async getBulkPrediction(payload: BulkPredictionInput[]): Promise<BulkPredictionResult[]> {
+    try {
+      if (!payload || payload.length === 0) {
+        return [];
+      }
+
+      const response = await axios.post<BulkPredictionResult[]>('/predict/bulk', payload);
+
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        console.error('ML Bulk Error Status:', error.response?.status);
+        console.error('ML Bulk Error Data:', error.response?.data);
+        throw new Error(`Gagal prediksi bulk: ${error.response?.data?.detail ?? error.message}`);
       }
       throw error;
     }

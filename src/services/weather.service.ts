@@ -4,10 +4,15 @@ import prisma from '../configs/db.js';
 import { weatherConfig } from '../configs/weather.js';
 
 interface WeatherData {
-  suhu_rata?: number;
-  suhu_max?: number;
-  avg_temp?: number;
-  max_temp?: number;
+  suhu_rata: number;
+  suhu_max: number;
+}
+
+// Interface untuk helper grouping
+interface DailyAccumulator {
+  tempSum: number;
+  maxTemp: number;
+  count: number;
 }
 
 class WeatherService {
@@ -24,34 +29,32 @@ class WeatherService {
   }
 
   /**
-   * Mengambil data prakiraan suhu rata-rata dan maksimal untuk tanggal tertentu.
-   * @param date - Tanggal prakiraan yang diinginkan.
+   * Mengambil data prakiraan.
+   * Strategi: Cek DB -> Jika null, Fetch API -> Hitung SEMUA tanggal di API -> Simpan SEMUA ke DB -> Return tanggal diminta.
    */
   public async getForecast(date: Date): Promise<WeatherData | null> {
-    if (!this.apiKey) {
-      console.warn('Layanan cuaca tidak terkonfigurasi, mengembalikan null.');
-      return null;
-    }
+    if (!this.apiKey) return null;
 
-    const targetDate = new Date(
-      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
-    );
+    // Normalisasi tanggal ke YYYY-MM-DD untuk query DB & API filter
+    const targetDateStr = date.toISOString().split('T')[0];
+    const targetDateObj = new Date(targetDateStr); // Pastikan jam 00:00:00 UTC
 
+    // 1. Cek Cache Database
     const cachedWeather = await prisma.weatherHistory.findUnique({
-      where: { data_date: targetDate },
+      where: { data_date: targetDateObj },
     });
 
     if (cachedWeather) {
-      console.log(
-        `[WeatherService] Data cuaca untuk ${targetDate.toISOString().split('T')[0]} ditemukan di cache.`,
-      );
       return {
         suhu_rata: cachedWeather.avg_temp.toNumber(),
         suhu_max: cachedWeather.max_temp.toNumber(),
       };
     }
 
+    // 2. Jika tidak ada, ambil dari API (Fetch sekali, simpan banyak)
     try {
+      console.log(`[WeatherService] Cache miss untuk ${targetDateStr}. Mengambil data API...`);
+
       const response = await axios.get(this.baseURL, {
         params: {
           lat: this.lat,
@@ -61,70 +64,94 @@ class WeatherService {
         },
       });
 
-      const targetDateString = targetDate.toISOString().split('T')[0];
+      const forecastList = response.data.list;
+      if (!forecastList || forecastList.length === 0) return null;
 
-      const dailyForecasts = response.data.list.filter((item: any) => {
-        return item.dt_txt.startsWith(targetDateString);
-      });
+      // 3. Proses & Agregasi data untuk SEMUA hari yang tersedia di response
+      // Output Map: "2023-10-01" -> { suhu_rata: 28, suhu_max: 32 }
+      const processedForecasts = this.aggregateForecastByDay(forecastList);
 
-      if (dailyForecasts.length === 0) {
+      // 4. Bulk Insert ke Database (Optimasi Database)
+      // Kita simpan semua hari yang didapat, bukan cuma targetDate
+      const dbPayload = Array.from(processedForecasts.entries()).map(([dateStr, data]) => ({
+        data_date: new Date(dateStr),
+        avg_temp: data.suhu_rata,
+        max_temp: data.suhu_max,
+      }));
+
+      if (dbPayload.length > 0) {
+        await prisma.weatherHistory.createMany({
+          data: dbPayload,
+          skipDuplicates: true, // PENTING: Agar tidak error jika hari lain sudah ada di DB
+        });
+        console.log(`[WeatherService] Berhasil menyimpan cache untuk ${dbPayload.length} hari.`);
+      }
+
+      // 5. Kembalikan data untuk tanggal yang diminta user
+      const result = processedForecasts.get(targetDateStr);
+
+      if (!result) {
         console.warn(
-          `[WeatherService] Tidak ada data prakiraan cuaca yang ditemukan untuk tanggal ${targetDateString} dari API.`,
+          `[WeatherService] API merespons, tapi tanggal ${targetDateStr} tidak ada dalam list.`,
         );
-
         return null;
       }
 
-      let tempSum = 0;
-      let maxTemp = -Infinity;
-
-      for (const forecast of dailyForecasts) {
-        tempSum += forecast.main.temp;
-        if (forecast.main.temp_max > maxTemp) {
-          maxTemp = forecast.main.temp_max;
-        }
-      }
-
-      const avgTemp = tempSum / dailyForecasts.length;
-
-      const parsedData = {
-        suhu_rata: parseFloat(avgTemp.toFixed(2)),
-        suhu_max: parseFloat(maxTemp.toFixed(2)),
-      };
-
-      await prisma.weatherHistory.create({
-        data: {
-          data_date: targetDate,
-          avg_temp: parsedData.suhu_rata,
-          max_temp: parsedData.suhu_max,
-        },
-      });
-      console.log(
-        `[WeatherService] Data cuaca untuk ${targetDate.toISOString().split('T')[0]} diambil dari API dan disimpan ke cache.`,
-      );
-
-      return parsedData;
+      return result;
     } catch (error) {
-      if (isAxiosError(error)) {
-        const status = error.response?.status;
-        const message = error.response?.data?.message ?? error.message;
+      this.handleAxiosError(error);
+      return null; // Unreachable karena handleAxiosError melempar throw
+    }
+  }
 
-        console.error(
-          `[WeatherService] Gagal mengambil data dari OpenWeatherMap. Status: ${status}, Pesan: "${message}"`,
-        );
-        console.error(`[WeatherService] URL: ${error.config?.url}`);
-        console.error(`[WeatherService] Params:`, error.config?.params);
+  /**
+   * Helper: Mengubah data per 3 jam (raw API) menjadi data harian (avg & max)
+   */
+  private aggregateForecastByDay(list: any[]): Map<string, WeatherData> {
+    const dailyMap = new Map<string, DailyAccumulator>();
 
-        if (status === 401) {
-          throw new Error500('Kunci API untuk layanan cuaca tidak valid.');
-        }
-        if (status === 400) {
-          throw new Error400(`Permintaan ke layanan cuaca tidak valid: ${message}`);
-        }
+    // Pass 1: Sum & Max Logic
+    for (const item of list) {
+      const dateStr = item.dt_txt.split(' ')[0]; // Ambil YYYY-MM-DD
+      const temp = item.main.temp;
+      const max = item.main.temp_max;
+
+      if (!dailyMap.has(dateStr)) {
+        dailyMap.set(dateStr, { tempSum: 0, maxTemp: -Infinity, count: 0 });
       }
 
-      throw new Error500('Gagal terhubung ke layanan prakiraan cuaca.');
+      const entry = dailyMap.get(dateStr)!;
+      entry.tempSum += temp;
+      entry.maxTemp = Math.max(entry.maxTemp, max);
+      entry.count += 1;
     }
+
+    // Pass 2: Calculate Average & Format
+    const finalMap = new Map<string, WeatherData>();
+    dailyMap.forEach((val, key) => {
+      finalMap.set(key, {
+        suhu_rata: parseFloat((val.tempSum / val.count).toFixed(2)),
+        suhu_max: parseFloat(val.maxTemp.toFixed(2)),
+      });
+    });
+
+    return finalMap;
+  }
+
+  /**
+   * Helper: Centralized Error Handling
+   */
+  private handleAxiosError(error: unknown): never {
+    if (isAxiosError(error)) {
+      const status = error.response?.status;
+      const message = error.response?.data?.message ?? error.message;
+
+      console.error(`[WeatherService] Error ${status}: ${message}`);
+
+      if (status === 401) throw new Error500('API Key Weather invalid.');
+      if (status === 400) throw new Error400(`Bad Request: ${message}`);
+    }
+    throw new Error500('Gagal terhubung ke layanan cuaca.');
   }
 }
 

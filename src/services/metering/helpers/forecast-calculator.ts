@@ -144,7 +144,7 @@ export const _saveClassification = async (
   const classification = _mapClassificationToEnum(kinerja);
   const reasoning = `Deviasi ${deviasi.toFixed(2)}% dari prediksi normal.`;
 
-  await prisma.dailyUsageClassification.upsert({
+  return await prisma.dailyUsageClassification.upsert({
     where: { summary_id: summary.summary_id },
     update: {
       classification,

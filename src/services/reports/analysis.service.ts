@@ -385,6 +385,7 @@ export class AnalysisService extends BaseService {
       );
       return;
     }
+    
     const modelVersion = 'pax-integrated-v3.1';
 
     const predictionDate = new Date(baseDate);
@@ -855,7 +856,7 @@ export class AnalysisService extends BaseService {
     });
   }
 
-  public async runSingleClassification(date: Date, meterId: number): Promise<void> {
+  public async  runSingleClassification(date: Date, meterId: number): Promise<void> {
     return this._handleCrudOperation(async () => {
       const summary = await prisma.dailySummary.findFirst({
         where: {
@@ -1025,6 +1026,7 @@ export class AnalysisService extends BaseService {
         const childBudget = budgetAllocation.budget;
         const childPeriodDays =
           differenceInDays(childBudget.period_end, childBudget.period_start) + 1;
+
         const childPeriodMonths =
           (childBudget.period_end.getUTCFullYear() - childBudget.period_start.getUTCFullYear()) *
             12 +
