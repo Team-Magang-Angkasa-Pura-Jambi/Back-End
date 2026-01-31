@@ -15,6 +15,6 @@ export const classifyControllers = async (req: Request, res: Response, next: Nex
       data: result,
     });
   } catch (error) {
-    next(error);
+    return next(error);
   }
 };

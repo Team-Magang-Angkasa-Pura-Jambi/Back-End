@@ -14,11 +14,11 @@ export const predictsController = async (req: Request, res: Response, next: Next
       data: result,
     });
   } catch (error) {
-    next(error);
+    return next(error);
   }
 };
 
-export const predictBulkController = async (req: Request, res: Response, next: NextFunction) => {
+export const predictBulkController = async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const { start_date, end_date, meterId } = res.locals.validatedData.body;
 
@@ -34,6 +34,6 @@ export const predictBulkController = async (req: Request, res: Response, next: N
       data: result,
     });
   } catch (error) {
-    next(error);
+    return next(error);
   }
 };

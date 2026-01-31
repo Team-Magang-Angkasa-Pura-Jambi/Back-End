@@ -67,7 +67,7 @@ export const predictTerminal = async (date: Date, meterId: number) => {
     }
     return [];
   } catch (error) {
-    handlePredictionError(error, 'Terminal Prediction');
+    return handlePredictionError(error, 'Terminal Prediction');
   }
 };
 
@@ -85,7 +85,7 @@ export const predictOffice = async (date: Date, meterId: number) => {
     }
     return [];
   } catch (error) {
-    handlePredictionError(error, 'Office Prediction');
+    return handlePredictionError(error, 'Office Prediction');
   }
 };
 
@@ -185,6 +185,6 @@ export const predictService = async (date: Date, meterId: number) => {
       return await predictOffice(date, meter.meter_id);
     }
   } catch (error) {
-    handlePredictionError(error, 'Prediction');
+    return handlePredictionError(error, 'Prediction');
   }
 };
