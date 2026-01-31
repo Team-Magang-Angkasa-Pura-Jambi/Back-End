@@ -1,6 +1,7 @@
 import prisma from '../../configs/db.js';
 import { Error400, Error401, Error404 } from '../../utils/customError.js';
 import { _saveClassification } from '../metering/helpers/forecast-calculator.js';
+import { weatherService } from '../weather.service.js';
 import { machineLearningService } from './machineLearning.service.js';
 
 const ensureDataExists = <T>(data: T | null | undefined, name: string, date: Date): T => {
@@ -8,9 +9,13 @@ const ensureDataExists = <T>(data: T | null | undefined, name: string, date: Dat
   return data;
 };
 
+const toDecimalLike = (val: number) => ({
+  toNumber: () => val,
+});
+
 export const classifyTerminal = async (date: Date, meterId: number) => {
   try {
-    const [aktualKwhData, paxData, weatherData] = await Promise.all([
+    const [aktualKwhData, paxData, dbWeatherData] = await Promise.all([
       prisma.dailySummary.findFirst({
         where: { summary_date: date, meter_id: meterId },
         select: {
@@ -31,9 +36,26 @@ export const classifyTerminal = async (date: Date, meterId: number) => {
       }),
     ]);
 
+    let weatherData = dbWeatherData;
+
+    if (!weatherData) {
+      console.log(
+        `[Classify] Data cuaca DB kosong untuk ${date.toDateString()}, mengambil dari API...`,
+      );
+
+      const apiWeather = await weatherService.getForecast(date);
+
+      if (apiWeather) {
+        weatherData = {
+          avg_temp: toDecimalLike(apiWeather.suhu_rata) as any,
+          max_temp: toDecimalLike(apiWeather.suhu_max) as any,
+        };
+      }
+    }
+
     const validKwh = ensureDataExists(aktualKwhData, 'KWH', date);
     const validPax = ensureDataExists(paxData, 'Pax', date);
-    const validWeather = ensureDataExists(weatherData, 'Weather', date);
+    const validWeather = ensureDataExists(weatherData, 'Weather (DB & API Failed)', date);
 
     const mlPayload = {
       pax: validPax.total_pax,
@@ -67,7 +89,7 @@ export const classifyTerminal = async (date: Date, meterId: number) => {
 
 export const classifyOffice = async (date: Date, meterId: number) => {
   try {
-    const [aktualKwhData, weatherData] = await Promise.all([
+    const [aktualKwhData, dbWeatherData] = await Promise.all([
       prisma.dailySummary.findFirst({
         where: { summary_date: date, meter_id: meterId },
       }),
@@ -77,11 +99,28 @@ export const classifyOffice = async (date: Date, meterId: number) => {
       }),
     ]);
 
+    let weatherData = dbWeatherData;
+
+    if (!weatherData) {
+      console.log(
+        `[Classify] Data cuaca DB kosong untuk ${date.toDateString()}, mengambil dari API...`,
+      );
+
+      const apiWeather = await weatherService.getForecast(date);
+
+      if (apiWeather) {
+        weatherData = {
+          avg_temp: toDecimalLike(apiWeather.suhu_rata) as any,
+          max_temp: toDecimalLike(apiWeather.suhu_max) as any,
+        };
+      }
+    }
+
     const dayOfWeek = new Date(date).getUTCDay();
     const isWorkday = dayOfWeek >= 1 && dayOfWeek <= 5 ? 1 : 0;
 
     const validKwh = ensureDataExists(aktualKwhData, 'KWH', date);
-    const validWeather = ensureDataExists(weatherData, 'Weather', date);
+    const validWeather = ensureDataExists(weatherData, 'Weather (DB & API Failed)', date);
 
     const mlPayload = {
       is_hari_kerja: isWorkday,
@@ -109,6 +148,36 @@ export const classifyOffice = async (date: Date, meterId: number) => {
       throw error;
     } else {
       throw new Error('Internal Server Error processing Office Classification');
+    }
+  }
+};
+
+export const classifyService = async (date: Date, meterId: number) => {
+  try {
+    const meter = await prisma.meter.findUnique({
+      where: { meter_id: meterId },
+      include: {
+        category: true,
+      },
+    });
+
+    if (!meter) {
+      throw new Error404(`Meter dengan ID ${meterId} tidak ditemukan.`);
+    }
+
+    const categoryName = meter.category?.name?.toLowerCase() || '';
+
+    if (categoryName.includes('terminal')) {
+      return await classifyTerminal(date, meterId);
+    } else {
+      return await classifyOffice(date, meterId);
+    }
+  } catch (error) {
+    console.error('Error in classifyService:', error);
+    if (error instanceof Error400 || error instanceof Error401 || error instanceof Error404) {
+      throw error;
+    } else {
+      throw new Error('Internal Server Error processing Classification Service');
     }
   }
 };

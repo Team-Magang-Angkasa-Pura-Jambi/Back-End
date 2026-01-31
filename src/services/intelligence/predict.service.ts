@@ -163,3 +163,28 @@ export const predictBulkRange = async (startDate: Date, endDate: Date, meterId: 
     throw error;
   }
 };
+
+export const predictService = async (date: Date, meterId: number) => {
+  try {
+    const meter = await prisma.meter.findUnique({
+      where: { meter_id: Number(meterId) },
+      include: {
+        category: true,
+      },
+    });
+
+    if (!meter) {
+      throw new Error404(`Meter dengan ID ${meterId} tidak ditemukan.`);
+    }
+
+    const categoryName = meter.category?.name?.toLowerCase() || '';
+
+    if (categoryName.includes('terminal')) {
+      return await predictTerminal(date, meter.meter_id);
+    } else {
+      return await predictOffice(date, meter.meter_id);
+    }
+  } catch (error) {
+    handlePredictionError(error, 'Prediction');
+  }
+};

@@ -1,96 +1,152 @@
-import { PrismaClient, RoleName } from '../src/generated/prisma/index.js';
-import bcrypt from 'bcrypt';
+import { PrismaClient } from '../src/generated/prisma/index.js';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🚀 Seeding minimal master data...');
+  console.log('🚀 Seeding Master Data (Energy, Reading Types, Categories)...');
 
-  /**
-   * 1️⃣ ROLES: SuperAdmin, Admin, Technician
-   * Kita gunakan upsert agar tidak error jika data sudah ada.
-   */
+  // --- 1. ENERGY TYPES (Jenis Energi) ---
+  console.log('👉 Seeding Energy Types...');
 
-  // A. Role SuperAdmin
-  const superAdminRole = await prisma.role.upsert({
-    where: { role_name: RoleName.SuperAdmin },
-    update: {},
-    create: {
-      role_name: RoleName.SuperAdmin,
-    },
-  });
-
-  // B. Role Admin (Kita simpan ke variabel untuk dipakai user admin di bawah)
-  const adminRole = await prisma.role.upsert({
-    where: { role_name: RoleName.Admin },
-    update: {},
-    create: {
-      role_name: RoleName.Admin,
-    },
-  });
-
-  // C. Role Technician
-  const technician = await prisma.role.upsert({
-    where: { role_name: RoleName.Technician },
-    update: {},
-    create: {
-      role_name: RoleName.Technician,
-    },
-  });
-
-  /**
-   * 2️⃣ USER: admin
-   * User ini dikaitkan dengan role 'Admin' (sesuai variabel adminRole di atas)
-   */
-  const passwordHash = await bcrypt.hash('password123', 10);
-
-  await prisma.user.upsert({
-    where: { username: 'superdmin' },
-    update: {
-      password_hash: passwordHash,
-      role_id: superAdminRole.role_id,
-    },
-    create: {
-      username: 'admin',
-      password_hash: passwordHash,
-      role_id: superAdminRole.role_id,
-    },
-  });
-
-  /**
-   * 3️⃣ ENERGY TYPE DEFAULT
-   * - Electricity
-   * - Water
-   * - Fuel
-   */
   await prisma.energyType.upsert({
     where: { type_name: 'Electricity' },
     update: {},
-    create: {
-      type_name: 'Electricity',
-      unit_of_measurement: 'kWh',
-    },
+    create: { type_name: 'Electricity', unit_of_measurement: 'kWh' },
   });
 
   await prisma.energyType.upsert({
     where: { type_name: 'Water' },
     update: {},
-    create: {
-      type_name: 'Water',
-      unit_of_measurement: 'm³',
-    },
+    create: { type_name: 'Water', unit_of_measurement: 'm³' },
   });
 
   await prisma.energyType.upsert({
     where: { type_name: 'Fuel' },
     update: {},
+    create: { type_name: 'Fuel', unit_of_measurement: 'Liter' },
+  });
+
+  // --- 2. READING TYPES (Tipe Pembacaan) ---
+  // PERBAIKAN: Menambahkan field 'reading_unit' yang wajib
+  console.log('👉 Seeding Reading Types...');
+
+  // A. Listrik (WBP & LWBP)
+  await prisma.readingType.upsert({
+    where: { type_name: 'WBP' },
+    update: {},
     create: {
-      type_name: 'Fuel',
-      unit_of_measurement: 'Liter',
+      type_name: 'WBP',
+      reading_unit: 'kWh', // Field Wajib Baru
+      energy_type: { connect: { type_name: 'Electricity' } },
     },
   });
 
-  console.log('✅ Roles (SuperAdmin, Admin, Technician), User, & Energy types seeded successfully');
+  await prisma.readingType.upsert({
+    where: { type_name: 'LWBP' },
+    update: {},
+    create: {
+      type_name: 'LWBP',
+      reading_unit: 'kWh', // Field Wajib Baru
+      energy_type: { connect: { type_name: 'Electricity' } },
+    },
+  });
+
+  // B. BBM / Fuel (Flow)
+  await prisma.readingType.upsert({
+    where: { type_name: 'Flow' },
+    update: {},
+    create: {
+      type_name: 'Flow',
+      reading_unit: 'Liter', // Field Wajib Baru
+      energy_type: { connect: { type_name: 'Fuel' } },
+    },
+  });
+
+  // C. Air / Water (Total)
+  await prisma.readingType.upsert({
+    where: { type_name: 'Total' },
+    update: {},
+    create: {
+      type_name: 'Total',
+      reading_unit: 'm³', // Field Wajib Baru
+      energy_type: { connect: { type_name: 'Water' } },
+    },
+  });
+
+  // --- 3. METER CATEGORIES (Kategori Meter) ---
+  console.log('👉 Seeding Meter Categories...');
+
+  /**
+   * Kategori: TERMINAL
+   * Fasilitas Lengkap: Punya Listrik (WBP, LWBP), Air (Total), dan BBM (Flow)
+   */
+  await prisma.meterCategory.upsert({
+    where: { name: 'Terminal' },
+    update: {
+      allowed_reading_types: {
+        set: [], // Reset relasi lama
+        connect: [
+          { type_name: 'WBP' },
+          { type_name: 'LWBP' },
+          { type_name: 'Total' },
+          { type_name: 'Flow' },
+        ],
+      },
+    },
+    create: {
+      name: 'Terminal',
+      allowed_reading_types: {
+        connect: [
+          { type_name: 'WBP' },
+          { type_name: 'LWBP' },
+          { type_name: 'Total' },
+          { type_name: 'Flow' },
+        ],
+      },
+    },
+  });
+
+  /**
+   * Kategori: OFFICE
+   * Standar Kantor: Biasanya hanya Listrik dan Air
+   */
+  await prisma.meterCategory.upsert({
+    where: { name: 'Office' },
+    update: {
+      allowed_reading_types: {
+        set: [],
+        connect: [{ type_name: 'WBP' }, { type_name: 'LWBP' }, { type_name: 'Total' }],
+      },
+    },
+    create: {
+      name: 'Office',
+      allowed_reading_types: {
+        connect: [{ type_name: 'WBP' }, { type_name: 'LWBP' }, { type_name: 'Total' }],
+      },
+    },
+  });
+
+  /**
+   * Kategori: GENERAL
+   * Fasilitas Umum: Biasanya hanya butuh Listrik standar
+   */
+  await prisma.meterCategory.upsert({
+    where: { name: 'General' },
+    update: {
+      allowed_reading_types: {
+        set: [],
+        connect: [{ type_name: 'WBP' }, { type_name: 'LWBP' }],
+      },
+    },
+    create: {
+      name: 'General',
+      allowed_reading_types: {
+        connect: [{ type_name: 'WBP' }, { type_name: 'LWBP' }],
+      },
+    },
+  });
+
+  console.log('✅ Data Master (Tipe Bacaan & Kategori) berhasil dibuat!');
 }
 
 main()

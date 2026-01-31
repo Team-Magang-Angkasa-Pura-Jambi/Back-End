@@ -18,7 +18,6 @@ import SchemeRateRoute from './schemeRate.route.js';
 import recapRoute from './recap.route.js';
 import meterCategoryRoute from './meterCategory.route.js';
 import taxRoute from './tax.route.js';
-import { ConsumptionPredictionRoutes } from './ConsumptionPrediction.route.js';
 import notificationRoute from './notification.route.js';
 import TariffGroupRoute from './TariffGroup.route.js';
 import machineLearningRoute from './machineLearning.route.js';
@@ -58,7 +57,6 @@ export default (app: any) => {
   recapRoute(router);
   meterCategoryRoute(router);
   taxRoute(router);
-  ConsumptionPredictionRoutes(router);
   notificationRoute(router);
   TariffGroupRoute(router);
   machineLearningRoute(router);

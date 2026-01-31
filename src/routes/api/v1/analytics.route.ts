@@ -6,13 +6,10 @@ import { analysisController } from '../../../controllers/report/analysis.control
 import {
   budgetAllocationQuerySchema,
   budgetPreviewSchema,
-  bulkPredictionSchema,
-  classificationSummaryQuerySchema,
   efficiencyTargetPreviewSchema,
   fuelStockAnalysisQuerySchema,
   getBudgetSummarySchema,
   prepareBudgetSchema,
-  singlePredictionSchema,
   todaySummaryQuerySchema,
 } from '../../../validations/reports/analysis.validation.js';
 
@@ -25,13 +22,7 @@ export default (router: Router) => {
     validate(fuelStockAnalysisQuerySchema),
     asyncHandler(analysisController.getMonthlyFuelStockAnalysis),
   );
-  // summary
-  router.get(
-    `${prefix}/classification-summary`,
-    authorize('Admin', 'SuperAdmin', 'Technician'),
-    validate(classificationSummaryQuerySchema),
-    asyncHandler(analysisController.getClassificationSummary),
-  );
+
   router.get(
     `${prefix}/today-summary`,
     authorize('Technician', 'Admin', 'SuperAdmin'),
@@ -67,27 +58,6 @@ export default (router: Router) => {
     asyncHandler(analysisController.prepareNextPeriodBudget),
   );
 
-  // predict
-  router.post(
-    `${prefix}/run-single-prediction`,
-    authorize('SuperAdmin', 'Admin', 'Technician'),
-    validate(singlePredictionSchema),
-    asyncHandler(analysisController.runSinglePrediction),
-  );
-
-  router.post(
-    `${prefix}/run-bulk-predictions`,
-    authorize('SuperAdmin'),
-    validate(bulkPredictionSchema),
-    asyncHandler(analysisController.runBulkPredictions),
-  );
-  // classifation
-  router.post(
-    `${prefix}/run-single-classification`,
-    authorize('Admin', 'SuperAdmin'),
-    validate(singlePredictionSchema),
-    asyncHandler(analysisController.runSingleClassification),
-  );
   // efficiency
   router.post(
     `${prefix}/efficiency-target-preview`,

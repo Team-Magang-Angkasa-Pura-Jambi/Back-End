@@ -1,37 +1,17 @@
 import { type Request, type Response, type NextFunction } from 'express';
 
-import { classifyTerminal, classifyOffice } from '../../services/intelligence/classify.service.js';
 import { res200 } from '../../utils/response.js';
+import { classifyService } from '../../services/intelligence/classify.service.js';
 
-export const classifyTerminalController = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => {
+export const classifyControllers = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { date, meter_id } = res.locals.validatedData.body;
+    const { date, meterId } = res.locals.validatedData.body;
 
-    const result = await classifyTerminal(new Date(date), Number(meter_id));
+    const result = await classifyService(new Date(date), Number(meterId));
 
     return res200({
       res,
-      message: 'Klasifikasi performa Terminal berhasil',
-      data: result,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const classifyOfficeController = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { date, meter_id } = res.locals.validatedData.body;
-
-    const result = await classifyOffice(new Date(date), Number(meter_id));
-
-    return res200({
-      res,
-      message: 'Klasifikasi performa Kantor berhasil',
+      message: 'Klasifikasi performa  berhasil',
       data: result,
     });
   } catch (error) {

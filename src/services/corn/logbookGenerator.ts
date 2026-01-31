@@ -2,47 +2,68 @@ import { schedule } from 'node-cron';
 import { dailyLogbookService } from '../operations/dailyLogbook.service.js';
 import { alertService } from '../notifications/alert.service.js';
 
-async function generateLogbookForYesterdayIfNeeded() {
-  console.log(
-    `[CRON - Logbook] Memulai tugas pembuatan logbook harian pada ${new Date().toLocaleString(
-      'id-ID',
-      { timeZone: 'Asia/Jakarta' },
-    )}`,
-  );
+/**
+ * Logic Inti (Dipisah agar bisa ditest manual tanpa menunggu jam 2 pagi)
+ */
+export async function runLogbookGeneration() {
+  const jobStart = new Date();
+  console.log(`[LogbookCron] Memulai tugas pada ${jobStart.toISOString()}`);
 
   try {
-    const jobStartDate = new Date();
-    const nowInJakarta = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
-    const yesterdayInJakarta = new Date(nowInJakarta);
-    yesterdayInJakarta.setDate(nowInJakarta.getDate() - 1);
+    // 1. Tentukan Tanggal "Kemarin" dengan Aman
+    // Cron jalan jam 02:00 pagi Hari Ini, berarti kita mau generate data Kemarin.
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() - 1);
 
-    console.log(
-      `[CRON - Logbook] Log untuk ${
-        yesterdayInJakarta.toISOString().split('T')[0]
-      } akan dibuat/diperbarui.`,
-    );
-    const createdLogs = await dailyLogbookService.generateDailyLog(yesterdayInJakarta);
+    // Reset jam ke awal hari untuk konsistensi query database (00:00:00)
+    targetDate.setHours(0, 0, 0, 0);
 
-    const jobEndDate = new Date();
-    const durationInSeconds = (jobEndDate.getTime() - jobStartDate.getTime()) / 1000;
-    const performanceMessage = `Tugas pembuatan logbook harian selesai dalam ${durationInSeconds.toFixed(
-      2,
-    )} detik. ${createdLogs.length} logbook telah dibuat/diperbarui.`;
+    console.log(`[LogbookCron] Generating data untuk tanggal: ${targetDate.toDateString()}`);
 
+    // 2. Panggil Service Utama
+    // Pastikan service Anda siap menerima Date object, bukan string
+    const createdLogs = await dailyLogbookService.generateDailyLog(targetDate);
+
+    // 3. Hitung Durasi & Buat Laporan Kinerja
+    const duration = (new Date().getTime() - jobStart.getTime()) / 1000;
+    const logCount = createdLogs ? createdLogs.length : 0; // Handle jika void/null
+
+    const message = `Tugas Logbook Harian selesai dalam ${duration.toFixed(2)} detik. ${logCount} logbook berhasil digenerate/diupdate.`;
+
+    // 4. Kirim Notifikasi Sukses ke Dashboard Alert
     await alertService.create({
-      title: 'Laporan Kinerja: Pembuatan Logbook',
-      description: performanceMessage,
+      title: 'Laporan Kinerja: Logbook Harian',
+      description: message,
+      // Opsional: Severity INFO karena ini rutinitas sukses
+      // severity: 'INFO'
     });
-    console.log(`[CRON - Logbook] Tugas selesai dalam ${durationInSeconds.toFixed(2)} detik.`);
+
+    console.log(`[LogbookCron] Sukses. ${message}`);
   } catch (error) {
-    console.error('[CRON - Logbook] Terjadi kesalahan:', error);
+    console.error('[LogbookCron] Gagal:', error);
+
+    // Penting: Buat Alert Error agar admin tahu logbook gagal dibuat
+    await alertService.create({
+      title: 'SYSTEM ERROR: Logbook Gagal',
+      description: `Gagal generate logbook harian. Error: ${(error as Error).message}`,
+    });
   }
 }
 
+/**
+ * Entry Point Scheduler
+ */
 export function startDailyLogbookCron() {
-  console.log('⏰ Cron job untuk logbook harian otomatis diaktifkan (setiap hari jam 02:00 WIB).');
+  console.log('⏰ Cron job Logbook Harian: AKTIF (02:00 WIB).');
 
-  schedule('0 2 * * *', generateLogbookForYesterdayIfNeeded, {
-    timezone: 'Asia/Jakarta',
-  });
+  // Jalan setiap jam 02:00 Pagi
+  schedule(
+    '0 2 * * *',
+    async () => {
+      await runLogbookGeneration();
+    },
+    {
+      timezone: 'Asia/Jakarta',
+    },
+  );
 }

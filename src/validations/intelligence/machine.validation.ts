@@ -4,7 +4,7 @@ export const singleDateSchema = z.object({
   body: z.object({
     date: z.string({ error: 'Date is required' }).date('Invalid date format. Expected YYYY-MM-DD'), // Validasi format YYYY-MM-DD
 
-    meter_id: z.coerce
+    meterId: z.coerce
       .number({ error: 'Meter ID is required' })
       .int('Meter ID must be an integer')
       .positive('Meter ID must be a positive number'),
@@ -24,7 +24,7 @@ export const bulkDateSchema = z.object({
         .string({ error: 'End Date is required' })
         .date('Invalid date format. Expected YYYY-MM-DD'),
 
-      meter_id: z.coerce.number({ error: 'Meter ID is required' }).int().positive(),
+      meterId: z.coerce.number({ error: 'Meter ID is required' }).int().positive(),
     })
     .refine((data) => new Date(data.end_date) >= new Date(data.start_date), {
       message: 'End date must be greater than or equal to start date',

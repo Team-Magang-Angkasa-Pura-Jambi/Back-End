@@ -170,8 +170,8 @@ class MachineLearningService {
         const serviceForecast = await weatherService.getForecast(date);
 
         if (serviceForecast) {
-          suhu_rata = serviceForecast.avg_temp ?? 28.0;
-          suhu_max = serviceForecast.max_temp ?? 32.0;
+          suhu_rata = serviceForecast.suhu_rata ?? 28.0;
+          suhu_max = serviceForecast.suhu_max ?? 32.0;
         }
       }
 

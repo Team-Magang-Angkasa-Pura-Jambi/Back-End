@@ -8,7 +8,6 @@ interface WeatherData {
   suhu_max: number;
 }
 
-// Interface untuk helper grouping
 interface DailyAccumulator {
   tempSum: number;
   maxTemp: number;
@@ -35,11 +34,9 @@ class WeatherService {
   public async getForecast(date: Date): Promise<WeatherData | null> {
     if (!this.apiKey) return null;
 
-    // Normalisasi tanggal ke YYYY-MM-DD untuk query DB & API filter
     const targetDateStr = date.toISOString().split('T')[0];
-    const targetDateObj = new Date(targetDateStr); // Pastikan jam 00:00:00 UTC
+    const targetDateObj = new Date(targetDateStr);
 
-    // 1. Cek Cache Database
     const cachedWeather = await prisma.weatherHistory.findUnique({
       where: { data_date: targetDateObj },
     });
@@ -51,7 +48,6 @@ class WeatherService {
       };
     }
 
-    // 2. Jika tidak ada, ambil dari API (Fetch sekali, simpan banyak)
     try {
       console.log(`[WeatherService] Cache miss untuk ${targetDateStr}. Mengambil data API...`);
 
@@ -67,12 +63,8 @@ class WeatherService {
       const forecastList = response.data.list;
       if (!forecastList || forecastList.length === 0) return null;
 
-      // 3. Proses & Agregasi data untuk SEMUA hari yang tersedia di response
-      // Output Map: "2023-10-01" -> { suhu_rata: 28, suhu_max: 32 }
       const processedForecasts = this.aggregateForecastByDay(forecastList);
 
-      // 4. Bulk Insert ke Database (Optimasi Database)
-      // Kita simpan semua hari yang didapat, bukan cuma targetDate
       const dbPayload = Array.from(processedForecasts.entries()).map(([dateStr, data]) => ({
         data_date: new Date(dateStr),
         avg_temp: data.suhu_rata,
@@ -82,12 +74,11 @@ class WeatherService {
       if (dbPayload.length > 0) {
         await prisma.weatherHistory.createMany({
           data: dbPayload,
-          skipDuplicates: true, // PENTING: Agar tidak error jika hari lain sudah ada di DB
+          skipDuplicates: true,
         });
         console.log(`[WeatherService] Berhasil menyimpan cache untuk ${dbPayload.length} hari.`);
       }
 
-      // 5. Kembalikan data untuk tanggal yang diminta user
       const result = processedForecasts.get(targetDateStr);
 
       if (!result) {
@@ -100,7 +91,7 @@ class WeatherService {
       return result;
     } catch (error) {
       this.handleAxiosError(error);
-      return null; // Unreachable karena handleAxiosError melempar throw
+      return null;
     }
   }
 
@@ -110,9 +101,8 @@ class WeatherService {
   private aggregateForecastByDay(list: any[]): Map<string, WeatherData> {
     const dailyMap = new Map<string, DailyAccumulator>();
 
-    // Pass 1: Sum & Max Logic
     for (const item of list) {
-      const dateStr = item.dt_txt.split(' ')[0]; // Ambil YYYY-MM-DD
+      const dateStr = item.dt_txt.split(' ')[0];
       const temp = item.main.temp;
       const max = item.main.temp_max;
 
@@ -126,7 +116,6 @@ class WeatherService {
       entry.count += 1;
     }
 
-    // Pass 2: Calculate Average & Format
     const finalMap = new Map<string, WeatherData>();
     dailyMap.forEach((val, key) => {
       finalMap.set(key, {
