@@ -462,7 +462,6 @@ model AnalyticsInsight {
   acknowledged_by User?  @relation(fields: [acknowledged_by_user_id], references: [user_id])
 
   @@map("analytics_insights")
-  @@index([is_read, created_at])
 }
 
 model ConsumptionPrediction {
