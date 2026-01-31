@@ -18,7 +18,6 @@ import SchemeRateRoute from './schemeRate.route.js';
 import recapRoute from './recap.route.js';
 import meterCategoryRoute from './meterCategory.route.js';
 import taxRoute from './tax.route.js';
-import { ConsumptionPredictionRoutes } from './ConsumptionPrediction.route.js';
 import notificationRoute from './notification.route.js';
 import TariffGroupRoute from './TariffGroup.route.js';
 import machineLearningRoute from './machineLearning.route.js';
@@ -28,6 +27,8 @@ import budgetRoute from './budget.route.js';
 import annualBudgetRoute from './annualBudget.route.js';
 import readingRoutes from './reading.routes.js';
 import visualizationsRoute from './visualizations.route.js';
+import classifyRoute from './classify.route.js';
+import predictRoute from './predict.route.js';
 
 export default (app: any) => {
   const router = Router();
@@ -56,7 +57,6 @@ export default (app: any) => {
   recapRoute(router);
   meterCategoryRoute(router);
   taxRoute(router);
-  ConsumptionPredictionRoutes(router);
   notificationRoute(router);
   TariffGroupRoute(router);
   machineLearningRoute(router);
@@ -66,4 +66,7 @@ export default (app: any) => {
   annualBudgetRoute(router);
 
   visualizationsRoute(router);
+
+  classifyRoute(router);
+  predictRoute(router);
 };

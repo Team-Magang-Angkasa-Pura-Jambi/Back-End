@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sklearn.exceptions import InconsistentVersionWarning
 
-
+from typing import List
 
 
 warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
@@ -112,7 +112,11 @@ class EvaluationInputFull(BaseModel):
     aktual_kwh_terminal: float
     aktual_kwh_kantor: float
 
-
+class PredictionResult(BaseModel):
+    tanggal: str
+    prediksi_pax: int
+    prediksi_kwh_terminal: float
+    prediksi_kwh_kantor: float
 
 
 @app.exception_handler(Exception)
@@ -220,7 +224,21 @@ def _evaluate_kantor_logic(suhu_rata: float, suhu_max: float, is_workday: int, a
     }
 
 
-
+def _calculate_prediction(tanggal: date, suhu_rata: float, suhu_max: float):
+    # 1. Extract Feature
+    target_date, is_workday = _get_date_features(tanggal)
+    
+    # 2. Predict Chain
+    pred_pax = _predict_pax_logic(target_date, is_workday)
+    pred_terminal = _predict_terminal_logic(pred_pax, suhu_rata, suhu_max)
+    pred_kantor = _predict_kantor_logic(suhu_rata, suhu_max, is_workday)
+    
+    return {
+        "tanggal": tanggal,
+        "prediksi_pax": round(pred_pax),
+        "prediksi_kwh_terminal": round(pred_terminal, 2),
+        "prediksi_kwh_kantor": round(pred_kantor, 2)
+    }
 
 @app.get("/")
 def read_root():
@@ -240,6 +258,18 @@ def predict_all(data: PredictionInput):
         "prediksi_kwh_terminal": round(pred_terminal, 2),
         "prediksi_kwh_kantor": round(pred_kantor, 2)
     }
+
+
+@app.post("/predict/bulk", response_model=List[PredictionResult], summary="Prediksi Bulk Range")
+def predict_bulk(data_list: list[PredictionInput]):
+    results = []
+    for item in data_list:
+        # Panggil logic yang sama
+        res = _calculate_prediction(item.tanggal, item.suhu_rata, item.suhu_max)
+        results.append(res)
+    
+    return results
+
 
 @app.post("/predict/terminal", summary="Prediksi Terminal Saja")
 def predict_terminal(data: PredictionInput):

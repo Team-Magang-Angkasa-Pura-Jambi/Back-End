@@ -14,7 +14,7 @@ import type {
 } from '../../types/reports/recap.types.js';
 import { BaseService } from '../../utils/baseService.js';
 import { SocketServer } from '../../configs/socket.js';
-import { _classifyDailyUsage } from '../metering/helpers/forecast-calculator.js';
+import { classifyOffice, classifyTerminal } from '../intelligence/classify.service.js';
 
 type NotificationEvent = 'recalculation:success' | 'recalculation:progress' | 'recalculation:error';
 
@@ -318,7 +318,11 @@ export class RecapService extends BaseService {
           processed: i + 1,
           total: summaries.length,
         });
-        await _classifyDailyUsage(summaries[i], summaries[i].meter);
+        if (summaries[i].meter.category.name === 'Office') {
+          await classifyOffice(summaries[i].summary_date, summaries[i].meter_id);
+        } else {
+          await classifyTerminal(summaries[i].summary_date, summaries[i].meter_id);
+        }
       }
 
       notify('recalculation:success', {

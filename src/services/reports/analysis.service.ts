@@ -1,23 +1,15 @@
 import prisma from '../../configs/db.js';
-import { Prisma, UsageCategory } from '../../generated/prisma/index.js';
+import { Prisma, type UsageCategory } from '../../generated/prisma/index.js';
 import type { GetAnalysisQuery } from '../../types/reports/analysis.types.js';
 import { Error400, Error404 } from '../../utils/customError.js';
 import { BaseService } from '../../utils/baseService.js';
-import { weatherService } from '../weather.service.js';
 import { differenceInDays } from 'date-fns';
-import { _classifyDailyUsage } from '../metering/helpers/forecast-calculator.js';
-import { machineLearningService } from '../intelligence/machineLearning.service.js';
 
 export type ClassificationSummary = Partial<Record<UsageCategory, number>> & {
   totalDaysInMonth: number;
   totalDaysWithData: number;
   totalDaysWithClassification: number;
 };
-
-interface ElectricityClassificationSummary {
-  terminal: ClassificationSummary;
-  kantor: ClassificationSummary;
-}
 
 interface MonthlyBudgetAllocation {
   month: number;
@@ -54,11 +46,6 @@ export interface TodaySummaryResponse {
     pax: number | null;
   };
   sumaries: NewDataCountNotification[];
-}
-interface bodyRunBulkPrediction {
-  startDate: Date;
-  endDate: Date;
-  userId: number;
 }
 
 export class AnalysisService extends BaseService {
@@ -132,99 +119,6 @@ export class AnalysisService extends BaseService {
     return Promise.all(summaryPromises);
   }
 
-  /**
-   * BARU: Menghitung ringkasan jumlah klasifikasi (BOROS, HEMAT, NORMAL)
-   * untuk periode dan filter yang diberikan.
-   */
-  public async getClassificationSummary(
-    query: Omit<GetAnalysisQuery, 'energyType' | 'meterId'>,
-  ): Promise<ElectricityClassificationSummary> {
-    const { month } = query;
-
-    const targetDate = month ? new Date(`${month}-01T00:00:00.000Z`) : new Date();
-    const year = targetDate.getUTCFullYear();
-    const monthIndex = targetDate.getUTCMonth();
-
-    const startDate = new Date(Date.UTC(year, monthIndex, 1));
-    const endDate = new Date(Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999));
-
-    const totalDaysInMonth = endDate.getUTCDate();
-
-    const [terminalMeter, kantorMeter] = await Promise.all([
-      prisma.meter.findUnique({ where: { meter_code: 'ELEC-TERM-01' } }),
-      prisma.meter.findUnique({ where: { meter_code: 'ELEC-KANTOR-01' } }),
-    ]);
-
-    if (!terminalMeter || !kantorMeter) {
-      throw new Error404(
-        'Meteran listrik untuk Terminal atau Kantor tidak ditemukan. Pastikan meter dengan kode ELEC-TERM-01 dan ELEC-KANTOR-01 ada.',
-      );
-    }
-
-    const [terminalSummary, kantorSummary] = await Promise.all([
-      this._getSummaryForMeter(terminalMeter.meter_id, startDate, endDate),
-      this._getSummaryForMeter(kantorMeter.meter_id, startDate, endDate),
-    ]);
-
-    return {
-      terminal: { ...terminalSummary, totalDaysInMonth },
-      kantor: { ...kantorSummary, totalDaysInMonth },
-    };
-  }
-
-  /**
-   * Helper privat untuk menghitung ringkasan klasifikasi untuk satu meter.
-   * @param meterId - ID meter yang akan dianalisis.
-   * @param startDate - Tanggal mulai periode.
-   * @param endDate - Tanggal akhir periode.
-   * @returns Objek ClassificationSummary tanpa totalDaysInMonth.
-   */
-  private async _getSummaryForMeter(
-    meterId: number,
-    startDate: Date,
-    endDate: Date,
-  ): Promise<Omit<ClassificationSummary, 'totalDaysInMonth'>> {
-    const [groupedData, distinctDaysWithData] = await Promise.all([
-      prisma.dailyUsageClassification.groupBy({
-        by: ['classification'],
-        where: {
-          meter_id: meterId,
-          classification_date: { gte: startDate, lte: endDate },
-          classification: {
-            in: [UsageCategory.BOROS, UsageCategory.HEMAT, UsageCategory.NORMAL],
-          },
-        },
-        _count: { classification: true },
-      }),
-      prisma.dailySummary.count({
-        where: {
-          meter_id: meterId,
-          summary_date: { gte: startDate, lte: endDate },
-        },
-      }),
-    ]);
-
-    const summary: Omit<ClassificationSummary, 'totalDaysInMonth'> = {
-      totalDaysWithData: distinctDaysWithData,
-      totalDaysWithClassification: 0,
-      BOROS: 0,
-      HEMAT: 0,
-      NORMAL: 0,
-    };
-
-    let totalClassifiedDays = 0;
-    for (const group of groupedData) {
-      const count = group._count.classification;
-      if (group.classification) {
-        summary[group.classification] = count;
-      }
-      totalClassifiedDays += count;
-    }
-    summary.totalDaysWithClassification = totalClassifiedDays;
-
-    return summary;
-  }
-
   public async getTodaySummary(
     energyType?: 'Electricity' | 'Water' | 'Fuel',
   ): Promise<TodaySummaryResponse> {
@@ -294,207 +188,6 @@ export class AnalysisService extends BaseService {
       },
       sumaries: formattedData,
     };
-  }
-
-  /**
-   * BARU: Menjalankan prediksi secara massal untuk rentang tanggal tertentu.
-   * Ini berjalan sebagai background job dan memberikan notifikasi via socket.
-   * @param body - Berisi startDate, endDate, dan userId untuk notifikasi.
-   */
-
-  public async runBulkPredictions(body: bodyRunBulkPrediction): Promise<void> {
-    const { startDate, endDate, userId } = body;
-    const jobDescription = `bulk-predict-${userId}-${Date.now()}`;
-
-    console.log(
-      `[BACKGROUND JOB - ${jobDescription}] Memulai prediksi massal dari ${startDate.toISOString()} hingga ${endDate.toISOString()}`,
-    );
-
-    const notifyUser = (event: string, data: unknown) => {
-      if (userId) {
-        prisma.user.findUnique({ where: { user_id: userId } }).then((user) => {
-          if (user) {
-            console.log(`NOTIFY ${userId}: ${event}`, data);
-          }
-        });
-      }
-    };
-
-    try {
-      const datesToProcess = [];
-      for (let d = new Date(startDate); d <= endDate; d.setUTCDate(d.getUTCDate() + 1)) {
-        datesToProcess.push(new Date(d));
-      }
-
-      if (datesToProcess.length === 0) {
-        notifyUser('prediction:success', {
-          message: 'Tidak ada tanggal untuk diproses.',
-        });
-        return;
-      }
-
-      const totalDays = datesToProcess.length;
-      let processedCount = 0;
-
-      for (const currentDate of datesToProcess) {
-        const predictionDate = new Date(currentDate);
-        predictionDate.setUTCDate(currentDate.getUTCDate() + 1);
-
-        await this.runPredictionForDate(currentDate);
-
-        processedCount++;
-        notifyUser('prediction:progress', {
-          processed: processedCount,
-          total: totalDays,
-        });
-      }
-
-      notifyUser('prediction:success', {
-        message: `Prediksi massal selesai. ${processedCount} hari diproses.`,
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[BACKGROUND JOB - ${jobDescription}] Error:`, errorMessage);
-      notifyUser('prediction:error', { message: errorMessage });
-    }
-  }
-
-  /**
-   * BARU: Logika terpusat untuk menjalankan prediksi untuk H+1 berdasarkan data di `baseDate`.
-   * Bisa dipanggil dari cron, bulk process, atau trigger lain.
-   * @param baseDate - Tanggal yang datanya akan digunakan sebagai dasar prediksi.
-   */
-  public async runPredictionForDate(baseDate: Date, targetMeterId?: number): Promise<void> {
-    const [terminalMeter, kantorMeter] = await Promise.all([
-      prisma.meter.findUnique({ where: { meter_code: 'ELEC-TERM-01' } }),
-      prisma.meter.findUnique({ where: { meter_code: 'ELEC-KANTOR-01' } }),
-    ]);
-
-    if (!terminalMeter || !kantorMeter) {
-      console.error('[Prediction] Gagal menemukan meter ELEC-TERM-01 atau ELEC-KANTOR-01.');
-      return;
-    }
-
-    if (
-      targetMeterId &&
-      targetMeterId !== terminalMeter.meter_id &&
-      targetMeterId !== kantorMeter.meter_id
-    ) {
-      console.error(
-        `[Prediction] Prediksi tunggal hanya didukung untuk meter Terminal (${terminalMeter.meter_id}) atau Kantor (${kantorMeter.meter_id}). ID yang diberikan: ${targetMeterId}`,
-      );
-      return;
-    }
-    const modelVersion = 'pax-integrated-v3.1';
-
-    const predictionDate = new Date(baseDate);
-
-    const predictionDateStr = baseDate.toISOString().split('T')[0];
-
-    try {
-      const weatherDataFromService = await weatherService.getForecast(predictionDate);
-      const weatherData = {
-        suhu_rata: weatherDataFromService?.suhu_rata ?? 28.0,
-        suhu_max: weatherDataFromService?.suhu_max ?? 32.0,
-      };
-
-      console.log(`[Prediction] Menjalankan prediksi untuk ${predictionDateStr}...`);
-
-      const predictionsToRun = [];
-
-      if (!targetMeterId || targetMeterId === terminalMeter.meter_id) {
-        predictionsToRun.push(
-          this._runTerminalPrediction(
-            predictionDate,
-            terminalMeter.meter_id,
-            modelVersion,
-            weatherData,
-          ),
-        );
-      }
-      if (!targetMeterId || targetMeterId === kantorMeter.meter_id) {
-        predictionsToRun.push(
-          this._runKantorPrediction(
-            predictionDate,
-            kantorMeter.meter_id,
-            modelVersion,
-            weatherData,
-          ),
-        );
-      }
-
-      await Promise.all(predictionsToRun);
-    } catch (error) {
-      console.error(`[Prediction] Gagal menjalankan prediksi untuk ${predictionDateStr}:`, error);
-    }
-  }
-
-  private async _runTerminalPrediction(
-    predictionDate: Date,
-    meterId: number,
-    modelVersion: string,
-    weatherData: { suhu_rata: number; suhu_max: number },
-  ) {
-    const predictionResult = await machineLearningService.getTerminalPrediction(
-      predictionDate,
-      weatherData,
-    );
-    if (predictionResult) {
-      await prisma.consumptionPrediction.upsert({
-        where: {
-          prediction_date_meter_id_model_version: {
-            prediction_date: predictionDate,
-            meter_id: meterId,
-            model_version: modelVersion,
-          },
-        },
-        update: {
-          predicted_value: predictionResult.prediksi_kwh_terminal,
-        },
-        create: {
-          prediction_date: predictionDate,
-          predicted_value: predictionResult.prediksi_kwh_terminal,
-          meter_id: meterId,
-          model_version: modelVersion,
-        },
-      });
-      console.log(
-        `[Prediction] Hasil prediksi Terminal untuk ${predictionDate.toISOString().split('T')[0]} berhasil disimpan.`,
-      );
-    }
-  }
-
-  private async _runKantorPrediction(
-    predictionDate: Date,
-    meterId: number,
-    modelVersion: string,
-    weatherData: { suhu_rata: number; suhu_max: number },
-  ) {
-    const predictionResult = await machineLearningService.getKantorPrediction(
-      predictionDate,
-      weatherData,
-    );
-    if (predictionResult) {
-      await prisma.consumptionPrediction.upsert({
-        where: {
-          prediction_date_meter_id_model_version: {
-            prediction_date: predictionDate,
-            meter_id: meterId,
-            model_version: modelVersion,
-          },
-        },
-        update: { predicted_value: predictionResult.prediksi_kwh_kantor },
-        create: {
-          prediction_date: predictionDate,
-          predicted_value: predictionResult.prediksi_kwh_kantor,
-          meter_id: meterId,
-          model_version: modelVersion,
-        },
-      });
-      console.log(
-        `[Prediction] Hasil prediksi Kantor untuk ${predictionDate.toISOString().split('T')[0]} berhasil disimpan.`,
-      );
-    }
   }
 
   /**
@@ -855,38 +548,6 @@ export class AnalysisService extends BaseService {
     });
   }
 
-  public async runSingleClassification(date: Date, meterId: number): Promise<void> {
-    return this._handleCrudOperation(async () => {
-      const summary = await prisma.dailySummary.findFirst({
-        where: {
-          meter_id: meterId,
-          summary_date: date,
-        },
-        include: {
-          meter: {
-            include: {
-              energy_type: true,
-              category: true,
-              tariff_group: {
-                include: {
-                  price_schemes: { include: { rates: true, taxes: true } },
-                },
-              },
-            },
-          },
-        },
-      });
-
-      if (!summary) {
-        throw new Error404(
-          `Tidak ada data ringkasan (DailySummary) yang ditemukan untuk meter ID ${meterId} pada tanggal ${date.toISOString().split('T')[0]}.`,
-        );
-      }
-
-      await _classifyDailyUsage(summary, summary.meter);
-    });
-  }
-
   public async getEfficiencyTargetPreview(data: {
     target_value: number;
     meterId: number;
@@ -1025,6 +686,7 @@ export class AnalysisService extends BaseService {
         const childBudget = budgetAllocation.budget;
         const childPeriodDays =
           differenceInDays(childBudget.period_end, childBudget.period_start) + 1;
+
         const childPeriodMonths =
           (childBudget.period_end.getUTCFullYear() - childBudget.period_start.getUTCFullYear()) *
             12 +
@@ -1037,7 +699,7 @@ export class AnalysisService extends BaseService {
 
         suggestion = {
           standard: {
-            message: `Berdasarkan alokasi anggaran periode ini, target harian Anda adalah sekitar ${suggestedDailyKwh.toDP(2)} ${meter.energy_type.unit_of_measurement}.`,
+            message: `Berdasarkan alokasi anggaran periode ini, target harian Anda adalah sekitar ${suggestedDailyKwh.toDP(2).toString()} ${meter.energy_type.unit_of_measurement}.`,
             suggestedDailyKwh: suggestedDailyKwh.toNumber(),
             suggestedTotalKwh: suggestedDailyKwh.times(totalDays).toNumber(),
           },

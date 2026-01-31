@@ -12,7 +12,7 @@ export const _createOrUpdateDistributedSummary = async (
   meter: MeterWithRelations,
   date: Date,
   summaryDetails: Omit<Prisma.SummaryDetailCreateInput, 'summary' | 'summary_id'>[],
-): Promise<Prisma.DailySummaryGetPayload<{}>> => {
+): Promise<Prisma.DailySummaryGetPayload<object>> => {
   const totalConsumption = summaryDetails[0]?.consumption_value ?? new Prisma.Decimal(0);
   const totalCost = summaryDetails[0]?.consumption_cost ?? new Prisma.Decimal(0);
 

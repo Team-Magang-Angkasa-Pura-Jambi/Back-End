@@ -2,91 +2,111 @@ import { schedule } from 'node-cron';
 import prisma from '../../configs/db.js';
 import { alertService } from '../notifications/alert.service.js';
 
-/**
- * Cron job untuk membuat ringkasan laporan harian sistem.
- * Berjalan setiap hari jam 7 pagi.
- */
+const formatDate = (date: Date) =>
+  date.toLocaleDateString('id-ID', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
 export function startDailyReportScheduler() {
-  console.log('⏰ Cron job untuk Laporan Harian Sistem diaktifkan.');
-  const options = {
-    scheduled: true,
-    timezone: 'Asia/Jakarta',
-  };
+  console.log('⏰ Cron job untuk Laporan Harian Sistem diaktifkan (07:00 WIB).');
+
   schedule(
-    '0 7 * * *', // Setiap hari jam 07:00
+    '0 7 * * *',
     async () => {
-      const jobStartDate = new Date();
-      console.log(
-        `[CRON - DailyReport] Memulai pembuatan laporan harian pada ${jobStartDate.toLocaleString(
-          'id-ID',
-          { timeZone: 'Asia/Jakarta' },
-        )}`,
-      );
+      const jobStart = new Date();
+
+      const timeString = jobStart.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta' });
+      console.log(`[DailyReport] Memulai job pada ${timeString}`);
 
       try {
-        // Tentukan rentang waktu (kemarin)
-        const today = new Date(jobStartDate);
-        today.setHours(0, 0, 0, 0);
-        const yesterday = new Date(today);
-        yesterday.setDate(today.getDate() - 1);
+        const endOfYesterday = new Date(jobStart);
+        endOfYesterday.setHours(0, 0, 0, 0);
 
-        // 1. Kumpulkan data dari 24 jam terakhir
-        const [newAlertsCount, handledAlertsCount, cronReports] = await Promise.all([
-          // Hitung alert baru yang dibuat kemarin
-          prisma.alert.count({
-            where: {
-              alert_timestamp: { gte: yesterday, lt: today },
-              NOT: { title: { startsWith: 'Laporan' } }, // Abaikan alert laporan itu sendiri
-            },
+        const startOfYesterday = new Date(endOfYesterday);
+        startOfYesterday.setDate(endOfYesterday.getDate() - 1);
+
+        const dateFilter = {
+          alert_timestamp: { gte: startOfYesterday, lt: endOfYesterday },
+          NOT: { title: { startsWith: 'Laporan' } },
+        };
+
+        const [statsByStatus, topIssues, cronReports] = await Promise.all([
+          prisma.alert.groupBy({
+            by: ['status'],
+            where: dateFilter,
+            _count: { _all: true },
           }),
-          // Hitung alert yang diselesaikan kemarin
-          prisma.alert.count({
-            where: {
-              status: 'HANDLED',
-              alert_timestamp: { gte: yesterday, lt: today },
-            },
+
+          prisma.alert.groupBy({
+            by: ['title'],
+            where: dateFilter,
+            _count: { title: true },
+            orderBy: { _count: { title: 'desc' } },
+            take: 3,
           }),
-          // Ambil laporan kinerja dari cron job lain
+
           prisma.alert.findMany({
             where: {
               title: { startsWith: 'Laporan Kinerja' },
-              alert_timestamp: { gte: yesterday, lt: today },
+              alert_timestamp: { gte: startOfYesterday, lt: endOfYesterday },
             },
             select: { title: true, description: true },
           }),
         ]);
 
-        // 2. Susun deskripsi laporan
-        let description = `Ringkasan aktivitas sistem untuk tanggal ${
-          yesterday.toISOString().split('T')[0]
-        }:\n`;
-        description += `- ${newAlertsCount} peringatan baru dibuat.\n`;
-        description += `- ${handledAlertsCount} peringatan berhasil diselesaikan (status: HANDLED).\n\n`;
-        description += `Laporan Tugas Otomatis:\n`;
-        if (cronReports.length > 0) {
-          cronReports.forEach((report) => {
-            description += `- ${report.title}: Sukses.\n`;
+        const totalAlerts = statsByStatus.reduce((acc, curr) => acc + curr._count._all, 0);
+
+        const statusBreakdown = statsByStatus
+          .map((s) => `- **${s.status}**: ${s._count._all}`)
+          .join('\n');
+
+        let report = `📊 **Laporan Harian Sistem**\n`;
+        report += `📅 Tanggal: ${formatDate(startOfYesterday)}\n\n`;
+
+        report += `**Ringkasan Aktivitas:**\n`;
+        report += `- Total Alert Masuk: ${totalAlerts}\n`;
+        if (totalAlerts > 0) {
+          report += `Status Terakhir:\n${statusBreakdown}\n`;
+        }
+        report += `\n`;
+
+        report += `**🔥 Top 3 Masalah Terbanyak:**\n`;
+        if (topIssues.length > 0) {
+          topIssues.forEach((issue, idx) => {
+            report += `${idx + 1}. ${issue.title} (${issue._count.title}x)\n`;
           });
         } else {
-          description += `- Tidak ada laporan kinerja dari tugas otomatis.\n`;
+          report += `- Sistem stabil, tidak ada isu dominan.\n`;
+        }
+        report += `\n`;
+
+        report += `**🤖 Laporan Tugas Otomatis:**\n`;
+        if (cronReports.length > 0) {
+          cronReports.forEach((r) => (report += `- ✅ ${r.title}\n`));
+        } else {
+          report += `- Tidak ada laporan kinerja otomatis tercatat.\n`;
         }
 
-        // 3. Buat satu Alert Sistem sebagai laporan harian
         await alertService.create({
-          title: 'Laporan Harian Sistem',
-          description,
+          title: `Laporan Harian: ${formatDate(startOfYesterday)}`,
+          description: report,
         });
 
-        console.log('[CRON - DailyReport] Laporan harian sistem berhasil dibuat.');
+        console.log(`[DailyReport] Sukses. Total Alert: ${totalAlerts}`);
       } catch (error) {
-        console.error('[CRON - DailyReport] Gagal membuat laporan harian:', error);
-        // Jika gagal, buat alert error
+        console.error('[DailyReport] Gagal:', error);
+
         await alertService.create({
-          title: 'Error Sistem: Laporan Harian Gagal',
-          description: `Cron job untuk membuat laporan harian sistem gagal.`,
+          title: 'System Error: Daily Report Failed',
+          description: `Gagal generate laporan. Error: ${(error as Error).message}`,
         });
       }
     },
-    options,
+    {
+      timezone: 'Asia/Jakarta',
+    },
   );
 }

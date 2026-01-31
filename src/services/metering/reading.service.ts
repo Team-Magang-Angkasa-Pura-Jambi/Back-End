@@ -9,7 +9,6 @@ import type {
 } from '../../types/metering/reading.types.js';
 import { Error400 } from '../../utils/customError.js';
 import { dailyLogbookService } from '../operations/dailyLogbook.service.js';
-import { AnalysisService } from '../reports/analysis.service.js';
 import {
   _checkAndResolveMissingDataAlert,
   _checkUsageAgainstTargetAndNotify,
@@ -30,7 +29,8 @@ import {
   _findOrCreateSession,
   _updateDailySummary,
 } from './helpers/reading-summarizer.js';
-import { _classifyDailyUsage } from './helpers/forecast-calculator.js';
+import { classifyOffice, classifyTerminal } from '../intelligence/classify.service.js';
+import { predictOffice, predictTerminal } from '../intelligence/predict.service.js';
 
 export class ReadingService extends GenericBaseService<
   typeof prisma.readingSession,
@@ -78,9 +78,11 @@ export class ReadingService extends GenericBaseService<
 
     await _checkAndResolveMissingDataAlert(meter_id, dateForDb);
 
-    const analysisService = new AnalysisService();
-
-    analysisService.runPredictionForDate(dateForDb);
+    if (meter.category.name === 'Terminal') {
+      await predictTerminal(dateForDb, meter.meter_id);
+    } else {
+      await predictOffice(dateForDb, meter.meter_id);
+    }
 
     return newSession;
   }
@@ -154,7 +156,7 @@ export class ReadingService extends GenericBaseService<
   ): Promise<void> {
     const db = tx ?? this._prisma;
     return this._handleCrudOperation(async () => {
-      const meter = await db.meter.findUniqueOrThrow({
+      const meter = await prisma.meter.findUniqueOrThrow({
         where: { meter_id: meterId },
         include: {
           energy_type: true,
@@ -178,7 +180,11 @@ export class ReadingService extends GenericBaseService<
 
       if (summaries) {
         for (const summary of summaries) {
-          await _classifyDailyUsage(summary, meter);
+          if (meter.category.name === 'Office') {
+            await classifyOffice(summary.summary_date, meter.meter_id);
+          } else {
+            await classifyTerminal(summary.summary_date, meter.meter_id);
+          }
           await _checkUsageAgainstTargetAndNotify(summary, meter);
         }
       }
