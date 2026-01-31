@@ -224,7 +224,7 @@ def _evaluate_kantor_logic(suhu_rata: float, suhu_max: float, is_workday: int, a
     }
 
 
-def _calculate_prediction(tanggal: date, suhu_rata: float, suhu_max: float):
+def _calculate_prediction(tanggal: str, suhu_rata: float, suhu_max: float):
     # 1. Extract Feature
     target_date, is_workday = _get_date_features(tanggal)
     
