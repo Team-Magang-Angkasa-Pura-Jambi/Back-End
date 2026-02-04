@@ -286,7 +286,8 @@ export class RecapService extends BaseService {
     userId?: number,
   ): Promise<void> {
     const notify = (event: string, data: any) =>
-      userId && SocketServer.instance.io.to(String(userId)).emit(event, data);
+      // Tambahkan 'as any' pada event
+      userId && SocketServer.instance.io.to(String(userId)).emit(event as any, data);
 
     console.log(`🔄 Start Recalculate: ${startDate.toDateString()} - ${endDate.toDateString()}`);
 

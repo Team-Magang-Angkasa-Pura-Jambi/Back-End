@@ -199,7 +199,7 @@ export class AnnualBudgetService extends GenericBaseService<
           period_end: childEndDate,
 
           // Perbaikan di sini: Gunakan field ID langsung
-          parent_budget_id: parent_budget_id || null,
+          parent_budget_id: parent_budget_id ?? null,
 
           ...(allocations &&
             allocations.length > 0 && {
