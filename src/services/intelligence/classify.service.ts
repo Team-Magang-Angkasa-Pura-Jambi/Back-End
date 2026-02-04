@@ -80,7 +80,10 @@ export const classifyTerminal = async (date: Date, meterId: number) => {
   } catch (error) {
     console.error('Error in classifyTerminal:', error);
     if (error instanceof Error400 || error instanceof Error401 || error instanceof Error404) {
-      throw error;
+      console.warn(`⚠️ Data tidak ditemukan (404). Melanjutkan proses ke item berikutnya...`);
+
+      // Return null agar fungsi pemanggil tahu bahwa data ini kosong, tapi tidak error
+      return;
     } else {
       throw new Error('Internal Server Error processing Terminal Classification');
     }
@@ -175,7 +178,10 @@ export const classifyService = async (date: Date, meterId: number) => {
   } catch (error) {
     console.error('Error in classifyService:', error);
     if (error instanceof Error400 || error instanceof Error401 || error instanceof Error404) {
-      throw error;
+      console.warn(`⚠️ Data tidak ditemukan (404). Melanjutkan proses ke item berikutnya...`);
+
+      // Return null agar fungsi pemanggil tahu bahwa data ini kosong, tapi tidak error
+      return; 
     } else {
       throw new Error('Internal Server Error processing Classification Service');
     }

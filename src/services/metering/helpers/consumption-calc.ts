@@ -79,7 +79,7 @@ export const _calculateElectricitySummary = async (
   const getDetailValue = (session: SessionWithDetails | null, typeId: number) =>
     session?.details.find((d) => d.reading_type_id === typeId)?.value;
 
-  const faktorKali = new Prisma.Decimal(meter.tariff_group?.faktor_kali ?? 1);
+  const faktorKali = new Prisma.Decimal(1);
 
   const rateWbp = priceScheme.rates.find((r) => r.reading_type_id === wbpType.reading_type_id);
   const rateLwbp = priceScheme.rates.find((r) => r.reading_type_id === lwbpType.reading_type_id);

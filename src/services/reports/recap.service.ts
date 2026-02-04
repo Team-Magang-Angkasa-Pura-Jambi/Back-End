@@ -14,6 +14,7 @@ import type {
 } from '../../types/reports/recap.types.js';
 import { BaseService } from '../../utils/baseService.js';
 import { SocketServer } from '../../configs/socket.js';
+import { _updateDailySummary } from '../metering/helpers/reading-summarizer.js';
 import { classifyOffice, classifyTerminal } from '../intelligence/classify.service.js';
 
 type NotificationEvent = 'recalculation:success' | 'recalculation:progress' | 'recalculation:error';
@@ -281,26 +282,32 @@ export class RecapService extends BaseService {
   public async recalculateSummaries(
     startDate: Date,
     endDate: Date,
-    meterId?: number,
+    meterId?: number, // Opsional
     userId?: number,
   ): Promise<void> {
-    const notify = (event: NotificationEvent, data: any) =>
+    const notify = (event: string, data: any) =>
       userId && SocketServer.instance.io.to(String(userId)).emit(event, data);
 
+    console.log(`🔄 Start Recalculate: ${startDate.toDateString()} - ${endDate.toDateString()}`);
+
     try {
-      const summaries = await prisma.dailySummary.findMany({
+      // LANGKAH 1 (Query ke-1): Ambil Data Sesi (Bulk)
+      // Kita include 'meter' sedalam mungkin agar di dalam loop kita tidak perlu query meter lagi
+      const sessions = await prisma.readingSession.findMany({
         where: {
-          summary_date: { gte: startDate, lte: endDate },
+          reading_date: { gte: startDate, lte: endDate },
           ...(meterId && { meter_id: meterId }),
         },
         include: {
           meter: {
+            // Pre-fetch Meter & Tariff agar tidak query ulang di dalam helper
             include: {
               energy_type: true,
               category: true,
               tariff_group: {
                 include: {
                   price_schemes: {
+                    where: { is_active: true },
                     include: {
                       rates: { include: { reading_type: true } },
                       taxes: { include: { tax: true } },
@@ -311,28 +318,42 @@ export class RecapService extends BaseService {
             },
           },
         },
+        orderBy: { reading_date: 'asc' }, // Penting urut tanggal agar previous reading valid
       });
 
-      for (let i = 0; i < summaries.length; i++) {
-        notify('recalculation:progress', {
-          processed: i + 1,
-          total: summaries.length,
+      const total = sessions.length;
+      if (total === 0) return;
+
+      // LANGKAH 2 (Loop N): Proses Logic Perhitungan
+      // Ini memang N+1, tapi karena Meter sudah di-include di atas,
+      // beban query di dalam _updateDailySummary berkurang drastis (hanya read session & upsert summary).
+
+      for (let i = 0; i < total; i++) {
+        const session = sessions[i];
+
+        // Gunakan Transaction per item agar aman
+        await prisma.$transaction(async (tx) => {
+          // Panggil Logic Inti (Sama seperti yang dipakai di create)
+          // Kita passing session.meter yang SUDAH lengkap dari Query 1
+          await _updateDailySummary(tx, session.meter, session.reading_date);
         });
-        if (summaries[i].meter.category.name === 'Office') {
-          await classifyOffice(summaries[i].summary_date, summaries[i].meter_id);
-        } else {
-          await classifyTerminal(summaries[i].summary_date, summaries[i].meter_id);
+
+        if (session.meter.category.name === 'Terminal') {
+          await classifyTerminal(session.reading_date, session.meter.meter_id);
+        } else if (session.meter.category.name === 'Office') {
+          await classifyOffice(session.reading_date, session.meter.meter_id);
+        }
+
+        // Feedback Progress (Opsional)
+        if ((i + 1) % 10 === 0) {
+          notify('recalculation:progress', { processed: i + 1, total });
         }
       }
 
-      notify('recalculation:success', {
-        message: `Selesai memproses ${summaries.length} data.`,
-        total: summaries.length,
-      });
+      notify('recalculation:success', { message: 'Selesai', total });
     } catch (error) {
-      notify('recalculation:error', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
+      console.error(error);
+      notify('recalculation:error', { message: 'Gagal' });
     }
   }
 }
