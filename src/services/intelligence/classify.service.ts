@@ -181,7 +181,7 @@ export const classifyService = async (date: Date, meterId: number) => {
       console.warn(`⚠️ Data tidak ditemukan (404). Melanjutkan proses ke item berikutnya...`);
 
       // Return null agar fungsi pemanggil tahu bahwa data ini kosong, tapi tidak error
-      return; 
+      return;
     } else {
       throw new Error('Internal Server Error processing Classification Service');
     }

@@ -63,23 +63,14 @@ export const _calculateElectricitySummary = async (
     );
   }
 
-  const wbpType = await tx.readingType.findUnique({
-    where: { type_name: 'WBP' },
-  });
-  const lwbpType = await tx.readingType.findUnique({
-    where: { type_name: 'LWBP' },
-  });
+  const wbpType = await tx.readingType.findUnique({ where: { type_name: 'WBP' } });
+  const lwbpType = await tx.readingType.findUnique({ where: { type_name: 'LWBP' } });
 
   if (!wbpType || !lwbpType) {
     throw new Error500(
       'Konfigurasi sistem error: Tipe bacaan WBP atau LWBP tidak ditemukan di database.',
     );
   }
-
-  const getDetailValue = (session: SessionWithDetails | null, typeId: number) =>
-    session?.details.find((d) => d.reading_type_id === typeId)?.value;
-
-  const faktorKali = new Prisma.Decimal(1);
 
   const rateWbp = priceScheme.rates.find((r) => r.reading_type_id === wbpType.reading_type_id);
   const rateLwbp = priceScheme.rates.find((r) => r.reading_type_id === lwbpType.reading_type_id);
@@ -93,43 +84,223 @@ export const _calculateElectricitySummary = async (
   const HARGA_WBP = new Prisma.Decimal(rateWbp.value);
   const HARGA_LWBP = new Prisma.Decimal(rateLwbp.value);
 
-  const wbpConsumption = _calculateSafeConsumption(
+  const meterName = meter.category.name.toLowerCase();
+
+  if (meterName.includes('kantor') || meterName.includes('office')) {
+    return _calculateOfficeSummary(
+      tx,
+      meter,
+      currentSession,
+      previousSession,
+      HARGA_WBP,
+      HARGA_LWBP,
+    );
+  } else {
+    return _calculateTerminalSummary(
+      currentSession,
+      previousSession,
+      meter,
+      wbpType,
+      lwbpType,
+      HARGA_WBP,
+      HARGA_LWBP,
+    );
+  }
+};
+
+const _calculateOfficeSummary = async (
+  tx: Prisma.TransactionClient,
+  meter: MeterWithRelations,
+  currentSession: SessionWithDetails,
+  previousSession: SessionWithDetails | null,
+
+  HARGA_WBP: Prisma.Decimal,
+  HARGA_LWBP: Prisma.Decimal,
+) => {
+  const FAKTOR_KALI = new Prisma.Decimal(120);
+
+  const typeSore = await tx.readingType.findFirst({ where: { type_name: 'Sore' } });
+  const typeMalam = await tx.readingType.findFirst({ where: { type_name: 'Malam' } });
+  const typePagi = await tx.readingType.findFirst({ where: { type_name: 'Pagi' } });
+
+  if (!typeSore || !typeMalam || !typePagi) {
+    throw new Error404('Missing Type Reading');
+  }
+
+  const startDate = new Date(currentSession.reading_date);
+  startDate.setHours(0, 0, 0, 0);
+
+  const endDate = new Date(currentSession.reading_date);
+  endDate.setHours(23, 59, 59, 999);
+
+  const dailySessions = await tx.readingSession.findMany({
+    where: {
+      meter_id: meter.meter_id,
+      reading_date: { gte: startDate, lte: endDate },
+    },
+    include: { details: true },
+    orderBy: { reading_date: 'asc' },
+  });
+
+  const findValueByType = (typeId: number | undefined): Prisma.Decimal | null => {
+    if (!typeId) return null;
+
+    for (const session of dailySessions) {
+      const detail = session.details.find((d) => d.reading_type_id === typeId);
+      if (detail) return new Prisma.Decimal(detail.value);
+    }
+
+    const currDetail = currentSession.details.find((d) => d.reading_type_id === typeId);
+    if (currDetail) return new Prisma.Decimal(currDetail.value);
+
+    return null;
+  };
+
+  const getPreviousValue = (sess: SessionWithDetails | null) => {
+    if (!sess) return new Prisma.Decimal(0);
+
+    const detail =
+      sess.details.find((d) => d.reading_type_id === typePagi?.reading_type_id) ?? sess.details[0];
+    return detail ? new Prisma.Decimal(detail.value) : new Prisma.Decimal(0);
+  };
+
+  const standAwal = getPreviousValue(previousSession);
+
+  const standSore = findValueByType(typeSore?.reading_type_id);
+  const standMalam = findValueByType(typeMalam?.reading_type_id);
+  const standPagi = findValueByType(typePagi?.reading_type_id);
+
+  let deltaLWBPSiang = new Prisma.Decimal(0);
+  if (standSore) {
+    deltaLWBPSiang = standSore.minus(standPagi ?? 0);
+  }
+
+  let deltaWBP = new Prisma.Decimal(0);
+  if (standMalam && standSore) {
+    deltaWBP = standMalam.minus(standSore);
+  }
+
+  let deltaLWBPMalam = new Prisma.Decimal(0);
+  if (standPagi) {
+    if (standMalam) {
+      deltaLWBPMalam = standPagi.minus(standMalam);
+    } else if (standSore) {
+      deltaLWBPMalam = standPagi.minus(standSore);
+    }
+  }
+
+  if (deltaLWBPSiang.isNegative()) deltaLWBPSiang = new Prisma.Decimal(0);
+  if (deltaWBP.isNegative()) deltaWBP = new Prisma.Decimal(0);
+  if (deltaLWBPMalam.isNegative()) deltaLWBPMalam = new Prisma.Decimal(0);
+
+  const rawLWBP = deltaLWBPSiang.plus(deltaLWBPMalam);
+  const rawWBP = deltaWBP;
+
+  const realLWBP = rawLWBP.times(FAKTOR_KALI);
+  const realWBP = rawWBP.times(FAKTOR_KALI);
+
+  const costLWBP = realLWBP.times(HARGA_LWBP);
+  const costWBP = realWBP.times(HARGA_WBP);
+
+  return _buildOutput(
+    meter,
+    realWBP,
+    realLWBP,
+    costWBP,
+    costLWBP,
+    standPagi ?? new Prisma.Decimal(0),
+    standAwal,
+  );
+};
+
+const _calculateTerminalSummary = (
+  currentSession: SessionWithDetails,
+  previousSession: SessionWithDetails | null,
+  meter: MeterWithRelations,
+  wbpType: any,
+  lwbpType: any,
+  HARGA_WBP: Prisma.Decimal,
+  HARGA_LWBP: Prisma.Decimal,
+) => {
+  const FAKTOR_KALI = new Prisma.Decimal(1);
+
+  const getDetailValue = (session: SessionWithDetails | null, typeId: number) =>
+    session?.details.find((d) => d.reading_type_id === typeId)?.value;
+
+  const rawWbpDelta = _calculateSafeConsumption(
     getDetailValue(currentSession, wbpType.reading_type_id),
     getDetailValue(previousSession, wbpType.reading_type_id),
     meter.rollover_limit,
   );
 
-  const lwbpConsumption = _calculateSafeConsumption(
+  const rawLwbpDelta = _calculateSafeConsumption(
     getDetailValue(currentSession, lwbpType.reading_type_id),
     getDetailValue(previousSession, lwbpType.reading_type_id),
     meter.rollover_limit,
   );
-  const wbpCost = wbpConsumption.times(faktorKali).times(HARGA_WBP);
-  const lwbpCost = lwbpConsumption.times(faktorKali).times(HARGA_LWBP);
 
+  const realWBP = rawWbpDelta.times(FAKTOR_KALI);
+  const realLWBP = rawLwbpDelta.times(FAKTOR_KALI);
+
+  const costWBP = realWBP.times(HARGA_WBP);
+  const costLWBP = realLWBP.times(HARGA_LWBP);
+
+  const currentReadingWBP =
+    getDetailValue(currentSession, wbpType.reading_type_id) ?? new Prisma.Decimal(0);
+  const prevReadingWBP =
+    getDetailValue(previousSession, wbpType.reading_type_id) ?? new Prisma.Decimal(0);
+
+  const output = _buildOutput(
+    meter,
+    realWBP,
+    realLWBP,
+    costWBP,
+    costLWBP,
+    currentReadingWBP,
+    prevReadingWBP,
+  );
+
+  output[0].current_reading = currentReadingWBP;
+  output[0].previous_reading = prevReadingWBP;
+
+  const currentReadingLWBP =
+    getDetailValue(currentSession, lwbpType.reading_type_id) ?? new Prisma.Decimal(0);
+  const prevReadingLWBP =
+    getDetailValue(previousSession, lwbpType.reading_type_id) ?? new Prisma.Decimal(0);
+
+  output[1].current_reading = currentReadingLWBP;
+  output[1].previous_reading = prevReadingLWBP;
+
+  return output;
+};
+
+const _buildOutput = (
+  meter: any,
+  realWBP: Prisma.Decimal,
+  realLWBP: Prisma.Decimal,
+  costWBP: Prisma.Decimal,
+  costLWBP: Prisma.Decimal,
+  currRead: Prisma.Decimal,
+  prevRead: Prisma.Decimal,
+) => {
   const summaryDetails: Omit<Prisma.SummaryDetailCreateInput, 'summary' | 'summary_id'>[] = [
     {
       metric_name: 'Pemakaian WBP',
       energy_type: { connect: { energy_type_id: meter.energy_type_id } },
-      current_reading:
-        getDetailValue(currentSession, wbpType.reading_type_id) ?? new Prisma.Decimal(0),
-      previous_reading:
-        getDetailValue(previousSession, wbpType.reading_type_id) ?? new Prisma.Decimal(0),
-      consumption_value: wbpConsumption,
-      consumption_cost: wbpCost,
-      wbp_value: wbpConsumption,
+      current_reading: currRead,
+      previous_reading: prevRead,
+      consumption_value: realWBP,
+      consumption_cost: costWBP,
+      wbp_value: realWBP,
     },
     {
       metric_name: 'Pemakaian LWBP',
       energy_type: { connect: { energy_type_id: meter.energy_type_id } },
-
-      current_reading:
-        getDetailValue(currentSession, lwbpType.reading_type_id) ?? new Prisma.Decimal(0),
-      previous_reading:
-        getDetailValue(previousSession, lwbpType.reading_type_id) ?? new Prisma.Decimal(0),
-      consumption_value: lwbpConsumption,
-      consumption_cost: lwbpCost,
-      lwbp_value: lwbpConsumption,
+      current_reading: currRead,
+      previous_reading: prevRead,
+      consumption_value: realLWBP,
+      consumption_cost: costLWBP,
+      lwbp_value: realLWBP,
     },
   ];
 
@@ -138,8 +309,8 @@ export const _calculateElectricitySummary = async (
     energy_type: { connect: { energy_type_id: meter.energy_type_id } },
     current_reading: new Prisma.Decimal(0),
     previous_reading: new Prisma.Decimal(0),
-    consumption_value: wbpConsumption.plus(lwbpConsumption),
-    consumption_cost: wbpCost.plus(lwbpCost),
+    consumption_value: realWBP.plus(realLWBP),
+    consumption_cost: costWBP.plus(costLWBP),
   });
 
   return summaryDetails;
@@ -321,47 +492,103 @@ export const _calculateWaterSummary = async (
     include: { rates: true };
   }> | null,
 ) => {
+  const dateStr = currentSession.reading_date.toISOString().split('T')[0];
+  console.log(
+    `\n💧 [WATER-CALC] Memulai perhitungan untuk Meter: ${meter.meter_code} (${dateStr})`,
+  );
+
+  // 1. Validasi Price Scheme
   if (!priceScheme) {
+    console.error(
+      `❌ [WATER-CALC] Price Scheme tidak ditemukan untuk Group: ${meter.tariff_group.group_code}`,
+    );
     throw new Error404(
-      `Konfigurasi harga untuk golongan tarif '${meter.tariff_group.group_code}' pada tanggal ${
-        currentSession.reading_date.toISOString().split('T')[0]
-      } tidak ditemukan.`,
+      `Konfigurasi harga untuk golongan tarif '${meter.tariff_group.group_code}' pada tanggal ${dateStr} tidak ditemukan.`,
     );
   }
 
-  const mainType = await tx.readingType.findFirst({
-    where: { energy_type_id: meter.energy_type_id },
+  // 2. Cari Tipe Bacaan 'Water'
+  // Dispesifikasikan 'Water' agar tidak tertukar jika nanti ada tipe lain di EnergyType yang sama
+  let mainType = await tx.readingType.findFirst({
+    where: {
+      energy_type_id: meter.energy_type_id,
+      type_name: 'Water',
+    },
   });
-  if (!mainType) return [];
 
-  const getDetailValue = (session: SessionWithDetails | null, typeId: number) =>
-    session?.details.find((d) => d.reading_type_id === typeId)?.value;
+  // Fallback: Jika tidak ada yang bernama 'Water', ambil tipe pertama apapun di energi ini
+  if (!mainType) {
+    console.warn(`⚠️ [WATER-CALC] Tipe 'Water' spesifik tidak ditemukan, mencari tipe generic...`);
+    mainType = await tx.readingType.findFirst({
+      where: { energy_type_id: meter.energy_type_id },
+    });
+  }
 
+  if (!mainType) {
+    console.error(
+      `❌ [WATER-CALC] Tidak ada ReadingType yang terdefinisi untuk Energy ID: ${meter.energy_type_id}`,
+    );
+    return [];
+  }
+
+  console.log(
+    `✅ [WATER-CALC] Reading Type ditemukan: ${mainType.type_name} (ID: ${mainType.reading_type_id})`,
+  );
+
+  // 3. Helper untuk ambil nilai detail
+  const getDetailValue = (session: SessionWithDetails | null, typeId: number) => {
+    const detail = session?.details.find((d) => d.reading_type_id === typeId);
+    return detail ? new Prisma.Decimal(detail.value) : undefined; // Return undefined jika tidak ada, jangan 0 dulu
+  };
+
+  // 4. Ambil Nilai Meter (Stand Awal & Akhir)
+  const currentVal = getDetailValue(currentSession, mainType.reading_type_id);
+  const prevVal = getDetailValue(previousSession, mainType.reading_type_id);
+
+  console.log(`📊 [WATER-READING] Stand Akhir (Current): ${currentVal?.toString() ?? 'Tidak Ada'}`);
+  console.log(
+    `📊 [WATER-READING] Stand Awal (Previous): ${prevVal?.toString() ?? 'Tidak Ada (Initial/Null)'}`,
+  );
+
+  // 5. Validasi Rate Harga
   const rate = priceScheme.rates.find((r) => r.reading_type_id === mainType.reading_type_id);
 
   if (!rate) {
+    console.error(
+      `❌ [WATER-CALC] Tarif tidak ditemukan di skema '${priceScheme.scheme_name}' untuk tipe ID ${mainType.reading_type_id}`,
+    );
     throw new Error404(
       `Tarif untuk '${mainType.type_name}' tidak terdefinisi dalam skema harga '${priceScheme.scheme_name}'.`,
     );
   }
-  const HARGA_SATUAN = new Prisma.Decimal(rate.value);
 
+  const HARGA_SATUAN = new Prisma.Decimal(rate.value ?? 0);
+  console.log(`💰 [WATER-RATE] Harga Satuan: Rp ${HARGA_SATUAN.toString()} / m3`);
+
+  // 6. Hitung Konsumsi (Safe Calculation handling Rollover)
+  // Jika prevVal undefined, _calculateSafeConsumption harus menanganinya (biasanya dianggap 0 atau pemakaian 0)
   const consumption = _calculateSafeConsumption(
-    getDetailValue(currentSession, mainType.reading_type_id),
-    getDetailValue(previousSession, mainType.reading_type_id),
+    currentVal ?? new Prisma.Decimal(0),
+    prevVal ?? new Prisma.Decimal(0), // Jika null, asumsi flow meter baru/reset
     meter.rollover_limit,
   );
 
+  const totalCost = consumption.times(HARGA_SATUAN);
+
+  console.log(`🧮 [WATER-RESULT] Konsumsi: ${consumption.toString()} m3`);
+  console.log(`💵 [WATER-RESULT] Total Biaya: Rp ${totalCost.toString()}`);
+
+  // 7. Return Format Summary
   return [
     {
       metric_name: `Pemakaian Harian (${meter.energy_type.type_name})`,
       energy_type: { connect: { energy_type_id: meter.energy_type_id } },
-      current_reading:
-        getDetailValue(currentSession, mainType.reading_type_id) ?? new Prisma.Decimal(0),
-      previous_reading:
-        getDetailValue(previousSession, mainType.reading_type_id) ?? new Prisma.Decimal(0),
+
+      current_reading: currentVal ?? new Prisma.Decimal(0),
+      previous_reading: prevVal ?? new Prisma.Decimal(0),
+
       consumption_value: consumption,
-      consumption_cost: consumption.times(HARGA_SATUAN),
+      consumption_cost: totalCost,
     },
   ];
 };

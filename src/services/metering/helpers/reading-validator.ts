@@ -80,26 +80,27 @@ export const _validateDuplicateSession = async (meter_id: number, dateForDb: Dat
       unique_meter_reading_per_day: { meter_id, reading_date: dateForDb },
     },
     select: {
+      // TAMBAHAN 1: Ambil nama meter untuk pengecekan
+      meter: {
+        select: { category: true }, // Sesuaikan field ini dengan schema DB Anda (misal: 'name' atau 'meter_name')
+      },
       details: {
         select: {
-          reading_type: { select: { type_name: true } }, // Pastikan ambil field 'name'
+          reading_type: { select: { type_name: true } },
         },
       },
     },
   });
 
   if (existingSession) {
-    // 1. Ambil list tipe yang sudah ada (misal: "Kwh Import, Kvarh")
     const existingTypes = existingSession.details.map((d) => d.reading_type.type_name).join(', ');
 
-    // 2. Format tanggal agar lebih enak dibaca manusia (Opsional, atau tetap pakai ISO)
     const formattedDate = dateForDb.toLocaleDateString('id-ID', {
       day: 'numeric',
       month: 'long',
       year: 'numeric',
     });
 
-    // 3. Throw Error dengan Diksi Modern
     throw new Error409(
       `Entri harian untuk tanggal ${formattedDate} sudah terdaftar. (Data yang sudah ada: ${existingTypes})`,
     );

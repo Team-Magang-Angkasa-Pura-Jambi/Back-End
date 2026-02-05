@@ -151,19 +151,37 @@ export const _createReadingDetails = async (
   sessionId: number,
   details: CreateReadingSessionInternal['details'],
 ) => {
-  const detailsToCreate = details.map((detail) => ({
-    session_id: sessionId,
-    reading_type_id: detail.reading_type_id,
-    value: detail.value,
-  }));
-  await tx.readingDetail.createMany({ data: detailsToCreate });
+  // Gunakan Promise.all untuk menjalankan operasi secara paralel (lebih cepat)
+  await Promise.all(
+    details.map((detail) => {
+      return tx.readingDetail.upsert({
+        // 1. Kunci Unik (Pastikan di schema.prisma ada @@unique([session_id, reading_type_id]))
+        where: {
+          session_id_reading_type_id: {
+            session_id: sessionId,
+            reading_type_id: detail.reading_type_id,
+          },
+        },
+        // 2. Jika belum ada (Input jam 17.00), buat baru
+        create: {
+          session_id: sessionId,
+          reading_type_id: detail.reading_type_id,
+          value: detail.value,
+        },
+        // 3. Jika sudah ada (Input jam 24.00 / Revisi), update nilainya
+        update: {
+          value: detail.value,
+        },
+      });
+    }),
+  );
 };
-
 export const _updateDailySummary = async (
   tx: Prisma.TransactionClient,
   meter: MeterWithRelations,
   dateForDb: Date,
 ): Promise<Prisma.DailySummaryGetPayload<object>[] | null> => {
+  // 1. Ambil Sesi Hari Ini
   const currentSession = await tx.readingSession.findUnique({
     where: {
       unique_meter_reading_per_day: {
@@ -176,8 +194,9 @@ export const _updateDailySummary = async (
 
   if (!currentSession) return null;
 
-  let previousSession: SessionWithDetails | null;
+  let previousSession: SessionWithDetails | null = null;
 
+  // 2. Cek Tipe Fuel (Logika Khusus Fuel)
   const typeFuel = await tx.energyType.findUnique({
     where: { type_name: 'Fuel' },
     select: { type_name: true },
@@ -192,9 +211,9 @@ export const _updateDailySummary = async (
       orderBy: { reading_date: 'desc' },
       include: { details: true },
     });
-
     return _calculateAndDistributeFuelSummary(tx, meter, currentSession, previousFuelSession);
   } else {
+    // Logic Listrik/Air (Ambil sesi H-1 persis)
     const previousDate = new Date(dateForDb);
     previousDate.setUTCDate(previousDate.getUTCDate() - 1);
 
@@ -209,30 +228,49 @@ export const _updateDailySummary = async (
     });
   }
 
+  // 3. Kalkulasi Detail
   const summaryDetailsToCreate = await _calculateSummaryDetails(
     tx,
     meter,
     currentSession,
     previousSession,
   );
+
   if (summaryDetailsToCreate.length === 0) return null;
 
+  // 4. Hitung Total Biaya
   const finalTotalCost = summaryDetailsToCreate.reduce((sum, detail) => {
+    if (detail.metric_name === 'Total Pemakaian') return sum;
+
     const rawCost = detail.consumption_cost ?? 0;
-    const safeCost = new Prisma.Decimal(rawCost as any);
-
-    return detail.metric_name !== 'Total Pemakaian' ? sum.plus(safeCost) : sum;
+    return sum.plus(new Prisma.Decimal(rawCost as any));
   }, new Prisma.Decimal(0));
 
+  // ==========================================================
+  // 5. Hitung Total Konsumsi (PERBAIKAN DI SINI)
+  // ==========================================================
   const finalTotalConsumption = summaryDetailsToCreate.reduce((sum, detail) => {
-    const rawCost = detail.consumption_value ?? 0;
-    const safeCost = new Prisma.Decimal(rawCost as any);
+    // Skip baris rekapitulasi agar tidak double count
+    if (detail.metric_name === 'Total Pemakaian') return sum;
 
-    return !detail.metric_name.includes('WBP') && !detail.metric_name.includes('LWBP')
-      ? sum.plus(new Prisma.Decimal(safeCost))
-      : sum;
+    const rawVal = detail.consumption_value ?? 0;
+    const val = new Prisma.Decimal(rawVal as any);
+
+    // Logic 1: Jika Listrik (WBP + LWBP)
+    if (detail.metric_name.includes('LWBP') || detail.metric_name.includes('WBP')) {
+      return sum.plus(val);
+    }
+
+    // Logic 2: Jika Air (Water)
+    // Cek berdasarkan tipe energi meteran atau nama metric
+    if (meter.energy_type.type_name === 'Water' || detail.metric_name.includes('Water')) {
+      return sum.plus(val);
+    }
+
+    return sum;
   }, new Prisma.Decimal(0));
 
+  // 6. Upsert Daily Summary (Header)
   const dailySummary = await tx.dailySummary.upsert({
     where: {
       summary_date_meter_id: {
@@ -252,6 +290,7 @@ export const _updateDailySummary = async (
     },
   });
 
+  // 7. Refresh Detail Summary
   await tx.summaryDetail.deleteMany({
     where: { summary_id: dailySummary.summary_id },
   });
@@ -259,11 +298,9 @@ export const _updateDailySummary = async (
   await tx.summaryDetail.createMany({
     data: summaryDetailsToCreate.map((detail) => {
       const { energy_type, ...rest } = detail;
-
       const energyTypeId = (energy_type as any)?.connect?.energy_type_id;
-      if (!energyTypeId) {
-        throw new Error('Energy Type ID is missing in summary details');
-      }
+
+      if (!energyTypeId) throw new Error('Energy Type ID missing');
 
       return {
         ...rest,
@@ -275,7 +312,6 @@ export const _updateDailySummary = async (
 
   return [dailySummary];
 };
-
 export const _buildWhereClause = (
   date?: Date,
   energyTypeName?: string,

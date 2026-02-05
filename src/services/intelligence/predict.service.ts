@@ -170,6 +170,7 @@ export const predictService = async (date: Date, meterId: number) => {
       where: { meter_id: Number(meterId) },
       include: {
         category: true,
+        energy_type: true, // 1. Tambahkan include energy_type
       },
     });
 
@@ -177,8 +178,21 @@ export const predictService = async (date: Date, meterId: number) => {
       throw new Error404(`Meter dengan ID ${meterId} tidak ditemukan.`);
     }
 
+    // 2. Validasi Tipe Energi
+    // Pastikan prediksi hanya jalan jika tipe energinya 'Electricity'
+    // Sesuaikan string 'electricity' dengan data di database Anda (case-insensitive)
+    const energyTypeName = meter.energy_type?.type_name?.toLowerCase() || '';
+
+    if (energyTypeName !== 'electricity') {
+      console.warn(
+        `[Prediction] Skipped. Meter ID ${meterId} adalah tipe '${meter.energy_type?.type_name}'. Prediksi hanya untuk Electricity.`,
+      );
+      return null; // Atau throw Error400 jika ingin memblokir request
+    }
+
     const categoryName = meter.category?.name?.toLowerCase() || '';
 
+    // 3. Lanjut ke logika kategori
     if (categoryName.includes('terminal')) {
       return await predictTerminal(date, meter.meter_id);
     } else {

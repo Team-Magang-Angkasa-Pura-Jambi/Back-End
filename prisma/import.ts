@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import csv from 'csv-parser';
-import prisma from '../src/configs/db.js';
+import prisma from '../src/configs/db.js'; // Pastikan path ini benar
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,44 +10,62 @@ const __dirname = path.dirname(__filename);
 const CSV_FILE_PATH = path.join(__dirname, 'historical_data.csv');
 
 export async function runImport() {
-  console.log(`🚀 Memulai impor data (Terminal, Office, & Pax)...`);
+  console.log(`🚀 Memulai impor data (Terminal, Office, Pax, & Water)...`);
 
-  // --- 1. Ambil Data Master Meter & Reading Type ---
+  // ====================================================
+  // 1. AMBIL DATA MASTER (METER & READING TYPE)
+  // ====================================================
+
+  // A. Ambil Meter
   const meterKantor = await prisma.meter.findFirst({
     where: { category: { name: 'Office' } },
   });
 
   const meterTerminal = await prisma.meter.findFirst({
-    where: { category: { name: 'Terminal' } },
+    where: { category: { name: 'Terminal' }, energy_type: { type_name: 'Electricity' } },
   });
 
-  const wbpType = await prisma.readingType.findFirst({
-    where: { type_name: 'WBP' },
+  const meterAirTerminal = await prisma.meter.findFirst({
+    where: { category: { name: 'Terminal' }, energy_type: { type_name: 'Water' } },
   });
 
-  const lwbpType = await prisma.readingType.findFirst({
-    where: { type_name: 'LWBP' },
-  });
+  // B. Reading Types (Listrik)
+  const wbpType = await prisma.readingType.findFirst({ where: { type_name: 'WBP' } });
+  const lwbpType = await prisma.readingType.findFirst({ where: { type_name: 'LWBP' } });
+  const pagiType = await prisma.readingType.findFirst({ where: { type_name: 'Pagi' } });
+  const soreType = await prisma.readingType.findFirst({ where: { type_name: 'Sore' } });
+  const malamType = await prisma.readingType.findFirst({ where: { type_name: 'Malam' } });
 
-  const kwhTotalType = await prisma.readingType.findFirst({
-    where: { type_name: 'Total Kantor' },
-  });
+  // C. Reading Types (Air)
+  const waterType = await prisma.readingType.findFirst({ where: { type_name: 'Water' } });
 
-  // Validasi
+  // Validasi Master Data
   if (!meterKantor || !meterTerminal) {
-    console.error('❌ Meter tidak ditemukan. Cek seed master.');
+    console.error('❌ Meter Listrik (Office/Terminal) tidak ditemukan.');
     return;
   }
-  if (!wbpType || !lwbpType || !kwhTotalType) {
-    console.error('❌ Reading Type tidak lengkap. Cek seed reading_type.');
+  if (!meterAirTerminal) {
+    console.warn('⚠️ Meter Air Terminal tidak ditemukan. Data air akan dilewati.');
+  }
+
+  if (!wbpType || !lwbpType || !pagiType || !soreType || !malamType || !waterType) {
+    console.error(
+      '❌ Salah satu Reading Type tidak ditemukan (Cek seed: WBP, LWBP, Pagi, Sore, Malam, Water).',
+    );
     return;
   }
 
-  // --- 2. Baca File CSV ---
+  // ====================================================
+  // 2. BACA FILE CSV
+  // ====================================================
   const results: any[] = await new Promise((resolve, reject) => {
     const data: any[] = [];
     fs.createReadStream(CSV_FILE_PATH)
-      .pipe(csv({ mapHeaders: ({ header }) => header.trim() }))
+      .pipe(
+        csv({
+          mapHeaders: ({ header }) => header.trim(), // Trim spasi nama kolom
+        }),
+      )
       .on('data', (row) => data.push(row))
       .on('error', reject)
       .on('end', () => resolve(data));
@@ -55,42 +73,65 @@ export async function runImport() {
 
   console.log(`✅ File CSV dibaca: ${results.length} baris.`);
 
-  // --- 3. Loop Proses Data ---
+  // ====================================================
+  // 3. LOOP PROSES DATA
+  // ====================================================
   for (const row of results) {
     if (!row.Tanggal) continue;
 
-    // --- PERBAIKAN TANGGAL DI SINI ---
+    // --- A. Parsing Tanggal ---
     const readingDate = new Date(row.Tanggal);
-
-    // Paksa jam menjadi 12:00 siang (Local Time)
-    // Ini mencegah tanggal mundur ke hari sebelumnya saat dikonversi ke UTC
-    // Contoh: 00:00 WIB -> 17:00 UTC (Kemarin) [SALAH]
-    // Fix:    12:00 WIB -> 05:00 UTC (Hari yang sama) [BENAR]
+    if (isNaN(readingDate.getTime())) {
+      console.error(`⚠️ Tanggal tidak valid: ${row.Tanggal}`);
+      continue;
+    }
+    // Set jam ke 12:00 siang (Local Time) untuk aman dari timezone
     readingDate.setHours(12, 0, 0, 0);
 
-    // Parsing Data Listrik (Float)
-    const valWBP = parseFloat((row.WBP ?? '0').replace(/,/g, ''));
-    const valLWBP = parseFloat((row.LWBP ?? '0').replace(/,/g, ''));
-    const valKwhKantor = parseFloat((row['Kwh Kantor'] ?? '0').replace(/,/g, ''));
+    // --- B. Parsing Angka (Helper) ---
+    const cleanNum = (val: string | undefined) => {
+      if (!val) return 0;
+      return parseFloat(val.replace(/,/g, ''));
+    };
 
-    // Parsing Data Pax
+    // 1. Listrik Terminal
+    const valWbpTerminal = cleanNum(row['WBP TERMINAL']);
+    const valLwbpTerminal = cleanNum(row['LWBP TERMINAL']);
+
+    // 2. Listrik Kantor
+    const valKantorPagi = cleanNum(row['Kantor Pagi']);
+    const valKantorSore = cleanNum(row['Kantor Sore']);
+    const valKantorMalam = cleanNum(row['Kantor Malam']);
+
+    // 3. Air Terminal (Header Baru: 'meter air terminal')
+    const valWaterTerminal = cleanNum(row['meter air terminal']);
+
+    // 4. Pax
     const valPax = parseInt((row.pax ?? '0').replace(/,/g, ''), 10);
 
-    // Skip jika baris benar-benar kosong
-    if (valWBP === 0 && valLWBP === 0 && valKwhKantor === 0 && valPax === 0) continue;
+    // Skip jika baris kosong semua
+    if (
+      valWbpTerminal === 0 &&
+      valLwbpTerminal === 0 &&
+      valKantorPagi === 0 &&
+      valKantorSore === 0 &&
+      valKantorMalam === 0 &&
+      valWaterTerminal === 0 &&
+      valPax === 0
+    )
+      continue;
 
-    // Format tanggal untuk log agar terlihat benar di console
     const logDate = readingDate.toISOString().split('T')[0];
     console.log(
-      `🔄 ${logDate} | Trm: ${valWBP}/${valLWBP} | Ofc: ${valKwhKantor} | Pax: ${valPax}`,
+      `🔄 ${logDate} | Elec: ${valWbpTerminal}/${valLwbpTerminal} | Water: ${valWaterTerminal} | Ofc: P${valKantorPagi}/S${valKantorSore}/M${valKantorMalam} | Pax: ${valPax}`,
     );
 
     try {
       await prisma.$transaction(async (tx) => {
-        // ==========================================
-        // BAGIAN 1: PROSES METER TERMINAL (WBP & LWBP)
-        // ==========================================
-        if (valWBP > 0 || valLWBP > 0) {
+        // ------------------------------------------
+        // BLOCK 1: TERMINAL LISTRIK (WBP & LWBP)
+        // ------------------------------------------
+        if (valWbpTerminal > 0 || valLwbpTerminal > 0) {
           const sessionTerminal = await tx.readingSession.upsert({
             where: {
               unique_meter_reading_per_day: {
@@ -98,15 +139,12 @@ export async function runImport() {
                 reading_date: readingDate,
               },
             },
-            create: {
-              meter_id: meterTerminal.meter_id,
-              reading_date: readingDate,
-            },
+            create: { meter_id: meterTerminal.meter_id, reading_date: readingDate },
             update: {},
           });
 
           // WBP
-          if (valWBP > 0) {
+          if (valWbpTerminal > 0) {
             await tx.readingDetail.upsert({
               where: {
                 session_id_reading_type_id: {
@@ -117,14 +155,14 @@ export async function runImport() {
               create: {
                 session_id: sessionTerminal.session_id,
                 reading_type_id: wbpType.reading_type_id,
-                value: valWBP,
+                value: valWbpTerminal,
               },
-              update: { value: valWBP },
+              update: { value: valWbpTerminal },
             });
           }
 
           // LWBP
-          if (valLWBP > 0) {
+          if (valLwbpTerminal > 0) {
             await tx.readingDetail.upsert({
               where: {
                 session_id_reading_type_id: {
@@ -135,17 +173,17 @@ export async function runImport() {
               create: {
                 session_id: sessionTerminal.session_id,
                 reading_type_id: lwbpType.reading_type_id,
-                value: valLWBP,
+                value: valLwbpTerminal,
               },
-              update: { value: valLWBP },
+              update: { value: valLwbpTerminal },
             });
           }
         }
 
-        // ==========================================
-        // BAGIAN 2: PROSES METER OFFICE (KWH KANTOR)
-        // ==========================================
-        if (valKwhKantor > 0) {
+        // ------------------------------------------
+        // BLOCK 2: KANTOR LISTRIK (Pagi, Sore, Malam)
+        // ------------------------------------------
+        if (valKantorPagi > 0 || valKantorSore > 0 || valKantorMalam > 0) {
           const sessionOffice = await tx.readingSession.upsert({
             where: {
               unique_meter_reading_per_day: {
@@ -153,44 +191,74 @@ export async function runImport() {
                 reading_date: readingDate,
               },
             },
-            create: {
-              meter_id: meterKantor.meter_id,
-              reading_date: readingDate,
-            },
+            create: { meter_id: meterKantor.meter_id, reading_date: readingDate },
             update: {},
           });
 
-          await tx.readingDetail.upsert({
-            where: {
-              session_id_reading_type_id: {
-                session_id: sessionOffice.session_id,
-                reading_type_id: kwhTotalType.reading_type_id,
+          const upsertDetail = async (typeId: number, val: number) => {
+            if (val <= 0) return;
+            await tx.readingDetail.upsert({
+              where: {
+                session_id_reading_type_id: {
+                  session_id: sessionOffice.session_id,
+                  reading_type_id: typeId,
+                },
               },
-            },
-            create: {
-              session_id: sessionOffice.session_id,
-              reading_type_id: kwhTotalType.reading_type_id,
-              value: valKwhKantor,
-            },
-            update: { value: valKwhKantor },
+              create: {
+                session_id: sessionOffice.session_id,
+                reading_type_id: typeId,
+                value: val,
+              },
+              update: { value: val },
+            });
+          };
+
+          await upsertDetail(pagiType.reading_type_id, valKantorPagi);
+          await upsertDetail(soreType.reading_type_id, valKantorSore);
+          await upsertDetail(malamType.reading_type_id, valKantorMalam);
+        }
+
+        // ------------------------------------------
+        // BLOCK 3: PAX (Penumpang)
+        // ------------------------------------------
+        if (valPax > 0) {
+          await tx.paxData.upsert({
+            where: { data_date: readingDate },
+            create: { data_date: readingDate, total_pax: valPax },
+            update: { total_pax: valPax },
           });
         }
 
-        // ==========================================
-        // BAGIAN 3: PROSES DATA PAX
-        // ==========================================
-        if (valPax > 0) {
-          await tx.paxData.upsert({
+        // ------------------------------------------
+        // BLOCK 4: TERMINAL AIR (Water)
+        // ------------------------------------------
+        if (meterAirTerminal && valWaterTerminal > 0) {
+          // 1. Session Air
+          const sessionWater = await tx.readingSession.upsert({
             where: {
-              data_date: readingDate,
+              unique_meter_reading_per_day: {
+                meter_id: meterAirTerminal.meter_id,
+                reading_date: readingDate,
+              },
+            },
+            create: { meter_id: meterAirTerminal.meter_id, reading_date: readingDate },
+            update: {},
+          });
+
+          // 2. Detail Air (Stand Meter)
+          await tx.readingDetail.upsert({
+            where: {
+              session_id_reading_type_id: {
+                session_id: sessionWater.session_id,
+                reading_type_id: waterType.reading_type_id,
+              },
             },
             create: {
-              data_date: readingDate,
-              total_pax: valPax,
+              session_id: sessionWater.session_id,
+              reading_type_id: waterType.reading_type_id,
+              value: valWaterTerminal,
             },
-            update: {
-              total_pax: valPax,
-            },
+            update: { value: valWaterTerminal },
           });
         }
       });
@@ -202,6 +270,7 @@ export async function runImport() {
   console.log('\n🎉 Impor Selesai!');
 }
 
+// Jalankan
 runImport()
   .catch((e) => {
     console.error(e);

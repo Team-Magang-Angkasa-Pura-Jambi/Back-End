@@ -6,9 +6,9 @@ import 'dotenv/config';
  * in environment variables.
  */
 export const weatherConfig = {
-  apiKey: process.env.OPENWEATHER_API_KEY || '6953d3a5c74bbd94157aa3455bd9dd87',
-  latitude: process.env.OPENWEATHER_LATITUDE || '-1.63806',
-  longitude: process.env.OPENWEATHER_LONGITUDE || '103.64444',
+  apiKey: process.env.OPENWEATHER_API_KEY ?? '6953d3a5c74bbd94157aa3455bd9dd87',
+  latitude: process.env.OPENWEATHER_LATITUDE ?? '-1.63806',
+  longitude: process.env.OPENWEATHER_LONGITUDE ?? '103.64444',
   baseURL: 'https://api.openweathermap.org/data/2.5/forecast',
 };
 

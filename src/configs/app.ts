@@ -16,6 +16,7 @@ const corsOptions = {
   ],
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true, // ⬅️ WAJIB
 };
 
 app.use(cors(corsOptions));
