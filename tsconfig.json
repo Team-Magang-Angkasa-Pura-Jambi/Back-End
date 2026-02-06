@@ -36,7 +36,7 @@
     "emitDecoratorMetadata": false
   },
 
-  "include": ["src/**/*.ts", "prisma/**/*.ts", "src/**/__test__/*", "tests/**/*"],
+  "include": ["src/**/*.ts", "prisma/**/*.ts"],
   "exclude": [
     "node_modules",
     "dist",
@@ -44,7 +44,9 @@
     "generated",
     "src/generated",
     "prisma/generated",
-    "**/*.d.ts"
+    "**/*.d.ts",
+    "src/**/__test__/*",
+    "tests/**/*"
   ],
   "types": ["vitest/globals"]
 }

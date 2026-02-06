@@ -13,7 +13,7 @@ export const handleNotFound = (req: Request, res: Response, next: NextFunction) 
 };
 
 export const errorHandler = (error: Error, req: Request, res: Response, next: NextFunction) => {
-  console.error(error.stack || error);
+  console.error(error.stack ?? error);
 
   if (error instanceof HttpError) {
     return res.status(error.statusCode).json({

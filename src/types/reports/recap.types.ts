@@ -12,8 +12,8 @@ export interface RecapDataRow {
   consumption: number | null;
   classification: UsageCategory | null;
   confidence_score?: number | null;
-  prediction?: number | {} | null;
-  pax: number | {} | null;
+  prediction?: number | object | null;
+  pax: number | object | null;
   cost: number | null;
   avg_temp?: number | null;
   max_temp?: number | null;
