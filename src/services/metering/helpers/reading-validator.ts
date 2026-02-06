@@ -32,11 +32,11 @@ export const _validateReadingsAgainstPrevious = async (
     where: {
       meter_id: meter.meter_id,
       reading_date: {
-        lt: dateForDb, // ✅ SEBELUM TANGGAL SAAT INI
+        lt: dateForDb,
       },
     },
     orderBy: {
-      reading_date: 'desc', // ✅ PALING DEKAT
+      reading_date: 'desc',
     },
     include: {
       details: true,
@@ -67,7 +67,6 @@ export const _validateReadingsAgainstPrevious = async (
 
     const currentValue = new Prisma.Decimal(detail.value);
 
-    // BARU: Validasi bahwa nilai input tidak melebihi rollover_limit jika ada.
     if (meter.rollover_limit) {
       const rolloverLimit = new Prisma.Decimal(meter.rollover_limit);
       if (currentValue.greaterThan(rolloverLimit)) {
@@ -79,18 +78,23 @@ export const _validateReadingsAgainstPrevious = async (
   }
 };
 
-export const _validateDuplicateSession = async (meter_id: number, dateForDb: Date) => {
+export const _validateDuplicateSession = async (
+  meter_id: number,
+  dateForDb: Date,
+  details: {
+    value: number;
+    reading_type_id: number;
+  }[],
+) => {
   const existingSession = await prisma.readingSession.findUnique({
     where: {
       unique_meter_reading_per_day: { meter_id, reading_date: dateForDb },
     },
     select: {
-      // TAMBAHAN 1: Ambil nama meter untuk pengecekan
-      meter: {
-        select: { category: true }, // Sesuaikan field ini dengan schema DB Anda (misal: 'name' atau 'meter_name')
-      },
+      session_id: true,
       details: {
         select: {
+          reading_type_id: true,
           reading_type: { select: { type_name: true } },
         },
       },
@@ -98,17 +102,28 @@ export const _validateDuplicateSession = async (meter_id: number, dateForDb: Dat
   });
 
   if (existingSession) {
-    const existingTypes = existingSession.details.map((d) => d.reading_type.type_name).join(', ');
+    const existingTypeIds = existingSession.details.map((d) => d.reading_type_id);
 
-    const formattedDate = dateForDb.toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-
-    throw new Error409(
-      `Entri harian untuk tanggal ${formattedDate} sudah terdaftar. (Data yang sudah ada: ${existingTypes})`,
+    const duplicateDetails = details.filter((item) =>
+      existingTypeIds.includes(item.reading_type_id),
     );
+
+    if (duplicateDetails.length > 0) {
+      const duplicateNames = existingSession.details
+        .filter((d) => details.some((u) => u.reading_type_id === d.reading_type_id))
+        .map((d) => d.reading_type.type_name)
+        .join(', ');
+
+      const formattedDate = dateForDb.toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+
+      throw new Error409(
+        `Gagal simpan: Tipe pembacaan (${duplicateNames}) untuk tanggal ${formattedDate} sudah pernah diinput.`,
+      );
+    }
   }
 };
 

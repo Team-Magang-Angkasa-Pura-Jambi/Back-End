@@ -54,7 +54,7 @@ export class ReadingService extends GenericBaseService<
 
     const dateForDb = _normalizeDate(reading_date);
 
-    await _validateDuplicateSession(meter_id, dateForDb);
+    await _validateDuplicateSession(meter_id, dateForDb, details);
 
     await _validateReadingsAgainstPrevious(meter, dateForDb, details);
 
