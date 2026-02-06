@@ -12,11 +12,10 @@ const corsOptions = {
     'http://localhost:3000',
     'https://sentinel-angkasa-pura.vercel.app',
     'http://192.168.1.9:3000',
-    // 'https://patentable-steve-unsuburbed.ngrok-free.dev',
   ],
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true, // ⬅️ WAJIB
+  credentials: true,
 };
 
 app.use(cors(corsOptions));

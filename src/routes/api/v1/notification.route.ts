@@ -18,6 +18,11 @@ export default (router: Router) => {
     authorize('Admin', 'SuperAdmin', 'Technician'),
     asyncHandler(notificationController.getAll),
   );
+  router.get(
+    `${prefix}/latest`,
+    authorize('Admin', 'SuperAdmin', 'Technician'),
+    asyncHandler(notificationController.getLatest),
+  );
 
   router.patch(
     `${prefix}/:notificationId/mark-as-read`,
@@ -44,11 +49,5 @@ export default (router: Router) => {
     authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(bulkDeleteNotificationsSchema),
     asyncHandler(notificationController.bulkDelete),
-  );
-
-  router.get(
-    `${prefix}/latest`,
-    authorize('Admin', 'SuperAdmin', 'Technician'),
-    asyncHandler(notificationController.getLatest),
   );
 };

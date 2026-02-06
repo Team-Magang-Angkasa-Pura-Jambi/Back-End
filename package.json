@@ -12,9 +12,10 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier . --write",
     "lint:nibble": "eslint-nibble",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "test:ui": "vitest --ui",
+    "test": "vitest",                 
+    "test:run": "vitest run",         
+    "test:ui": "vitest --ui",         
+    "coverage": "vitest run --coverage",
     "postinstall": "npx prisma generate",
     "import:csv": "tsx prisma/import.ts",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit"
@@ -62,6 +63,7 @@
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.42.0",
     "@typescript-eslint/parser": "^8.42.0",
+    "@vitest/coverage-v8": "^4.0.18",
     "@vitest/ui": "^4.0.16",
     "cross-env": "^10.1.0",
     "eslint": "^9.39.2",
@@ -78,6 +80,8 @@
     "tsx": "^4.20.4",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.52.0",
+    "vite-plugin-notifier": "^0.1.5",
+    "vite-tsconfig-paths": "^6.0.5",
     "vitest": "^4.0.15",
     "vitest-mock-extended": "^3.1.0"
   }

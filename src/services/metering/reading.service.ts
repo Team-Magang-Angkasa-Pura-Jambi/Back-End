@@ -87,13 +87,6 @@ export class ReadingService extends GenericBaseService<
     return newSession;
   }
 
-  /**
-   * Memperbarui data pembacaan meter yang sudah ada.
-   * Metode ini akan memvalidasi data baru, memperbarui detail dalam transaksi,
-   * dan memicu kalkulasi ulang untuk tanggal yang bersangkutan dan hari berikutnya.
-   * @param sessionId - ID dari ReadingSession yang akan diperbarui.
-   * @param data - Data baru yang berisi detail pembacaan.
-   */
   public override async update(
     sessionId: number,
     data: UpdateReadingSessionBody,
@@ -196,22 +189,19 @@ export class ReadingService extends GenericBaseService<
       await dailyLogbookService.generateDailyLog(dateForDb);
     });
   }
+
   public override async delete(sessionId: number): Promise<ReadingSession> {
     return this._handleCrudOperation(() =>
-      // PERBAIKAN: Gunakan this.prisma.$transaction, bukan model.delete
       prisma.$transaction(async (tx) => {
-        // 1. Cari data yang akan dihapus
         const sessionToDelete = await tx.readingSession.findUniqueOrThrow({
           where: { session_id: sessionId },
         });
 
-        // 2. Cek Session Terakhir untuk Meter tersebut
         const latestSession = await tx.readingSession.findFirst({
           where: { meter_id: sessionToDelete.meter_id },
           orderBy: { reading_date: 'desc' },
         });
 
-        // 3. Validasi: Hanya boleh menghapus jika ini adalah data terakhir
         if (latestSession && latestSession.session_id !== sessionId) {
           throw new Error400(
             'Hanya data pembacaan terakhir yang dapat dihapus. Untuk memperbaiki data lama, hapus entri hingga tanggal tersebut dan input ulang.',
@@ -220,7 +210,6 @@ export class ReadingService extends GenericBaseService<
 
         const { meter_id, reading_date } = sessionToDelete;
 
-        // 4. Hapus Data Terkait (DailySummary)
         await tx.dailySummary.deleteMany({
           where: {
             meter_id,
@@ -228,7 +217,6 @@ export class ReadingService extends GenericBaseService<
           },
         });
 
-        // 5. Hapus Data Terkait (DailyLogbook)
         await tx.dailyLogbook.deleteMany({
           where: {
             meter_id,
@@ -236,7 +224,6 @@ export class ReadingService extends GenericBaseService<
           },
         });
 
-        // 6. Hapus ReadingSession
         const deletedSession = await tx.readingSession.delete({
           where: { session_id: sessionId },
         });
@@ -274,9 +261,6 @@ export class ReadingService extends GenericBaseService<
     return this._handleCrudOperation(() => this._model.findMany({ where }));
   }
 
-  /**
-   * Menemukan satu sesi pembacaan berdasarkan ID dengan relasi spesifik.
-   */
   public override async findById(sessionId: number): Promise<ReadingSessionWithDetails> {
     const includeArgs = {
       meter: { include: { energy_type: true, category: true } },
@@ -309,10 +293,6 @@ export class ReadingService extends GenericBaseService<
 
     return lastReading;
   }
-
-  /**
-   * Menemukan semua sesi, selalu menyertakan relasi dasar.
-   */
 
   public async getHistory(query: GetReadingSessionsQuery): Promise<GetHistoryResponse> {
     const { energyTypeName, startDate, endDate, meterId, sortBy, sortOrder } = query;
@@ -355,7 +335,6 @@ export class ReadingService extends GenericBaseService<
         }),
       ]);
 
-      // 1. Fungsi Helper untuk normalisasi tanggal ke format YYYY-MM-DD secara LOKAL
       const toLocalDateString = (date: Date) => {
         const d = new Date(date);
         const year = d.getFullYear();
@@ -364,7 +343,6 @@ export class ReadingService extends GenericBaseService<
         return `${year}-${month}-${day}`;
       };
 
-      // 2. Buat Map dengan key lokal
       const paxDataMap = new Map<string, { total_pax: number; pax_id: number }>(
         paxData.map((p) => [
           toLocalDateString(p.data_date),
@@ -372,9 +350,8 @@ export class ReadingService extends GenericBaseService<
         ]),
       );
 
-      // 3. Gabungkan data menggunakan normalisasi yang SAMA
       const dataWithPax = readingSessions.map((session) => {
-        const dateKey = toLocalDateString(session.reading_date); // Pastikan pakai toLocalDateString
+        const dateKey = toLocalDateString(session.reading_date);
         const paxInfo = paxDataMap.get(dateKey);
 
         return {

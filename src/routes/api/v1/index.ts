@@ -20,7 +20,6 @@ import meterCategoryRoute from './meterCategory.route.js';
 import taxRoute from './tax.route.js';
 import notificationRoute from './notification.route.js';
 import TariffGroupRoute from './TariffGroup.route.js';
-import machineLearningRoute from './machineLearning.route.js';
 import alertRoute from './alert.route.js';
 import dailyLogbookRoute from './dailyLogbook.route.js';
 import budgetRoute from './budget.route.js';
@@ -33,8 +32,9 @@ import predictRoute from './predict.route.js';
 export default (app: any) => {
   const router = Router();
 
-  app.use('/api/v1', router);
   router.get('/', indexController.index);
+
+  app.use('/api/v1', router);
 
   authRoutes(router);
   router.use(authMiddleware);
@@ -59,7 +59,6 @@ export default (app: any) => {
   taxRoute(router);
   notificationRoute(router);
   TariffGroupRoute(router);
-  machineLearningRoute(router);
   dailyLogbookRoute(router);
   alertRoute(router);
   budgetRoute(router);

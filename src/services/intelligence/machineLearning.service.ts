@@ -77,9 +77,6 @@ class MachineLearningService {
     this.baseURL = process.env.ML_API_BASE_URL ?? 'http://127.0.0.1:8000';
   }
 
-  /**
-   * Memanggil endpoint /evaluate pada API Python.
-   */
   public async evaluateDailyUsage(data: EvaluationInput): Promise<EvaluationResult> {
     try {
       const response = await axios.post<EvaluationResult>(`${this.baseURL}/evaluate`, data);
@@ -103,9 +100,6 @@ class MachineLearningService {
     }
   }
 
-  /**
-   * BARU: Memanggil endpoint /evaluate/terminal pada API Python.
-   */
   public async evaluateTerminalUsage(
     data: EvaluationInputTerminal,
   ): Promise<TerminalEvaluationResult> {
@@ -129,9 +123,6 @@ class MachineLearningService {
     }
   }
 
-  /**
-   * BARU: Memanggil endpoint /evaluate/kantor pada API Python.
-   */
   public async evaluateKantorUsage(data: EvaluationInputKantor): Promise<KantorEvaluationResult> {
     try {
       const response = await axios.post<KantorEvaluationResult>(
@@ -153,11 +144,6 @@ class MachineLearningService {
     }
   }
 
-  /**
-   * Memanggil endpoint /predict pada API Python dengan data cuaca dari OpenWeatherMap.
-   * @param date - Tanggal prediksi (objek Date).
-   * @param weatherData - (Opsional) Data cuaca yang sudah ada untuk menghindari panggilan API baru.
-   */
   public async getDailyPrediction(
     date: Date,
     weatherData?: { suhu_rata: number; suhu_max: number },
@@ -205,10 +191,6 @@ class MachineLearningService {
     }
   }
 
-  /**
-   * BARU: Memanggil endpoint /predict/terminal pada API Python.
-   * @param date - Tanggal prediksi (objek Date).
-   */
   public async getTerminalPrediction(
     date: Date,
     weatherData: { suhu_rata: number; suhu_max: number },
@@ -239,10 +221,6 @@ class MachineLearningService {
     }
   }
 
-  /**
-   * BARU: Memanggil endpoint /predict/kantor pada API Python.
-   * @param date - Tanggal prediksi (objek Date).
-   */
   public async getKantorPrediction(
     date: Date,
     weatherData: { suhu_rata: number; suhu_max: number },

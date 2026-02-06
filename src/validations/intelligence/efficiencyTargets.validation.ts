@@ -28,3 +28,16 @@ export const efficiencyScheme = new CrudSchemaBuilder({
   bodySchema: efficiencyBodyScheme,
   paramsSchema: efficiencyParamsSchema,
 });
+
+export const efficiencyTargetPreviewSchema = z.object({
+  body: z.object({
+    target_value: z.coerce.number().positive('Target value must be greater than 0'),
+    meter_id: z.coerce.number().int().positive('Invalid Meter ID'),
+    period_start: z.coerce.date({
+      error: () => ({ message: 'Format tanggal mulai tidak valid' }),
+    }),
+    period_end: z.coerce.date({
+      error: () => ({ message: 'Format tanggal akhir tidak valid' }),
+    }),
+  }),
+});

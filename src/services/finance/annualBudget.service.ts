@@ -44,20 +44,16 @@ export class AnnualBudgetService extends GenericBaseService<
 
   public async getDetailedBudgets(args: Prisma.AnnualBudgetFindManyArgs) {
     return this._handleCrudOperation(async () => {
-      // 1. Fetch Data Utama
       const budgets = await prisma.annualBudget.findMany({
         ...args,
         where: {
           ...args.where,
-          // parent_budget_id: { not: null },
-          // Hanya Child Budget
         },
         include: {
           energy_type: true,
           allocations: {
             include: {
               meter: {
-                // 🔥 Tambahkan meter_name agar card di UI tampil lengkap
                 select: { meter_id: true, meter_code: true },
               },
             },
@@ -68,7 +64,6 @@ export class AnnualBudgetService extends GenericBaseService<
 
       if (budgets.length === 0) return [];
 
-      // 2. Siapkan Data untuk Batch Query
       const allMeterIds = new Set<number>();
       budgets.forEach((b) =>
         b.allocations.forEach((a) => {
@@ -76,12 +71,10 @@ export class AnnualBudgetService extends GenericBaseService<
         }),
       );
 
-      // Cari range tanggal terluar
       const dates = budgets.flatMap((b) => [b.period_start.getTime(), b.period_end.getTime()]);
       const minDate = new Date(Math.min(...dates));
       const maxDate = new Date(Math.max(...dates));
 
-      // 3. Batch Query: Ambil Realisasi (DailySummary)
       const rawRealisations = await prisma.dailySummary.groupBy({
         by: ['meter_id', 'summary_date'],
         _sum: { total_cost: true },
@@ -91,16 +84,12 @@ export class AnnualBudgetService extends GenericBaseService<
         },
       });
 
-      // 4. Mapping & Kalkulasi (Per Allocation -> Per Budget)
       const detailedBudgets = budgets.map((budget) => {
         const totalBudget = budget.total_budget.toNumber();
 
-        // A. Hitung Realisasi PER METER (Allocation Level)
         const processedAllocations = budget.allocations.map((alloc) => {
-          // Hitung Budget untuk meter ini (Total Budget * Bobot)
           const allocBudget = budget.total_budget.times(alloc.weight).toNumber();
 
-          // Filter realisasi khusus untuk meter ini di rentang tanggal budget ini
           const allocRealization = rawRealisations
             .filter((r) => {
               const rDate = new Date(r.summary_date);
@@ -117,7 +106,7 @@ export class AnnualBudgetService extends GenericBaseService<
 
           return {
             ...alloc,
-            // Pastikan object meter aman
+
             meter: alloc.meter || {
               meter_code: 'Unknown',
               meter_name: 'Unknown',
@@ -129,8 +118,6 @@ export class AnnualBudgetService extends GenericBaseService<
           };
         });
 
-        // B. Hitung Total Realisasi Budget (Sum dari allocation di atas)
-        // Ini memastikan angka di header budget sinkron dengan total kartu-kartu di bawahnya
         const totalRealization = processedAllocations.reduce(
           (acc, curr) => acc + curr.totalRealization,
           0,
@@ -142,7 +129,7 @@ export class AnnualBudgetService extends GenericBaseService<
 
         return {
           ...budget,
-          // 🔥 Return allocations yang sudah ada datanya
+
           allocations: processedAllocations,
           totalBudget,
           totalRealization,
@@ -159,7 +146,6 @@ export class AnnualBudgetService extends GenericBaseService<
     const { allocations, parent_budget_id, ...budgetData } = data;
 
     return this._handleCrudOperation(async () => {
-      // 1. Normalisasi Tanggal
       const childStartDate = new Date(budgetData.period_start);
       childStartDate.setUTCHours(0, 0, 0, 0);
       const childEndDate = new Date(budgetData.period_end);
@@ -174,7 +160,6 @@ export class AnnualBudgetService extends GenericBaseService<
           throw new Error400('ID anggaran induk tidak valid.');
         }
 
-        // Validasi Overlap
         const overlapping = await prisma.annualBudget.findFirst({
           where: {
             parent_budget_id: parent_budget_id,
@@ -188,8 +173,6 @@ export class AnnualBudgetService extends GenericBaseService<
         }
       }
 
-      // 2. Eksekusi Create
-      // Gunakan parent_budget_id langsung sebagai nilai angka (Number)
       return prisma.annualBudget.create({
         data: {
           total_budget: budgetData.total_budget,
@@ -198,7 +181,6 @@ export class AnnualBudgetService extends GenericBaseService<
           period_start: childStartDate,
           period_end: childEndDate,
 
-          // Perbaikan di sini: Gunakan field ID langsung
           parent_budget_id: parent_budget_id ?? null,
 
           ...(allocations &&
@@ -220,7 +202,6 @@ export class AnnualBudgetService extends GenericBaseService<
       });
     });
   }
-  // ---------------------------------------
 
   /**
    * BARU: Override metode update untuk menangani pembaruan AnnualBudget beserta

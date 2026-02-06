@@ -6,7 +6,8 @@ import type {
   UpdateEfficiencyBody,
 } from '../../types/intelligence/efficiencyTarget.type.js';
 import type { DefaultArgs } from '../../generated/prisma/runtime/library.js';
-import { Error400 } from '../../utils/customError.js';
+import { Error400, Error404 } from '../../utils/customError.js';
+import { differenceInDays } from 'date-fns';
 type CreateEfficiencyInternal = CreateEfficiencyBody & {
   set_by_user_id: number;
 };
@@ -139,6 +140,181 @@ export class EfficiencyTargetService extends GenericBaseService<
           },
         },
       });
+    });
+  }
+
+  public async getEfficiencyTargetPreview(data: {
+    target_value: number;
+    meterId: number;
+    periodStartDate: Date;
+    periodEndDate: Date;
+  }) {
+    return this._handleCrudOperation(async () => {
+      const { target_value, meterId, periodStartDate, periodEndDate } = data;
+
+      if (periodEndDate < periodStartDate) {
+        throw new Error400('Tanggal akhir tidak boleh sebelum tanggal mulai.');
+      }
+      const totalDays = differenceInDays(periodEndDate, periodStartDate) + 1;
+      if (totalDays <= 0) {
+        throw new Error400('Periode tidak valid, tanggal akhir harus setelah tanggal mulai.');
+      }
+
+      const meter = await prisma.meter.findUnique({
+        where: { meter_id: meterId },
+        include: {
+          energy_type: true,
+          tariff_group: {
+            include: {
+              price_schemes: {
+                where: { is_active: true },
+                include: { rates: { include: { reading_type: true } } },
+                orderBy: { effective_date: 'desc' },
+              },
+            },
+          },
+        },
+      });
+
+      if (!meter) {
+        throw new Error404(`Meter dengan ID ${meterId} tidak ditemukan.`);
+      }
+
+      const activePriceScheme = meter.tariff_group?.price_schemes[0];
+      if (!activePriceScheme) {
+        throw new Error404(
+          `Tidak ada skema harga aktif yang ditemukan untuk golongan tarif meter '${meter.meter_code}'.`,
+        );
+      }
+
+      let avgPricePerUnit: Prisma.Decimal;
+      if (meter.energy_type.type_name === 'Electricity') {
+        const wbpRate = activePriceScheme.rates.find(
+          (r: any) => r.reading_type.type_name === 'WBP',
+        )?.value;
+        const lwbpRate = activePriceScheme.rates.find(
+          (r: any) => r.reading_type.type_name === 'LWBP',
+        )?.value;
+
+        if (!wbpRate || !lwbpRate) {
+          throw new Error400(
+            'Skema harga untuk Listrik tidak lengkap. Tarif WBP atau LWBP tidak ditemukan.',
+          );
+        }
+
+        avgPricePerUnit = wbpRate.plus(lwbpRate).div(2);
+      } else {
+        const singleRate = activePriceScheme.rates[0]?.value;
+        if (!singleRate) {
+          throw new Error400(
+            `Skema harga untuk ${meter.energy_type.type_name} tidak memiliki tarif yang terdefinisi.`,
+          );
+        }
+        avgPricePerUnit = singleRate;
+      }
+
+      if (avgPricePerUnit.isZero()) {
+        throw new Error400(
+          'Harga rata-rata per unit adalah nol. Tidak dapat menghitung target dari anggaran.',
+        );
+      }
+
+      const inputTotalKwh = new Prisma.Decimal(target_value).times(totalDays);
+      const estimatedTotalCost = inputTotalKwh.times(avgPricePerUnit);
+
+      const budgetAllocation = await prisma.budgetAllocation.findFirst({
+        where: {
+          meter_id: meterId,
+          budget: {
+            parent_budget_id: { not: null },
+            period_start: { lte: periodEndDate },
+            period_end: { gte: periodStartDate },
+          },
+        },
+        include: { budget: { include: { parent_budget: true } } },
+      });
+
+      let budgetInfo: object | null = null;
+      let suggestion: object | null = null;
+
+      if (budgetAllocation) {
+        const allocatedBudgetForMeter = budgetAllocation.budget.total_budget.times(
+          budgetAllocation.weight,
+        );
+
+        budgetInfo = {
+          budgetId: budgetAllocation.budget_id,
+          budgetPeriodStart: budgetAllocation.budget.period_start,
+          budgetPeriodEnd: budgetAllocation.budget.period_end,
+          meterAllocationWeight: budgetAllocation.weight.toNumber(),
+          allocatedBudgetForMeter: allocatedBudgetForMeter.toNumber(),
+
+          realizationToDate: 0,
+          remainingBudget: allocatedBudgetForMeter.toNumber(),
+        };
+
+        const realizationEndDate = new Date(periodStartDate);
+        realizationEndDate.setUTCDate(realizationEndDate.getUTCDate() - 1);
+
+        let remainingBudget = allocatedBudgetForMeter;
+        let realizedCost = new Prisma.Decimal(0);
+
+        if (realizationEndDate >= budgetAllocation.budget.period_start) {
+          const realizationResult = await prisma.dailySummary.aggregate({
+            _sum: { total_cost: true },
+            where: {
+              meter_id: meterId,
+              summary_date: {
+                gte: budgetAllocation.budget.period_start,
+                lte: realizationEndDate,
+              },
+            },
+          });
+
+          realizedCost = realizationResult._sum.total_cost ?? new Prisma.Decimal(0);
+          remainingBudget = allocatedBudgetForMeter.minus(realizedCost);
+
+          (budgetInfo as any).realizationToDate = realizedCost.toNumber();
+          (budgetInfo as any).remainingBudget = remainingBudget.toNumber();
+        }
+
+        const childBudget = budgetAllocation.budget;
+        const childPeriodDays =
+          differenceInDays(childBudget.period_end, childBudget.period_start) + 1;
+
+        const childPeriodMonths =
+          (childBudget.period_end.getUTCFullYear() - childBudget.period_start.getUTCFullYear()) *
+            12 +
+          (childBudget.period_end.getUTCMonth() - childBudget.period_start.getUTCMonth()) +
+          1;
+
+        const dailyBudgetForMeter = allocatedBudgetForMeter.div(childPeriodDays);
+
+        const suggestedDailyKwh = dailyBudgetForMeter.div(avgPricePerUnit);
+
+        suggestion = {
+          standard: {
+            message: `Berdasarkan alokasi anggaran periode ini, target harian Anda adalah sekitar ${suggestedDailyKwh.toDP(2).toString()} ${meter.energy_type.unit_of_measurement}.`,
+            suggestedDailyKwh: suggestedDailyKwh.toNumber(),
+            suggestedTotalKwh: suggestedDailyKwh.times(totalDays).toNumber(),
+          },
+        };
+      }
+
+      return {
+        input: {
+          ...data,
+        },
+        budget: budgetInfo,
+        preview: {
+          totalDays,
+          unitOfMeasurement: meter.energy_type.unit_of_measurement,
+          avgPricePerUnit: avgPricePerUnit.toNumber(),
+          inputTotalKwh: inputTotalKwh.toNumber(),
+          estimatedTotalCost: estimatedTotalCost.toNumber(),
+        },
+        suggestion,
+      };
     });
   }
 }

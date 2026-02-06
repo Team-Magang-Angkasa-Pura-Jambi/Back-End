@@ -4,12 +4,22 @@ import { type Router } from 'express';
 
 import { createCrudRouter } from '../../../utils/routerFactory.js';
 import { EfficiencyTargetService } from '../../../services/intelligence/efficiencyTarget.service.js';
-import { EfficiencyTargetController } from '../../../controllers/intelligence/efficiencyTarget.controller.js';
-import { efficiencyScheme } from '../../../validations/intelligence/efficiencyTargets.validation.js';
+import {
+  EfficiencyTargetController,
+  efficiencyTargetController,
+} from '../../../controllers/intelligence/efficiencyTarget.controller.js';
+import {
+  efficiencyScheme,
+  efficiencyTargetPreviewSchema,
+} from '../../../validations/intelligence/efficiencyTargets.validation.js';
+import { authorize } from '../../../middleware/auth.middleware.js';
+import { validate } from '../../../utils/validate.js';
+import { asyncHandler } from '../../../utils/asyncHandler.js';
 
 export default (router: Router) => {
+  const prefix = '/efficiency';
   // Gunakan pabrik untuk membuat semua rute CRUD secara otomatis
-  const efficiencyTargetRouter = createCrudRouter('/efficiency-targets', {
+  const efficiencyTargetRouter = createCrudRouter(prefix, {
     ServiceClass: EfficiencyTargetService,
     ControllerClass: EfficiencyTargetController,
     idParamName: 'targetId',
@@ -30,4 +40,11 @@ export default (router: Router) => {
   });
 
   router.use(efficiencyTargetRouter);
+
+  router.post(
+    `${prefix}/preview`,
+    authorize('Admin', 'SuperAdmin'),
+    validate(efficiencyTargetPreviewSchema),
+    asyncHandler(efficiencyTargetController.getEfficiencyTargetPreview),
+  );
 };

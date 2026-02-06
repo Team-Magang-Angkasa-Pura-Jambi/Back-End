@@ -19,12 +19,26 @@ export default (router: Router) => {
     asyncHandler(alertController.getMeterAlerts),
   );
 
+  router.get(
+    `${prefix}/system`,
+    authorize('Admin', 'SuperAdmin', 'Technician'),
+    asyncHandler(alertController.getSystemAlerts),
+  );
+
+  router.get(
+    `${prefix}/latest`,
+    authorize('Admin', 'SuperAdmin', 'Technician'),
+    validate(getLatestAlertsSchema),
+    asyncHandler(alertController.getLatest),
+  );
+
   router.patch(
     `${prefix}/bulk-update`,
     authorize('Admin', 'SuperAdmin', 'Technician'),
     validate(bulkUpdateAlertsSchema),
     asyncHandler(alertController.bulkUpdateStatus),
   );
+
   router.patch(
     `${prefix}/:alertId`,
     authorize('Admin', 'SuperAdmin', 'Technician'),
@@ -37,47 +51,4 @@ export default (router: Router) => {
     validate(bulkDeleteAlertsSchema),
     asyncHandler(alertController.bulkDelete),
   );
-
-  router.get(
-    `${prefix}/system`,
-    authorize('Admin', 'SuperAdmin', 'Technician'),
-    asyncHandler(alertController.getSystemAlerts),
-  );
-
-  // ---------------------------
-
-  // router.get(
-  //   prefix,
-  //   authorize('Admin', 'SuperAdmin', 'Technician'),
-  //   validate(getAlertsSchema),
-  //   asyncHandler(alertController.getAll)
-  // );
-
-  router.get(
-    `${prefix}/latest`,
-    authorize('Admin', 'SuperAdmin', 'Technician'),
-    validate(getLatestAlertsSchema),
-    asyncHandler(alertController.getLatest),
-  );
-
-  // router.get(
-  //   `${prefix}/unread-count`,
-  //   authorize('Admin', 'SuperAdmin', 'Technician'),
-  //   validate(emptySchema),
-  //   asyncHandler(alertController.getUnreadCount)
-  // );
-
-  // router.patch(
-  //   `${prefix}/acknowledge-all`,
-  //   authorize('Admin', 'SuperAdmin', 'Technician'),
-  //   validate(emptySchema),
-  //   asyncHandler(alertController.acknowledgeAll)
-  // );
-
-  // router.patch(
-  //   `${prefix}/:alertId/acknowledge`,
-  //   authorize('Admin', 'SuperAdmin', 'Technician'),
-  //   validate(alertIdParamSchema),
-  //   asyncHandler(alertController.acknowledge)
-  // );
 };

@@ -12,7 +12,16 @@ import { validate } from '../../../utils/validate.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 
 export default (router: Router) => {
-  const dailySummaryRouter = createCrudRouter('/daily-summary', {
+  const prefix = '/daily-summary';
+
+  router.get(
+    prefix + '/reports-monthly',
+    authorize('Admin', 'SuperAdmin', 'Technician'),
+    validate(getMonthlyReportSchema),
+    asyncHandler(DailySummaryController.getMonthlyReport),
+  );
+
+  const dailySummaryRouter = createCrudRouter(prefix, {
     ServiceClass: DailySummaryService,
     ControllerClass: DailySummaryController,
     idParamName: 'summaryId',
@@ -32,13 +41,6 @@ export default (router: Router) => {
       delete: ['SuperAdmin'],
     },
   });
-
-  dailySummaryRouter.get(
-    '/daily-summary/reports/monthly',
-    authorize('Admin', 'SuperAdmin', 'Technician'),
-    validate(getMonthlyReportSchema),
-    asyncHandler(DailySummaryController.getMonthlyReport),
-  );
 
   router.use(dailySummaryRouter);
 };

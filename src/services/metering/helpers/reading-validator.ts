@@ -28,14 +28,19 @@ export const _validateReadingsAgainstPrevious = async (
   const previousDate = new Date(dateForDb);
   previousDate.setUTCDate(previousDate.getUTCDate() - 1);
 
-  const previousSession = await prisma.readingSession.findUnique({
+  const previousSession = await prisma.readingSession.findFirst({
     where: {
-      unique_meter_reading_per_day: {
-        meter_id: meter.meter_id,
-        reading_date: previousDate,
+      meter_id: meter.meter_id,
+      reading_date: {
+        lt: dateForDb, // ✅ SEBELUM TANGGAL SAAT INI
       },
     },
-    include: { details: true },
+    orderBy: {
+      reading_date: 'desc', // ✅ PALING DEKAT
+    },
+    include: {
+      details: true,
+    },
   });
 
   if (!previousSession) {

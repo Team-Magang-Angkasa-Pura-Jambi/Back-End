@@ -16,7 +16,6 @@ export default (router: Router) => {
 
   router.use(prefix, authMiddleware);
 
-  // GET /api/v1/logbooks - Mengambil semua logbook dengan filter dan paginasi
   router.get(
     prefix,
     authorize('Admin', 'SuperAdmin', 'Technician'),
@@ -24,7 +23,6 @@ export default (router: Router) => {
     asyncHandler(dailyLogbookController.getAll),
   );
 
-  // GET /api/v1/logbooks/:logId - Mengambil satu logbook berdasarkan ID
   router.get(
     `${prefix}/:logId`,
     authorize('Admin', 'SuperAdmin', 'Technician'),
@@ -32,7 +30,6 @@ export default (router: Router) => {
     asyncHandler(dailyLogbookController.getById),
   );
 
-  // POST /api/v1/logbooks/generate - Membuat logbook harian secara otomatis
   router.post(
     `${prefix}/generate`,
     authorize('Admin', 'SuperAdmin', 'Technician'),
@@ -40,7 +37,6 @@ export default (router: Router) => {
     asyncHandler(dailyLogbookController.generate),
   );
 
-  // PATCH /api/v1/logbooks/:logId - Memperbarui catatan manual pada logbook
   router.patch(
     `${prefix}/:logId`,
     authorize('Admin', 'SuperAdmin'),
@@ -48,10 +44,9 @@ export default (router: Router) => {
     asyncHandler(dailyLogbookController.update),
   );
 
-  // DELETE /api/v1/logbooks/:logId - Menghapus logbook
   router.delete(
     `${prefix}/:logId`,
-    authorize('SuperAdmin'), // Hanya SuperAdmin yang boleh menghapus
+    authorize('SuperAdmin'),
     validate(deleteLogbookSchema),
     asyncHandler(dailyLogbookController.delete),
   );

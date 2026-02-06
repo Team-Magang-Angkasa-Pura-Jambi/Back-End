@@ -14,7 +14,8 @@ import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { authorize } from '../../../middleware/auth.middleware.js';
 
 export default (router: Router) => {
-  const annualBudgetRouter = createCrudRouter('/annual-budgets', {
+  const prefix = '/annual-budgets';
+  const annualBudgetRouter = createCrudRouter(prefix, {
     ServiceClass: AnnualBudgetService,
     ControllerClass: AnnualBudgetController,
     idParamName: 'budgetId',
@@ -33,17 +34,15 @@ export default (router: Router) => {
     },
   });
 
-  // PERBAIKAN: Daftarkan rute kustom secara terpisah agar tidak menimpa rute CRUD.
   router.get(
-    '/annual-budgets/parents',
+    prefix + '/parents',
     authorize('Admin', 'SuperAdmin'),
-    // validate(queryAnnualBudget),
+
     asyncHandler(annualBudgetController.getAllParents),
   );
 
-  // -----------------------------new-----------------------------
   router.get(
-    '/annual-budgets/year-options',
+    prefix + '/year-options',
     authorize('Admin', 'SuperAdmin'),
     asyncHandler(annualBudgetController.getYearsOptions),
   );
