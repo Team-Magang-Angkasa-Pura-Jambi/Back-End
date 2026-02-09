@@ -9,70 +9,69 @@ export const _validateReadingsAgainstPrevious = async (
   dateForDb: Date,
   details: CreateReadingSessionInternal['details'],
 ) => {
-  if (meter.energy_type.type_name === 'Fuel') {
-    if (meter.tank_height_cm) {
-      const tankHeight = new Prisma.Decimal(meter.tank_height_cm);
-      for (const detail of details) {
-        const currentValue = new Prisma.Decimal(detail.value);
-        if (currentValue.greaterThan(tankHeight)) {
-          throw new Error400(
-            `Ketinggian BBM yang diinput (${currentValue.toString()} cm) tidak boleh melebihi kapasitas maksimal tangki (${tankHeight.toString()} cm).`,
-          );
-        }
+  // --- 1. VALIDASI FUEL (Kapasitas Tangki) ---
+  if (meter.energy_type.type_name === 'Fuel' && meter.tank_height_cm) {
+    const tankHeight = new Prisma.Decimal(meter.tank_height_cm);
+    for (const detail of details) {
+      if (new Prisma.Decimal(detail.value).greaterThan(tankHeight)) {
+        throw new Error400(
+          `Input (${detail.value} cm) melebihi kapasitas tangki (${tankHeight.toString()} cm).`,
+        );
       }
     }
-
+    // Note: Untuk Fuel biasanya diperbolehkan input mundur/acak,
+    // tapi jika ingin tetap strik, hapus 'return' di bawah ini.
     return;
   }
 
-  const previousDate = new Date(dateForDb);
-  previousDate.setUTCDate(previousDate.getUTCDate() - 1);
-
-  const previousSession = await prisma.readingSession.findFirst({
+  // --- 2. VALIDASI BACKDATE (Cek apakah ada data yang lebih baru) ---
+  const futureSession = await prisma.readingSession.findFirst({
     where: {
       meter_id: meter.meter_id,
-      reading_date: {
-        lt: dateForDb,
-      },
-    },
-    orderBy: {
-      reading_date: 'desc',
-    },
-    include: {
-      details: true,
+      reading_date: { gt: dateForDb }, // Mencari data SETELAH tanggal input
     },
   });
 
-  if (!previousSession) {
-    const anyPreviousEntry = await prisma.readingSession.findFirst({
-      where: { meter_id: meter.meter_id, reading_date: { lt: dateForDb } },
-    });
+  if (futureSession) {
+    throw new Error400(
+      `Tanggal tidak valid. Sudah ada data yang lebih baru (Tanggal ${futureSession.reading_date.toISOString().split('T')[0]}).`,
+    );
+  }
 
-    if (anyPreviousEntry) {
+  // --- 3. VALIDASI SEQUENCE (Cek data sebelumnya/H-1) ---
+  const previousSession = await prisma.readingSession.findFirst({
+    where: {
+      meter_id: meter.meter_id,
+      reading_date: { lt: dateForDb },
+    },
+    orderBy: { reading_date: 'desc' },
+    include: { details: true },
+  });
+
+  if (previousSession) {
+    // Cek apakah data sebelumnya tepat H-1 atau ada gap
+    const diffTime = Math.abs(dateForDb.getTime() - previousSession.reading_date.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays > 1) {
       throw new Error400(
-        `Data untuk tanggal ${
-          previousDate.toISOString().split('T')[0]
-        } belum diinput. Silakan input data hari sebelumnya terlebih dahulu.`,
+        `Ada gap data. Data terakhir adalah tanggal ${previousSession.reading_date.toISOString().split('T')[0]}. Silakan input data secara berurutan.`,
       );
     }
 
-    return;
-  }
+    // --- 4. VALIDASI NILAI (Opsional: Misal input tidak boleh lebih kecil dari sebelumnya) ---
+    for (const detail of details) {
+      const prevDetail = previousSession.details.find(
+        (d) => d.reading_type_id === detail.reading_type_id,
+      );
+      if (!prevDetail) continue;
 
-  for (const detail of details) {
-    const prevDetail = previousSession.details.find(
-      (d) => d.reading_type_id === detail.reading_type_id,
-    );
-    if (!prevDetail) continue;
+      const currentValue = new Prisma.Decimal(detail.value);
+      const prevValue = new Prisma.Decimal(prevDetail.value);
 
-    const currentValue = new Prisma.Decimal(detail.value);
-
-    if (meter.rollover_limit) {
-      const rolloverLimit = new Prisma.Decimal(meter.rollover_limit);
-      if (currentValue.greaterThan(rolloverLimit)) {
-        throw new Error400(
-          `Nilai input (${currentValue.toString()}) tidak boleh lebih besar dari batas reset meter (${rolloverLimit.toString()}).`,
-        );
+      // Contoh: Jika meteran elektrik tidak boleh turun angkanya (kecuali reset/rollover)
+      if (currentValue.lessThan(prevValue) && !meter.rollover_limit) {
+        throw new Error400(`Nilai input tidak boleh lebih kecil dari nilai sebelumnya.`);
       }
     }
   }
