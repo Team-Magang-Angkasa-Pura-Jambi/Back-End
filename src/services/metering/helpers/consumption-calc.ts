@@ -112,103 +112,129 @@ const _calculateOfficeSummary = async (
   tx: Prisma.TransactionClient,
   meter: MeterWithRelations,
   currentSession: SessionWithDetails,
-  previousSession: SessionWithDetails | null,
-
+  _previousSession: SessionWithDetails | null,
   HARGA_WBP: Prisma.Decimal,
   HARGA_LWBP: Prisma.Decimal,
 ) => {
   const FAKTOR_KALI = new Prisma.Decimal(120);
 
-  const typeSore = await tx.readingType.findFirst({ where: { type_name: 'Sore' } });
-  const typeMalam = await tx.readingType.findFirst({ where: { type_name: 'Malam' } });
-  const typePagi = await tx.readingType.findFirst({ where: { type_name: 'Pagi' } });
+  const fmt = new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
 
-  if (!typeSore || !typeMalam || !typePagi) {
-    throw new Error404('Missing Type Reading');
-  }
+  const currentDateObj = new Date(currentSession.reading_date);
+  const yesterdayDateObj = new Date(currentDateObj);
+  yesterdayDateObj.setDate(yesterdayDateObj.getDate() - 1);
 
-  const startDate = new Date(currentSession.reading_date);
-  startDate.setHours(0, 0, 0, 0);
+  const targetDateStr = fmt.format(currentDateObj);
+  const yesterdayDateStr = fmt.format(yesterdayDateObj);
 
-  const endDate = new Date(currentSession.reading_date);
-  endDate.setHours(23, 59, 59, 999);
+  console.log(`\n========= VALIDASI STRICT: ${meter.meter_code} =========`);
+  console.log(`Target Hari Ini: ${targetDateStr}, Target Kemarin: ${yesterdayDateStr}`);
 
-  const dailySessions = await tx.readingSession.findMany({
+  const types = await tx.readingType.findMany({
+    where: { type_name: { in: ['Pagi', 'Sore', 'Malam'] } },
+  });
+
+  const getTypeId = (name: string) => types.find((t) => t.type_name === name)?.reading_type_id;
+  const ID_PAGI = getTypeId('Pagi');
+  const ID_SORE = getTypeId('Sore');
+  const ID_MALAM = getTypeId('Malam');
+
+  if (!ID_PAGI || !ID_SORE || !ID_MALAM) throw new Error('Tipe Reading tidak lengkap.');
+
+  const bufferStart = new Date(yesterdayDateObj);
+  bufferStart.setHours(0, 0, 0, 0);
+
+  const bufferEnd = new Date(currentDateObj);
+  bufferEnd.setHours(23, 59, 59, 999);
+
+  const rawSessions = await tx.readingSession.findMany({
     where: {
       meter_id: meter.meter_id,
-      reading_date: { gte: startDate, lte: endDate },
+      reading_date: { gte: bufferStart, lte: bufferEnd },
     },
     include: { details: true },
     orderBy: { reading_date: 'asc' },
   });
 
-  const findValueByType = (typeId: number | undefined): Prisma.Decimal | null => {
-    if (!typeId) return null;
+  const sessionsToday = rawSessions.filter(
+    (s) => fmt.format(new Date(s.reading_date)) === targetDateStr,
+  );
+  const sessionsYesterday = rawSessions.filter(
+    (s) => fmt.format(new Date(s.reading_date)) === yesterdayDateStr,
+  );
 
-    for (const session of dailySessions) {
-      const detail = session.details.find((d) => d.reading_type_id === typeId);
-      if (detail) return new Prisma.Decimal(detail.value);
+  const findVal = (sessions: any[], typeId: number) => {
+    const checkList = [...sessions].reverse();
+    for (const s of checkList) {
+      const d = s.details.find((dt: any) => dt.reading_type_id === typeId);
+      if (d && d.value !== null) return new Prisma.Decimal(d.value);
     }
-
-    const currDetail = currentSession.details.find((d) => d.reading_type_id === typeId);
-    if (currDetail) return new Prisma.Decimal(currDetail.value);
-
     return null;
   };
 
-  const getPreviousValue = (sess: SessionWithDetails | null) => {
-    if (!sess) return new Prisma.Decimal(0);
+  const standPagi = findVal(sessionsToday, ID_PAGI);
+  const standSore = findVal(sessionsToday, ID_SORE);
+  const standMalam = findVal(sessionsToday, ID_MALAM);
 
-    const detail =
-      sess.details.find((d) => d.reading_type_id === typePagi?.reading_type_id) ?? sess.details[0];
-    return detail ? new Prisma.Decimal(detail.value) : new Prisma.Decimal(0);
-  };
+  const standMalamKemarin = findVal(sessionsYesterday, ID_MALAM);
 
-  const standAwal = getPreviousValue(previousSession);
-
-  const standSore = findValueByType(typeSore?.reading_type_id);
-  const standMalam = findValueByType(typeMalam?.reading_type_id);
-  const standPagi = findValueByType(typePagi?.reading_type_id);
-
-  let deltaLWBPSiang = new Prisma.Decimal(0);
-  if (standSore) {
-    deltaLWBPSiang = standSore.minus(standPagi ?? 0);
+  if (standPagi && standMalamKemarin) {
+    if (standPagi.lessThan(standMalamKemarin)) {
+      throw new Error(
+        `INPUT INVALID: Stand Pagi Ini (${standPagi.toString()}) lebih KECIL dari Malam Kemarin (${standMalamKemarin.toString()}). Meteran tidak boleh mundur.`,
+      );
+    }
   }
 
+  if (standSore && standPagi) {
+    if (standSore.lessThan(standPagi)) {
+      throw new Error(
+        `INPUT INVALID: Stand Sore (${standSore.toString()}) lebih KECIL dari Stand Pagi (${standPagi.toString()}). Cek kembali angka input.`,
+      );
+    }
+  }
+
+  if (standMalam && standSore) {
+    if (standMalam.lessThan(standSore)) {
+      throw new Error(
+        `INPUT INVALID: Stand Malam (${standMalam.toString()}) lebih KECIL dari Stand Sore (${standSore.toString()}). Cek kembali angka input.`,
+      );
+    }
+  }
+
+  let deltaLWBP = new Prisma.Decimal(0);
   let deltaWBP = new Prisma.Decimal(0);
+
+  if (standSore && standPagi) {
+    deltaLWBP = standSore.minus(standPagi);
+  }
+
   if (standMalam && standSore) {
     deltaWBP = standMalam.minus(standSore);
   }
 
-  let deltaLWBPMalam = new Prisma.Decimal(0);
-  if (standPagi) {
-    if (standMalam) {
-      deltaLWBPMalam = standPagi.minus(standMalam);
-    } else if (standSore) {
-      deltaLWBPMalam = standPagi.minus(standSore);
-    }
-  }
+  const realLWBP = deltaLWBP.times(FAKTOR_KALI);
+  const realWBP = deltaWBP.times(FAKTOR_KALI);
 
-  if (deltaLWBPSiang.isNegative()) deltaLWBPSiang = new Prisma.Decimal(0);
-  if (deltaWBP.isNegative()) deltaWBP = new Prisma.Decimal(0);
-  if (deltaLWBPMalam.isNegative()) deltaLWBPMalam = new Prisma.Decimal(0);
+  const standAkhir = standMalam ?? standSore ?? standPagi ?? new Prisma.Decimal(0);
+  const standAwal = standPagi ?? new Prisma.Decimal(0);
 
-  const rawLWBP = deltaLWBPSiang.plus(deltaLWBPMalam);
-  const rawWBP = deltaWBP;
-
-  const realLWBP = rawLWBP.times(FAKTOR_KALI);
-  const realWBP = rawWBP.times(FAKTOR_KALI);
-
-  const costLWBP = realLWBP.times(HARGA_LWBP);
-  const costWBP = realWBP.times(HARGA_WBP);
+  console.log(
+    `[RESULT] Success Validated -> LWBP: ${realLWBP.toString()}, WBP: ${realWBP.toString()}`,
+  );
 
   return _buildOutput(
     meter,
     realWBP,
     realLWBP,
-    costWBP,
-    costLWBP,
-    standPagi ?? new Prisma.Decimal(0),
+    realWBP.times(HARGA_WBP),
+    realLWBP.times(HARGA_LWBP),
+    standAkhir,
     standAwal,
   );
 };
@@ -497,7 +523,6 @@ export const _calculateWaterSummary = async (
     `\n💧 [WATER-CALC] Memulai perhitungan untuk Meter: ${meter.meter_code} (${dateStr})`,
   );
 
-  // 1. Validasi Price Scheme
   if (!priceScheme) {
     console.error(
       `❌ [WATER-CALC] Price Scheme tidak ditemukan untuk Group: ${meter.tariff_group.group_code}`,
@@ -507,8 +532,6 @@ export const _calculateWaterSummary = async (
     );
   }
 
-  // 2. Cari Tipe Bacaan 'Water'
-  // Dispesifikasikan 'Water' agar tidak tertukar jika nanti ada tipe lain di EnergyType yang sama
   let mainType = await tx.readingType.findFirst({
     where: {
       energy_type_id: meter.energy_type_id,
@@ -516,7 +539,6 @@ export const _calculateWaterSummary = async (
     },
   });
 
-  // Fallback: Jika tidak ada yang bernama 'Water', ambil tipe pertama apapun di energi ini
   if (!mainType) {
     console.warn(`⚠️ [WATER-CALC] Tipe 'Water' spesifik tidak ditemukan, mencari tipe generic...`);
     mainType = await tx.readingType.findFirst({
@@ -535,13 +557,11 @@ export const _calculateWaterSummary = async (
     `✅ [WATER-CALC] Reading Type ditemukan: ${mainType.type_name} (ID: ${mainType.reading_type_id})`,
   );
 
-  // 3. Helper untuk ambil nilai detail
   const getDetailValue = (session: SessionWithDetails | null, typeId: number) => {
     const detail = session?.details.find((d) => d.reading_type_id === typeId);
-    return detail ? new Prisma.Decimal(detail.value) : undefined; // Return undefined jika tidak ada, jangan 0 dulu
+    return detail ? new Prisma.Decimal(detail.value) : undefined;
   };
 
-  // 4. Ambil Nilai Meter (Stand Awal & Akhir)
   const currentVal = getDetailValue(currentSession, mainType.reading_type_id);
   const prevVal = getDetailValue(previousSession, mainType.reading_type_id);
 
@@ -550,7 +570,6 @@ export const _calculateWaterSummary = async (
     `📊 [WATER-READING] Stand Awal (Previous): ${prevVal?.toString() ?? 'Tidak Ada (Initial/Null)'}`,
   );
 
-  // 5. Validasi Rate Harga
   const rate = priceScheme.rates.find((r) => r.reading_type_id === mainType.reading_type_id);
 
   if (!rate) {
@@ -565,11 +584,9 @@ export const _calculateWaterSummary = async (
   const HARGA_SATUAN = new Prisma.Decimal(rate.value ?? 0);
   console.log(`💰 [WATER-RATE] Harga Satuan: Rp ${HARGA_SATUAN.toString()} / m3`);
 
-  // 6. Hitung Konsumsi (Safe Calculation handling Rollover)
-  // Jika prevVal undefined, _calculateSafeConsumption harus menanganinya (biasanya dianggap 0 atau pemakaian 0)
   const consumption = _calculateSafeConsumption(
     currentVal ?? new Prisma.Decimal(0),
-    prevVal ?? new Prisma.Decimal(0), // Jika null, asumsi flow meter baru/reset
+    prevVal ?? new Prisma.Decimal(0),
     meter.rollover_limit,
   );
 
@@ -578,7 +595,6 @@ export const _calculateWaterSummary = async (
   console.log(`🧮 [WATER-RESULT] Konsumsi: ${consumption.toString()} m3`);
   console.log(`💵 [WATER-RESULT] Total Biaya: Rp ${totalCost.toString()}`);
 
-  // 7. Return Format Summary
   return [
     {
       metric_name: `Pemakaian Harian (${meter.energy_type.type_name})`,
