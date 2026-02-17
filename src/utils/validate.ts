@@ -1,28 +1,20 @@
 import type { Request, Response, NextFunction } from 'express';
-import { ZodError, type ZodObject } from 'zod';
-import { Error400 } from './customError.js';
+import { type ZodObject } from 'zod';
 
 export const validate =
-  <T extends ZodObject>(schema: T) =>
-  async (req: Request, res: Response, next: NextFunction) => {
-    const { body, params, query } = req;
-
+  (schema: ZodObject) => async (req: Request, res: Response, next: NextFunction) => {
     try {
-      res.locals.validatedData = await schema.parseAsync({
-        body,
-        params,
-        query,
+      const validatedData = await schema.parseAsync({
+        body: req.body,
+        query: req.query,
+        params: req.params,
       });
-
+      res.locals.validatedData = {
+        ...(res.locals.validatedData ?? {}),
+        ...validatedData,
+      };
       return next();
     } catch (err) {
-      if (err instanceof ZodError) {
-        const errorMessages = err.issues.map(
-          (issue) => `${issue.path.join('.')}: ${issue.message}`,
-        );
-
-        return next(new Error400(`Invalid input. ${errorMessages.join('; ')}`));
-      }
       return next(err);
     }
   };

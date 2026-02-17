@@ -1,0 +1,109 @@
+{
+  'openapi': '3.0.0',
+  'info': { 'title': 'Sentinel API', 'version': '2.0.0', 'description': 'API Documentation' },
+  'servers': [{ 'url': 'http://localhost:8080/api/v2', 'description': 'Local Server' }],
+  'paths':
+    {
+      '/':
+        {
+          'get':
+            {
+              'tags': ['Root'],
+              'summary': 'Cek Status Server',
+              'description': 'Endpoint ini buat ngecek apakah server backend hidup atau mati.',
+              'responses':
+                {
+                  '200':
+                    {
+                      'description': 'Server OK',
+                      'content':
+                        {
+                          'application/json':
+                            {
+                              'schema':
+                                {
+                                  'type': 'object',
+                                  'properties':
+                                    {
+                                      'status':
+                                        {
+                                          'type': 'object',
+                                          'properties':
+                                            {
+                                              'code': { 'type': 'number', 'example': 200 },
+                                              'message':
+                                                {
+                                                  'type': 'string',
+                                                  'example': 'Sentinel API v2 Ready to use (❁´◡`❁) Happy Coding!',
+                                                },
+                                            },
+                                        },
+                                      'data':
+                                        {
+                                          'type': 'object',
+                                          'properties':
+                                            {
+                                              'status': { 'type': 'string', 'example': 'Online' },
+                                              'version': { 'type': 'string', 'example': '2.0.0' },
+                                              'serverTime':
+                                                {
+                                                  'type': 'string',
+                                                  'example': '17/2/2026, 21.45.04 WIB',
+                                                },
+                                            },
+                                        },
+                                    },
+                                  'xml': { 'name': 'main' },
+                                },
+                            },
+                          'application/xml':
+                            {
+                              'schema':
+                                {
+                                  'type': 'object',
+                                  'properties':
+                                    {
+                                      'status':
+                                        {
+                                          'type': 'object',
+                                          'properties':
+                                            {
+                                              'code': { 'type': 'number', 'example': 200 },
+                                              'message':
+                                                {
+                                                  'type': 'string',
+                                                  'example': 'Sentinel API v2 Ready to use (❁´◡`❁) Happy Coding!',
+                                                },
+                                            },
+                                        },
+                                      'data':
+                                        {
+                                          'type': 'object',
+                                          'properties':
+                                            {
+                                              'status': { 'type': 'string', 'example': 'Online' },
+                                              'version': { 'type': 'string', 'example': '2.0.0' },
+                                              'serverTime':
+                                                {
+                                                  'type': 'string',
+                                                  'example': '17/2/2026, 21.45.04 WIB',
+                                                },
+                                            },
+                                        },
+                                    },
+                                  'xml': { 'name': 'main' },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+  'components':
+    {
+      'securitySchemes':
+        { 'bearerAuth': { 'type': 'http', 'scheme': 'bearer', 'bearerFormat': 'JWT' } },
+    },
+  'security': [{ 'bearerAuth': [] }],
+}

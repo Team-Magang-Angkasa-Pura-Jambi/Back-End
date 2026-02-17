@@ -88,8 +88,9 @@ export class Error429 extends HttpError {
 
 // 500 Internal Server Error
 export class Error500 extends HttpError {
-  constructor(message = 'Internal Server Error') {
-    super(500, message, 'InternalServerError');
+  // Tambahkan parameter optional `originalError`
+  constructor(message = 'Internal Server Error', originalError?: any) {
+    super(500, message, originalError);
   }
 }
 
