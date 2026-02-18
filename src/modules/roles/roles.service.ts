@@ -14,8 +14,18 @@ export const rolesService = {
     });
   },
 
-  list: async (query?: { role_name?: string }) => {
+  list: async (id?: number, query?: { role_name?: string }) => {
     const whereClause: Prisma.RoleWhereInput = {};
+    if (id) {
+      return await prisma.role.findUnique({
+        where: { role_id: id },
+        select: {
+          role_id: true,
+          role_name: true,
+          users: { select: { user_id: true, username: true } },
+        },
+      });
+    }
 
     if (query?.role_name) {
       const roleInput = query.role_name.toUpperCase();

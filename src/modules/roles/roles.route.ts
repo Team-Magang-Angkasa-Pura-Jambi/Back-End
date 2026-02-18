@@ -6,6 +6,7 @@ import { RolesSchema } from './roles.schema.js';
 
 export const rolesRoute = (router: Router) => {
   const prefix = '/roles';
-  router.get(prefix, rolesController.list); // JANGAN pakai variabel prefix
-  router.post(prefix, validate(RolesSchema.body), asyncHandler(rolesController.store));
+  router.get(prefix, validate(RolesSchema.show), rolesController.list); // JANGAN pakai variabel prefix
+  router.get(prefix + '/:id', validate(RolesSchema.show), rolesController.list); // JANGAN pakai variabel prefix
+  router.post(prefix, validate(RolesSchema.store), asyncHandler(rolesController.store));
 };

@@ -1,3 +1,4 @@
+import { handlePrismaError } from '../../common/utils/prismaError.js';
 import prisma from '../../configs/db.js';
 import { RoleType, type Prisma } from '../../generated/prisma/index.js';
 import { type UpdateUserPayload, type UserBodyPayload } from './users.schema.js';
@@ -22,32 +23,40 @@ export const usersService = {
   },
 
   patch: async (user_id: number, payload: UpdateUserPayload) => {
-    const dataToUpdate: any = { ...payload };
+    try {
+      const dataToUpdate: any = { ...payload };
 
-    if (payload.password) {
-      dataToUpdate.password_hash = await bcrypt.hash(payload.password, 10);
-      delete dataToUpdate.password;
+      if (payload.password) {
+        dataToUpdate.password_hash = await bcrypt.hash(payload.password, 10);
+        delete dataToUpdate.password;
+      }
+
+      return await prisma.user.update({
+        where: { user_id },
+        data: dataToUpdate,
+        select: {
+          user_id: true,
+          full_name: true,
+          role: { select: { role_name: true } },
+        },
+      });
+    } catch (error) {
+      return handlePrismaError(error, 'User');
     }
-
-    return await prisma.user.update({
-      where: { user_id },
-      data: dataToUpdate,
-      select: {
-        user_id: true,
-        full_name: true,
-        role: { select: { role_name: true } },
-      },
-    });
   },
 
   remove: async (id: number) => {
-    return await prisma.user.delete({
-      where: { user_id: id },
-      select: {
-        user_id: true,
-        full_name: true,
-      },
-    });
+    try {
+      return await prisma.user.delete({
+        where: { user_id: id },
+        select: {
+          user_id: true,
+          full_name: true,
+        },
+      });
+    } catch (error) {
+      return handlePrismaError(error, 'User');
+    }
   },
 
   show: async (
