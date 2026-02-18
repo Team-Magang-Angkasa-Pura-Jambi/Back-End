@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import type { NextFunction, Request, Response } from 'express';
 import { Error401, Error403 } from '../utils/customError.js';
 import type { CustomJwtPayload } from '../types/Express.type.js';
-import type { RoleName } from '../generated/prisma/index.js';
+import { type RoleType } from '../generated/prisma/index.js';
 
 export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -36,7 +36,7 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
   }
 };
 
-export const authorize = (...allowedRoles: RoleName[]) => {
+export const authorize = (...allowedRoles: RoleType[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {

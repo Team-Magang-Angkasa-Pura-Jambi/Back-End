@@ -30,6 +30,7 @@ export const authService = {
       id: user.user_id,
       username: user.username,
       full_name: user.full_name,
+      role: user.role.role_name,
     };
 
     const token = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: '1h' });

@@ -46,6 +46,7 @@
     "express-async-handler": "^1.2.0",
     "ioredis": "^5.7.0",
     "jsonwebtoken": "^9.0.2",
+    "libphonenumber-js": "^1.12.37",
     "morgan": "^1.10.1",
     "node-cron": "^4.2.1",
     "pino": "^10.3.1",

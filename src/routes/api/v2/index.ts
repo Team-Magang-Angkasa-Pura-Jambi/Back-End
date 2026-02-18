@@ -4,6 +4,12 @@ import { usersRoute } from '../../../modules/users/users.route.js';
 import { rolesRoute } from '../../../modules/roles/roles.route.js';
 import { authRoute } from '../../../modules/auth/auth.route.js';
 import { energiesRoute } from '../../../modules/energies/energies.route.js';
+import { readingTypesRoute } from '../../../modules/reading-types/reading-types.route.js';
+import { authMiddleware } from '../../../middleware/auth.middleware.js';
+import { locationsRoute } from '../../../modules/locations/locations.route.js';
+import { auditContextMiddleware } from '../../../common/utils/auditContext.js';
+import { tenantsRoute } from '../../../modules/tenants/tenants.route.js';
+import { auditLogsRouter } from '../../../modules/audit-log/audit-log.route.js';
 
 export default (app: any) => {
   const router = Router();
@@ -11,8 +17,18 @@ export default (app: any) => {
   app.use('/api/v2', router);
   router.get('/', root);
   // root(router);
+  authRoute(router);
+
+  router.use(authMiddleware);
+  router.use(auditContextMiddleware);
+
   usersRoute(router);
   rolesRoute(router);
-  authRoute(router);
   energiesRoute(router);
+  readingTypesRoute(router);
+  locationsRoute(router);
+
+  tenantsRoute(router);
+
+  auditLogsRouter(router);
 };

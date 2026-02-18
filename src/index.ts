@@ -2,10 +2,12 @@ import http from 'http';
 import 'dotenv/config';
 import { app } from './configs/app.js';
 import { SocketServer } from './configs/socket.js';
+import { configureZod } from './common/utils/zodConfig.js';
 
 const port = Number(process.env.PORT ?? 8080);
 const host = process.env.HOST_LOCAL_AREA ?? '0.0.0.0';
 
+configureZod();
 const server = http.createServer(app);
 
 const socketServer = new SocketServer(server);

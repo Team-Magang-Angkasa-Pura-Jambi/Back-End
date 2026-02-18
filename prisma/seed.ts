@@ -1,161 +1,97 @@
-// import { PrismaClient } from '../src/generated/prisma/index.js';
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcrypt';
 
-// const prisma = new PrismaClient();
+const prisma = new PrismaClient();
 
-// async function main() {
-//   console.log('🚀 Seeding Master Data (Energy, Reading Types, Categories)...');
+async function main() {
+  console.log('🌱 Starting Seeding...');
 
-//   // --- 1. ENERGY TYPES (Jenis Energi) ---
-//   console.log('👉 Seeding Energy Types...');
+  await prisma.user.deleteMany({});
+  await prisma.readingType.deleteMany({});
+  await prisma.energyType.deleteMany({});
+  await prisma.role.deleteMany({});
+  console.log('🧹 Database cleaned');
 
-//   // awit prisma.user.upsert({update: {}, create: {username: 'admin', password_hash:'password123',role_id:}})
+  const roles = ['SUPER_ADMIN', 'ADMIN', 'TECHNICIAN'] as const;
+  for (const roleName of roles) {
+    await prisma.role.upsert({
+      where: { role_name: roleName },
+      update: {},
+      create: { role_name: roleName },
+    });
+  }
+  console.log('✅ Roles seeded');
 
-//   await prisma.energyType.upsert({
-//     where: { type_name: 'Electricity' },
-//     update: {},
-//     create: { type_name: 'Electricity', unit_of_measurement: 'kWh' },
-//   });
+  const energyTypes = [
+    { energy_type_id: 1, name: 'Electricity', unit_standard: 'kWh' },
+    { energy_type_id: 2, name: 'Water', unit_standard: 'm3' },
+    { energy_type_id: 3, name: 'Gas', unit_standard: 'm3' },
+  ];
 
-//   await prisma.energyType.upsert({
-//     where: { type_name: 'Water' },
-//     update: {},
-//     create: { type_name: 'Water', unit_of_measurement: 'm³' },
-//   });
+  for (const et of energyTypes) {
+    await prisma.energyType.upsert({
+      where: { energy_type_id: et.energy_type_id },
+      update: { name: et.name, unit_standard: et.unit_standard },
+      create: et,
+    });
+  }
+  console.log('✅ Energy Types seeded');
 
-//   await prisma.energyType.upsert({
-//     where: { type_name: 'Fuel' },
-//     update: {},
-//     create: { type_name: 'Fuel', unit_of_measurement: 'Liter' },
-//   });
+  const readingTypes = [
+    { reading_type_id: 1, type_name: 'Electricity Standard', unit: 'kWh', energy_type_id: 1 },
+    { reading_type_id: 2, type_name: 'Water Standard', unit: 'm3', energy_type_id: 2 },
+    { reading_type_id: 3, type_name: 'Gas Standard', unit: 'm3', energy_type_id: 3 },
+  ];
 
-//   // --- 2. READING TYPES (Tipe Pembacaan) ---
-//   // PERBAIKAN: Menambahkan field 'reading_unit' yang wajib
-//   console.log('👉 Seeding Reading Types...');
+  for (const type of readingTypes) {
+    await prisma.readingType.upsert({
+      where: { reading_type_id: type.reading_type_id },
+      update: { unit: type.unit, type_name: type.type_name, energy_type_id: type.energy_type_id },
+      create: type,
+    });
+  }
+  console.log('✅ Reading Types seeded');
 
-//   // A. Listrik (WBP & LWBP)
-//   await prisma.readingType.upsert({
-//     where: { type_name: 'WBP' },
-//     update: {},
-//     create: {
-//       type_name: 'WBP',
-//       reading_unit: 'kWh', // Field Wajib Baru
-//       energy_type: { connect: { type_name: 'Electricity' } },
-//     },
-//   });
+  const hashedPassword = await bcrypt.hash('admin123', 10);
+  const superAdminRole = await prisma.role.findUnique({ where: { role_name: 'SUPER_ADMIN' } });
 
-//   await prisma.readingType.upsert({
-//     where: { type_name: 'LWBP' },
-//     update: {},
-//     create: {
-//       type_name: 'LWBP',
-//       reading_unit: 'kWh', // Field Wajib Baru
-//       energy_type: { connect: { type_name: 'Electricity' } },
-//     },
-//   });
+  const roleId = superAdminRole?.role_id ?? 1;
 
-//   // B. BBM / Fuel (Flow)
-//   await prisma.readingType.upsert({
-//     where: { type_name: 'Flow' },
-//     update: {},
-//     create: {
-//       type_name: 'Flow',
-//       reading_unit: 'Liter', // Field Wajib Baru
-//       energy_type: { connect: { type_name: 'Fuel' } },
-//     },
-//   });
+  await prisma.user.upsert({
+    where: { user_id: 1 },
+    update: { username: 'system', email: 'system@sentinel.local' },
+    create: {
+      user_id: 1,
+      username: 'system',
+      email: 'system@sentinel.local',
+      password_hash: hashedPassword,
+      full_name: 'System Administrator',
+      role_id: roleId,
+    },
+  });
 
-//   // C. Air / Water (Total)
-//   await prisma.readingType.upsert({
-//     where: { type_name: 'Total' },
-//     update: {},
-//     create: {
-//       type_name: 'Total',
-//       reading_unit: 'm³', // Field Wajib Baru
-//       energy_type: { connect: { type_name: 'Water' } },
-//     },
-//   });
+  await prisma.user.upsert({
+    where: { user_id: 2 },
+    update: { username: 'quls_admin', email: 'admin@sentinel.local' },
+    create: {
+      user_id: 2,
+      username: 'quls_admin',
+      email: 'admin@sentinel.local',
+      password_hash: hashedPassword,
+      full_name: 'Yudi Admin Sentinel',
+      role_id: roleId,
+    },
+  });
 
-//   // --- 3. METER CATEGORIES (Kategori Meter) ---
-//   console.log('👉 Seeding Meter Categories...');
+  console.log('✅ Users seeded');
+  console.log('🚀 Seeding finished successfully.');
+}
 
-//   /**
-//    * Kategori: TERMINAL
-//    * Fasilitas Lengkap: Punya Listrik (WBP, LWBP), Air (Total), dan BBM (Flow)
-//    */
-//   await prisma.meterCategory.upsert({
-//     where: { name: 'Terminal' },
-//     update: {
-//       allowed_reading_types: {
-//         set: [], // Reset relasi lama
-//         connect: [
-//           { type_name: 'WBP' },
-//           { type_name: 'LWBP' },
-//           { type_name: 'Total' },
-//           { type_name: 'Flow' },
-//         ],
-//       },
-//     },
-//     create: {
-//       name: 'Terminal',
-//       allowed_reading_types: {
-//         connect: [
-//           { type_name: 'WBP' },
-//           { type_name: 'LWBP' },
-//           { type_name: 'Total' },
-//           { type_name: 'Flow' },
-//         ],
-//       },
-//     },
-//   });
-
-//   /**
-//    * Kategori: OFFICE
-//    * Standar Kantor: Biasanya hanya Listrik dan Air
-//    */
-//   await prisma.meterCategory.upsert({
-//     where: { name: 'Office' },
-//     update: {
-//       allowed_reading_types: {
-//         set: [],
-//         connect: [{ type_name: 'WBP' }, { type_name: 'LWBP' }, { type_name: 'Total' }],
-//       },
-//     },
-//     create: {
-//       name: 'Office',
-//       allowed_reading_types: {
-//         connect: [{ type_name: 'WBP' }, { type_name: 'LWBP' }, { type_name: 'Total' }],
-//       },
-//     },
-//   });
-
-//   /**
-//    * Kategori: GENERAL
-//    * Fasilitas Umum: Biasanya hanya butuh Listrik standar
-//    */
-//   await prisma.meterCategory.upsert({
-//     where: { name: 'General' },
-//     update: {
-//       allowed_reading_types: {
-//         set: [],
-//         connect: [{ type_name: 'WBP' }, { type_name: 'LWBP' }],
-//       },
-//     },
-//     create: {
-//       name: 'General',
-//       allowed_reading_types: {
-//         connect: [{ type_name: 'WBP' }, { type_name: 'LWBP' }],
-//       },
-//     },
-//   });
-
-//   console.log('✅ Data Master (Tipe Bacaan & Kategori) berhasil dibuat!');
-// }
-
-// main()
-//   .catch((error) => {
-//     console.error('❌ Seeding failed:', error);
-//     process.exit(1);
-//   })
-//   .finally(async () => {
-//     await prisma.$disconnect();
-//   });
+main()
+  .catch((e) => {
+    console.error('❌ Seeding Error:', e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
