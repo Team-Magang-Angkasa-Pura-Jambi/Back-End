@@ -7,13 +7,21 @@ interface SentinelEntity {
   location_id?: number | string;
   meter_id?: number | string;
   reading_type_id?: number | string;
+  scheme_id?: number | string;
 }
 
 const basePrisma = new PrismaClient({
   log: ['query', 'error', 'warn'],
 });
 
-const AUDITABLE_MODELS = ['Location', 'User', 'Meter', 'PriceScheme', 'Tenant'];
+const AUDITABLE_MODELS = [
+  'Location',
+  'User',
+  'Meter',
+  'PriceScheme', // Nama Model Prisma
+  'price_schemes', // Nama Tabel Database
+  'Tenant',
+];
 
 const prisma = basePrisma.$extends({
   query: {
@@ -62,6 +70,7 @@ const prisma = basePrisma.$extends({
                 entity?.location_id ??
                 entity?.meter_id ??
                 entity?.reading_type_id ??
+                entity?.scheme_id ??
                 'N/A',
             );
 
