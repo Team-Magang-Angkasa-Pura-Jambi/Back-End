@@ -17,6 +17,8 @@ import { meterConfigsRoute } from '../../../modules/meter_reading_configs/meter_
 import { templateRoute } from '../../../modules/calculation_templates/calculation_templates.route.js';
 import { formulaRoute } from '../../../modules/formula_definitions/formula_definitions.route.js';
 import { priceSchemeRoute } from '../../../modules/price_schemes/price_schemes.route.js';
+import { budgetRoute } from '../../../modules/annual_budgets/annual_budgets.route.js';
+import { allocationRoute } from '../../../modules/budget_allocations/budget_allocations.route.js';
 
 export default (app: any) => {
   const router = Router();
@@ -51,4 +53,8 @@ export default (app: any) => {
 
   formulaRoute(router);
   priceSchemeRoute(router);
+
+  budgetRoute(router);
+
+  allocationRoute(router);
 };
