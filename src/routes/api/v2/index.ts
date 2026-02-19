@@ -11,6 +11,7 @@ import { auditContextMiddleware } from '../../../common/utils/auditContext.js';
 import { tenantsRoute } from '../../../modules/tenants/tenants.route.js';
 import { auditLogsRouter } from '../../../modules/audit-log/audit-log.route.js';
 import { notificationsRouter } from '../../../modules/notifications/notifications.route.js';
+import { efficiencyRoute } from '../../../modules/efficiency_targets/efficiency_targets.route.js';
 
 export default (app: any) => {
   const router = Router();
@@ -34,4 +35,6 @@ export default (app: any) => {
   auditLogsRouter(router);
 
   notificationsRouter(router);
+
+  efficiencyRoute(router);
 };
