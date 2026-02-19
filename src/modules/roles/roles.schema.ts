@@ -1,5 +1,6 @@
 import z from 'zod';
 import { RoleType } from '../../generated/prisma/index.js';
+// import { RoleType } from '../../generated/prisma/index.js';
 
 export const RolesSchema = {
   store: z.object({

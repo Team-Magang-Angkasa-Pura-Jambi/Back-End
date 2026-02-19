@@ -1,9 +1,11 @@
 generator client {
   provider = "prisma-client-js"
+  output = "../src/generated/prisma"
+
 }
 
 datasource db {
-  provider = "postgresql" // Sesuaikan jika pakai MySQL/SQLServer
+  provider = "postgresql" 
   url      = env("DATABASE_URL")
 }
 
@@ -41,6 +43,8 @@ model User {
   // Relations (Tracking Created/Updated By)
   created_meters           Meter[] @relation("MeterCreatedBy")
   updated_meters           Meter[] @relation("MeterUpdatedBy")
+
+  created_tank_profiles TankProfile[] @relation("ProfileCreatedBy")
   
   created_reading_configs  MeterReadingConfig[] @relation("ConfigCreatedBy")
   updated_reading_configs  MeterReadingConfig[] @relation("ConfigUpdatedBy")
@@ -107,7 +111,23 @@ model ReadingType {
 }
 
 // ==========================================
-// 2. CORE: METER ASSET MANAGEMENT
+// ENUMS (Tambahkan ini agar Type Safe)
+// ==========================================
+
+enum MeterStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+enum TankShape {
+  CYLINDER_VERTICAL
+  CYLINDER_HORIZONTAL
+  BOX
+}
+
+// ==========================================
+// MODELS
 // ==========================================
 
 model Meter {
@@ -119,13 +139,14 @@ model Meter {
   tenant_id               Int?
   location_id             Int?
   calculation_template_id String?
-  price_scheme_id         Int?     /// Tarif yang berlaku untuk meter ini
+  price_scheme_id         Int?     
   energy_type_id          Int
   
-  multiplier              Decimal  @default(1.0) @db.Decimal(10, 4) /// Faktor Kali / CT Ratio. Wajib presisi.
-  initial_reading         Decimal  @default(0) @db.Decimal(19, 4)   /// Angka awal saat pasang baru
+  multiplier              Decimal  @default(1.0) @db.Decimal(10, 4) 
+  initial_reading         Decimal  @default(0) @db.Decimal(19, 4)   
   
-  status                  String   @default("ACTIVE") /// ACTIVE, MAINTENANCE, INACTIVE
+  // FIX 1: Gunakan Enum daripada String raw
+  status                  MeterStatus @default(ACTIVE) 
   
   created_at              DateTime @default(now())
   updated_at              DateTime @updatedAt
@@ -133,14 +154,14 @@ model Meter {
   updated_by              Int?
 
   // Relations
-  energy_type          EnergyType           @relation(fields: [energy_type_id], references: [energy_type_id])
-  tenant               Tenant?              @relation(fields: [tenant_id], references: [tenant_id])
-  location             Location?            @relation(fields: [location_id], references: [location_id])
-  calculation_template CalculationTemplate? @relation(fields: [calculation_template_id], references: [template_id])
-  price_scheme         PriceScheme?         @relation(fields: [price_scheme_id], references: [scheme_id])
+  energy_type          EnergyType            @relation(fields: [energy_type_id], references: [energy_type_id])
+  tenant               Tenant?               @relation(fields: [tenant_id], references: [tenant_id])
+  location             Location?             @relation(fields: [location_id], references: [location_id])
+  calculation_template CalculationTemplate?  @relation(fields: [calculation_template_id], references: [template_id])
+  price_scheme         PriceScheme?          @relation(fields: [price_scheme_id], references: [scheme_id])
   
-  creator              User?                @relation("MeterCreatedBy", fields: [created_by], references: [user_id])
-  updater              User?                @relation("MeterUpdatedBy", fields: [updated_by], references: [user_id])
+  creator              User?                 @relation("MeterCreatedBy", fields: [created_by], references: [user_id])
+  updater              User?                 @relation("MeterUpdatedBy", fields: [updated_by], references: [user_id])
 
   reading_configs      MeterReadingConfig[]
   tank_profile         TankProfile?
@@ -150,6 +171,10 @@ model Meter {
   budget_allocations   BudgetAllocation[]
   efficiency_targets   EfficiencyTarget[]
 
+  // FIX 2: Indexing untuk performa filter Dashboard
+  @@index([tenant_id])
+  @@index([location_id])
+  @@index([status])
   @@map("meters")
 }
 
@@ -158,15 +183,17 @@ model MeterReadingConfig {
   meter_id            Int
   reading_type_id     Int
   is_active           Boolean  @default(true)
-  alarm_min_threshold Decimal? @db.Decimal(10, 2) /// Batas bawah untuk trigger alert
-  alarm_max_threshold Decimal? @db.Decimal(10, 2) /// Batas atas untuk trigger alert
+  alarm_min_threshold Decimal? @db.Decimal(10, 2) 
+  alarm_max_threshold Decimal? @db.Decimal(10, 2) 
   
   created_at          DateTime @default(now())
   updated_at          DateTime @updatedAt
   created_by          Int?
   updated_by          Int?
 
-  meter               Meter       @relation(fields: [meter_id], references: [meter_id])
+  // FIX 3: Tambahkan onDelete: Cascade. 
+  // Jika Meter dihapus, config-nya wajib ikut terhapus.
+  meter               Meter       @relation(fields: [meter_id], references: [meter_id], onDelete: Cascade)
   reading_type        ReadingType @relation(fields: [reading_type_id], references: [reading_type_id])
   
   creator             User?       @relation("ConfigCreatedBy", fields: [created_by], references: [user_id])
@@ -177,20 +204,27 @@ model MeterReadingConfig {
 }
 
 model TankProfile {
-  profile_id      Int      @id @default(autoincrement())
-  meter_id        Int      @unique
-  shape           String   /// CYLINDER_VERTICAL, CYLINDER_HORIZONTAL, BOX
-  height_max_cm   Decimal  @db.Decimal(10, 2)
-  length_cm       Decimal? @db.Decimal(10, 2)
-  width_cm        Decimal? @db.Decimal(10, 2)
-  diameter_cm     Decimal? @db.Decimal(10, 2)
-  capacity_liters Decimal  @db.Decimal(12, 2)
+  profile_id      Int       @id @default(autoincrement())
+  meter_id        Int       @unique
   
-  updated_at      DateTime @updatedAt
+  // FIX 4: Gunakan Enum untuk bentuk tangki
+  shape           TankShape 
+  
+  height_max_cm   Decimal   @db.Decimal(10, 2)
+  length_cm       Decimal?  @db.Decimal(10, 2)
+  width_cm        Decimal?  @db.Decimal(10, 2)
+  diameter_cm     Decimal?  @db.Decimal(10, 2)
+  capacity_liters Decimal   @db.Decimal(12, 2)
+  
+  // FIX 5: Lengkapi Audit Fields (Created By/At) agar konsisten
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+  created_by      Int?
   updated_by      Int?
 
-  meter           Meter    @relation(fields: [meter_id], references: [meter_id], onDelete: Cascade)
-  updater         User?    @relation("ProfileUpdatedBy", fields: [updated_by], references: [user_id])
+  meter           Meter     @relation(fields: [meter_id], references: [meter_id], onDelete: Cascade)
+  creator         User?     @relation("ProfileCreatedBy", fields: [created_by], references: [user_id]) // Perlu tambah relasi ini di User model juga
+  updater         User?     @relation("ProfileUpdatedBy", fields: [updated_by], references: [user_id])
 
   @@map("tank_profiles")
 }

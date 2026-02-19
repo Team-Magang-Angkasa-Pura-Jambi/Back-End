@@ -1,0 +1,553 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "./src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// 0. ACCESS CONTROL & USERS
+// ==========================================
+enum RoleType {
+  SUPER_ADMIN
+  ADMIN
+  TECHNICIAN
+}
+
+model Role {
+  role_id   Int      @id @default(autoincrement())
+  role_name RoleType @unique /// FIXED: SuperAdmin, Admin, Technician
+
+  users User[]
+
+  @@map("roles")
+}
+
+model User {
+  user_id       Int      @id @default(autoincrement())
+  username      String   @unique
+  full_name     String?
+  email         String   @unique
+  password_hash String
+  image_url     String?
+  role_id       Int
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+
+  role Role @relation(fields: [role_id], references: [role_id])
+
+  // Relations (Tracking Created/Updated By)
+  created_meters Meter[] @relation("MeterCreatedBy")
+  updated_meters Meter[] @relation("MeterUpdatedBy")
+
+  created_tank_profiles TankProfile[] @relation("ProfileCreatedBy")
+
+  created_reading_configs MeterReadingConfig[] @relation("ConfigCreatedBy")
+  updated_reading_configs MeterReadingConfig[] @relation("ConfigUpdatedBy")
+
+  updated_tank_profiles TankProfile[] @relation("ProfileUpdatedBy")
+
+  created_calc_templates CalculationTemplate[] @relation("TemplateCreatedBy")
+  updated_calc_templates CalculationTemplate[] @relation("TemplateUpdatedBy")
+
+  created_price_schemes PriceScheme[] @relation("SchemeCreatedBy")
+  updated_price_schemes PriceScheme[] @relation("SchemeUpdatedBy")
+
+  created_tenants Tenant[] @relation("TenantCreatedBy")
+  updated_tenants Tenant[] @relation("TenantUpdatedBy")
+
+  created_locations Location[] @relation("LocationCreatedBy")
+  updated_locations Location[] @relation("LocationUpdatedBy")
+
+  created_lifecycle_logs    MeterLifecycleLog[] @relation("LogCreatedBy")
+  technician_lifecycle_logs MeterLifecycleLog[] @relation("TechnicianAssigned")
+
+  created_budgets AnnualBudget[] @relation("BudgetCreatedBy")
+  updated_budgets AnnualBudget[] @relation("BudgetUpdatedBy")
+
+  created_efficiency_targets EfficiencyTarget[] @relation("TargetCreatedBy")
+
+  captured_reading_sessions ReadingSession[]
+  notifications             Notification[]
+  audit_logs                AuditLog[]
+
+  @@map("users")
+}
+
+// ==========================================
+// 1. MASTER: ENERGY & CONFIGURATION
+// ==========================================
+
+model EnergyType {
+  energy_type_id Int    @id @default(autoincrement())
+  name           String @unique /// Electricity, Water, Fuel
+  unit_standard  String /// kWh, m3, Liters
+
+  reading_types  ReadingType[]
+  meters         Meter[]
+  annual_budgets AnnualBudget[]
+
+  @@map("energy_types")
+}
+
+model ReadingType {
+  reading_type_id Int    @id @default(autoincrement())
+  energy_type_id  Int
+  type_name       String /// WBP, LWBP, Flow Rate, Level, Temperature
+  unit            String /// kWh, cm, Celcius
+
+  energy_type EnergyType @relation(fields: [energy_type_id], references: [energy_type_id])
+
+  meter_configs   MeterReadingConfig[]
+  reading_details ReadingDetail[]
+  scheme_rates    SchemeRate[]
+
+  @@unique([type_name, energy_type_id])
+  @@map("reading_types")
+}
+
+// ==========================================
+// ENUMS (Tambahkan ini agar Type Safe)
+// ==========================================
+
+enum MeterStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+enum TankShape {
+  CYLINDER_VERTICAL
+  CYLINDER_HORIZONTAL
+  BOX
+}
+
+// ==========================================
+// MODELS
+// ==========================================
+
+model Meter {
+  meter_id      Int     @id @default(autoincrement())
+  meter_code    String  @unique
+  serial_number String?
+  name          String?
+
+  tenant_id               Int?
+  location_id             Int?
+  calculation_template_id String?
+  price_scheme_id         Int?
+  energy_type_id          Int
+
+  multiplier      Decimal @default(1.0) @db.Decimal(10, 4)
+  initial_reading Decimal @default(0) @db.Decimal(19, 4)
+
+  // FIX 1: Gunakan Enum daripada String raw
+  status MeterStatus @default(ACTIVE)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by Int?
+  updated_by Int?
+
+  // Relations
+  energy_type          EnergyType           @relation(fields: [energy_type_id], references: [energy_type_id])
+  tenant               Tenant?              @relation(fields: [tenant_id], references: [tenant_id])
+  location             Location?            @relation(fields: [location_id], references: [location_id])
+  calculation_template CalculationTemplate? @relation(fields: [calculation_template_id], references: [template_id])
+  price_scheme         PriceScheme?         @relation(fields: [price_scheme_id], references: [scheme_id])
+
+  creator User? @relation("MeterCreatedBy", fields: [created_by], references: [user_id])
+  updater User? @relation("MeterUpdatedBy", fields: [updated_by], references: [user_id])
+
+  reading_configs    MeterReadingConfig[]
+  tank_profile       TankProfile?
+  reading_sessions   ReadingSession[]
+  daily_summaries    DailySummary[]
+  lifecycle_logs     MeterLifecycleLog[]
+  budget_allocations BudgetAllocation[]
+  efficiency_targets EfficiencyTarget[]
+
+  // FIX 2: Indexing untuk performa filter Dashboard
+  @@index([tenant_id])
+  @@index([location_id])
+  @@index([status])
+  @@map("meters")
+}
+
+model MeterReadingConfig {
+  config_id           Int      @id @default(autoincrement())
+  meter_id            Int
+  reading_type_id     Int
+  is_active           Boolean  @default(true)
+  alarm_min_threshold Decimal? @db.Decimal(10, 2)
+  alarm_max_threshold Decimal? @db.Decimal(10, 2)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by Int?
+  updated_by Int?
+
+  // FIX 3: Tambahkan onDelete: Cascade. 
+  // Jika Meter dihapus, config-nya wajib ikut terhapus.
+  meter        Meter       @relation(fields: [meter_id], references: [meter_id], onDelete: Cascade)
+  reading_type ReadingType @relation(fields: [reading_type_id], references: [reading_type_id])
+
+  creator User? @relation("ConfigCreatedBy", fields: [created_by], references: [user_id])
+  updater User? @relation("ConfigUpdatedBy", fields: [updated_by], references: [user_id])
+
+  @@unique([meter_id, reading_type_id])
+  @@map("meter_reading_configs")
+}
+
+model TankProfile {
+  profile_id Int @id @default(autoincrement())
+  meter_id   Int @unique
+
+  // FIX 4: Gunakan Enum untuk bentuk tangki
+  shape TankShape
+
+  height_max_cm   Decimal  @db.Decimal(10, 2)
+  length_cm       Decimal? @db.Decimal(10, 2)
+  width_cm        Decimal? @db.Decimal(10, 2)
+  diameter_cm     Decimal? @db.Decimal(10, 2)
+  capacity_liters Decimal  @db.Decimal(12, 2)
+
+  // FIX 5: Lengkapi Audit Fields (Created By/At) agar konsisten
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by Int?
+  updated_by Int?
+
+  meter   Meter @relation(fields: [meter_id], references: [meter_id], onDelete: Cascade)
+  creator User? @relation("ProfileCreatedBy", fields: [created_by], references: [user_id]) // Perlu tambah relasi ini di User model juga
+  updater User? @relation("ProfileUpdatedBy", fields: [updated_by], references: [user_id])
+
+  @@map("tank_profiles")
+}
+
+// ==========================================
+// 3. FORMULA ENGINE (DYNAMIC CALCULATION)
+// ==========================================
+
+model CalculationTemplate {
+  template_id String  @id @default(uuid())
+  name        String
+  description String?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by Int?
+  updated_by Int?
+
+  creator User? @relation("TemplateCreatedBy", fields: [created_by], references: [user_id])
+  updater User? @relation("TemplateUpdatedBy", fields: [updated_by], references: [user_id])
+
+  definitions FormulaDefinition[]
+  meters      Meter[]
+
+  @@map("calculation_templates")
+}
+
+model FormulaDefinition {
+  def_id        String  @id @default(uuid())
+  template_id   String
+  name          String /// LWBP, Total Result
+  is_main       Boolean @default(false)
+  formula_items Json /// Struktur JSON dari Formula Builder
+
+  template CalculationTemplate @relation(fields: [template_id], references: [template_id], onDelete: Cascade)
+
+  @@map("formula_definitions")
+}
+
+// ==========================================
+// 4. TRANSACTIONAL: READINGS & DATA
+// ==========================================
+
+model ReadingSession {
+  session_id          Int      @id @default(autoincrement())
+  meter_id            Int
+  reading_date        DateTime
+  captured_by_user_id Int? /// Null jika otomatis/IoT
+  evidence_image_url  String? /// Foto bukti stand meter (Wajib untuk input manual)
+  notes               String? /// Catatan lapangan teknisi
+  created_at          DateTime @default(now())
+
+  meter           Meter           @relation(fields: [meter_id], references: [meter_id])
+  captured_by     User?           @relation(fields: [captured_by_user_id], references: [user_id])
+  reading_details ReadingDetail[]
+
+  @@unique([meter_id, reading_date])
+  @@map("reading_sessions")
+}
+
+model ReadingDetail {
+  detail_id       Int     @id @default(autoincrement())
+  session_id      Int
+  reading_type_id Int
+  value           Decimal @db.Decimal(19, 4) /// High precision for raw data
+
+  session      ReadingSession @relation(fields: [session_id], references: [session_id], onDelete: Cascade)
+  reading_type ReadingType    @relation(fields: [reading_type_id], references: [reading_type_id])
+
+  @@map("reading_details")
+}
+
+// ==========================================
+// 5. BILLING & PRICING
+// ==========================================
+
+model PriceScheme {
+  scheme_id      Int      @id @default(autoincrement())
+  name           String
+  description    String?
+  effective_date DateTime @db.Date
+  is_active      Boolean  @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by Int?
+  updated_by Int?
+
+  creator User? @relation("SchemeCreatedBy", fields: [created_by], references: [user_id])
+  updater User? @relation("SchemeUpdatedBy", fields: [updated_by], references: [user_id])
+
+  rates  SchemeRate[]
+  meters Meter[]
+
+  @@map("price_schemes")
+}
+
+model SchemeRate {
+  rate_id         Int     @id @default(autoincrement())
+  scheme_id       Int
+  reading_type_id Int /// Harga per tipe, misal Harga WBP
+  rate_value      Decimal @db.Decimal(19, 4) /// Harga bisa pecahan kecil
+
+  scheme       PriceScheme @relation(fields: [scheme_id], references: [scheme_id], onDelete: Cascade)
+  reading_type ReadingType @relation(fields: [reading_type_id], references: [reading_type_id])
+
+  @@map("scheme_rates")
+}
+
+// ==========================================
+// 6. REPORTING: AGGREGATED RESULTS
+// ==========================================
+
+model DailySummary {
+  summary_id   Int      @id @default(autoincrement())
+  meter_id     Int
+  summary_date DateTime @db.Date
+
+  total_usage              Decimal  @db.Decimal(19, 4)
+  total_cost               Decimal  @db.Decimal(19, 4)
+  used_formula_template_id String? /// Snapshot rumus mana yang dipakai saat kalkulasi ini
+  calculated_at            DateTime @default(now())
+
+  meter           Meter           @relation(fields: [meter_id], references: [meter_id])
+  summary_details SummaryDetail[]
+
+  @@unique([meter_id, summary_date])
+  @@map("daily_summaries")
+}
+
+model SummaryDetail {
+  id         Int     @id @default(autoincrement())
+  summary_id Int
+  label      String /// Nama variabel, misal: Biaya WBP
+  value      Decimal @db.Decimal(19, 4)
+
+  summary DailySummary @relation(fields: [summary_id], references: [summary_id], onDelete: Cascade)
+
+  @@map("summary_details")
+}
+
+// ==========================================
+// 7. UNIFIED NOTIFICATIONS & ALERTS
+// ==========================================
+
+model Notification {
+  notification_id Int @id @default(autoincrement())
+  user_id         Int /// Target user
+
+  category String /// ALERT, INFO, BILLING
+  severity String /// LOW, MEDIUM, HIGH, CRITICAL
+
+  title   String
+  message String  @db.Text
+  is_read Boolean @default(false)
+
+  reference_table String? /// meters, reading_sessions, invoices
+  reference_id    Int?
+
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [user_id])
+
+  @@map("notifications")
+}
+
+// ==========================================
+// 8. BUSINESS: TENANT & LOCATION
+// ==========================================
+
+model Tenant {
+  tenant_id      Int     @id @default(autoincrement())
+  name           String  @unique
+  category       String? /// Airline, Retail, F&B, Office, Cargo
+  contact_person String?
+  phone          String?
+  email          String?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by Int?
+  updated_by Int?
+
+  creator User? @relation("TenantCreatedBy", fields: [created_by], references: [user_id])
+  updater User? @relation("TenantUpdatedBy", fields: [updated_by], references: [user_id])
+
+  meters Meter[]
+
+  @@map("tenants")
+}
+
+model Location {
+  location_id Int    @id @default(autoincrement())
+  name        String
+  parent_id   Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by Int?
+  updated_by Int?
+
+  parent   Location?  @relation("LocHierarchy", fields: [parent_id], references: [location_id])
+  children Location[] @relation("LocHierarchy")
+
+  creator User? @relation("LocationCreatedBy", fields: [created_by], references: [user_id])
+  updater User? @relation("LocationUpdatedBy", fields: [updated_by], references: [user_id])
+
+  meters Meter[]
+
+  @@map("locations")
+}
+
+// ==========================================
+// 9. METER LIFECYCLE
+// ==========================================
+
+model MeterLifecycleLog {
+  log_id             Int      @id @default(autoincrement())
+  meter_id           Int
+  event_date         DateTime
+  event_type         String /// INSTALL, REPLACE, REMOVE
+  old_serial_num     String?
+  new_serial_num     String?
+  last_reading       Decimal? @db.Decimal(19, 4)
+  initial_reading    Decimal? @db.Decimal(19, 4)
+  evidence_image_url String? /// Foto Berita Acara
+  technician_id      Int?
+  notes              String?  @db.Text
+
+  created_at DateTime @default(now())
+  created_by Int? /// Admin yang menginput log ini
+
+  meter      Meter @relation(fields: [meter_id], references: [meter_id])
+  technician User? @relation("TechnicianAssigned", fields: [technician_id], references: [user_id])
+  creator    User? @relation("LogCreatedBy", fields: [created_by], references: [user_id])
+
+  @@map("meter_lifecycle_logs")
+}
+
+// ==========================================
+// 10. SYSTEM AUDIT LOGS
+// ==========================================
+
+model AuditLog {
+  log_id  Int    @id @default(autoincrement())
+  user_id Int /// Siapa yang melakukan perubahan
+  action  String /// CREATE, UPDATE, DELETE, LOGIN
+
+  entity_table String /// meters, price_schemes, dll
+  entity_id    String /// ID record yang berubah
+
+  old_values Json? /// Data sebelum diubah
+  new_values Json? /// Data sesudah diubah
+  reason     String? @db.Text /// Wajib diisi untuk operasi sensitif
+
+  ip_address String?
+  user_agent String?
+
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [user_id])
+
+  @@map("audit_logs")
+}
+
+// ==========================================
+// 11. BUDGETING & EFFICIENCY
+// ==========================================
+
+model AnnualBudget {
+  budget_id                    Int      @id @default(autoincrement())
+  fiscal_year                  Int /// 2024, 2025
+  energy_type_id               Int
+  name                         String /// Anggaran Listrik Bandara 2025
+  total_amount                 Decimal  @db.Decimal(19, 4)
+  total_volume                 Decimal  @db.Decimal(19, 4)
+  efficiency_target_percentage Decimal? @db.Decimal(5, 4) /// Target efisiensi (0.05 = 5%)
+  description                  String?  @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by Int?
+  updated_by Int?
+
+  energy_type EnergyType @relation(fields: [energy_type_id], references: [energy_type_id])
+  creator     User?      @relation("BudgetCreatedBy", fields: [created_by], references: [user_id])
+  updater     User?      @relation("BudgetUpdatedBy", fields: [updated_by], references: [user_id])
+
+  allocations BudgetAllocation[]
+
+  @@map("annual_budgets")
+}
+
+model BudgetAllocation {
+  allocation_id                Int     @id @default(autoincrement())
+  budget_id                    Int
+  meter_id                     Int
+  allocated_amount             Decimal @db.Decimal(19, 4)
+  allocated_volume             Decimal @db.Decimal(19, 4)
+  monthly_distribution_profile Json? /// JSON distribution profile
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  budget AnnualBudget @relation(fields: [budget_id], references: [budget_id], onDelete: Cascade)
+  meter  Meter        @relation(fields: [meter_id], references: [meter_id])
+
+  @@map("budget_allocations")
+}
+
+model EfficiencyTarget {
+  target_id         Int      @id @default(autoincrement())
+  meter_id          Int
+  period_start      DateTime @db.Date
+  period_end        DateTime @db.Date
+  kpi_name          String /// Penghematan vs Tahun Lalu
+  target_percentage Decimal  @db.Decimal(5, 4)
+  baseline_value    Decimal  @db.Decimal(19, 4)
+
+  created_at DateTime @default(now())
+  created_by Int?
+
+  meter   Meter @relation(fields: [meter_id], references: [meter_id])
+  creator User? @relation("TargetCreatedBy", fields: [created_by], references: [user_id])
+
+  @@map("efficiency_targets")
+}
