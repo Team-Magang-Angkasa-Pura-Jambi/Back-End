@@ -14,6 +14,8 @@ import { notificationsRouter } from '../../../modules/notifications/notification
 import { efficiencyRoute } from '../../../modules/efficiency_targets/efficiency_targets.route.js';
 import { metersRoute } from '../../../modules/meters/meters.route.js';
 import { meterConfigsRoute } from '../../../modules/meter_reading_configs/meter_reading_configs.route.js';
+import { templateRoute } from '../../../modules/calculation_templates/calculation_templates.route.js';
+import { formulaRoute } from '../../../modules/formula_definitions/formula_definitions.route.js';
 
 export default (app: any) => {
   const router = Router();
@@ -43,4 +45,8 @@ export default (app: any) => {
   metersRoute(router);
 
   meterConfigsRoute(router);
+
+  templateRoute(router);
+
+  formulaRoute(router);
 };
