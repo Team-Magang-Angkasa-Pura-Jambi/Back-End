@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MeterStatus } from '../../generated/prisma/index.js';
+import { MeterStatus, TankShape } from '../../generated/prisma/index.js';
 
 const meterShape = {
   meter_code: z.string({ error: 'Kode Meter wajib diisi' }).min(3),
@@ -20,7 +20,14 @@ const meterShape = {
 };
 
 const profileShape = {
-  shape: z.enum(['CYLINDER_VERTICAL', 'CYLINDER_HORIZONTAL', 'BOX']),
+  shape: z
+    .nativeEnum(TankShape, {
+      error: () => ({
+        message:
+          'Bentuk tangki tidak valid. Pilihan yang tersedia: CYLINDER_VERTICAL, CYLINDER_HORIZONTAL, atau BOX',
+      }),
+    })
+    .optional(),
   height_max_cm: z.coerce.number().min(0),
   length_cm: z.coerce.number().min(0).optional().nullable(),
   width_cm: z.coerce.number().min(0).optional().nullable(),

@@ -13,6 +13,7 @@ import { auditLogsRouter } from '../../../modules/audit-log/audit-log.route.js';
 import { notificationsRouter } from '../../../modules/notifications/notifications.route.js';
 import { efficiencyRoute } from '../../../modules/efficiency_targets/efficiency_targets.route.js';
 import { metersRoute } from '../../../modules/meters/meters.route.js';
+import { meterConfigsRoute } from '../../../modules/meter_reading_configs/meter_reading_configs.route.js';
 
 export default (app: any) => {
   const router = Router();
@@ -40,4 +41,6 @@ export default (app: any) => {
   efficiencyRoute(router);
 
   metersRoute(router);
+
+  meterConfigsRoute(router);
 };

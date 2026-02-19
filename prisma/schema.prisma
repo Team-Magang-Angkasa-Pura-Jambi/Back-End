@@ -124,6 +124,8 @@ enum TankShape {
   CYLINDER_VERTICAL
   CYLINDER_HORIZONTAL
   BOX
+  SPHERE
+  CUSTOM
 }
 
 // ==========================================
@@ -208,7 +210,7 @@ model TankProfile {
   meter_id        Int       @unique
   
   // FIX 4: Gunakan Enum untuk bentuk tangki
-  shape           TankShape 
+  shape           TankShape? 
   
   height_max_cm   Decimal   @db.Decimal(10, 2)
   length_cm       Decimal?  @db.Decimal(10, 2)
