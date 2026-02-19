@@ -10,6 +10,7 @@ import { locationsRoute } from '../../../modules/locations/locations.route.js';
 import { auditContextMiddleware } from '../../../common/utils/auditContext.js';
 import { tenantsRoute } from '../../../modules/tenants/tenants.route.js';
 import { auditLogsRouter } from '../../../modules/audit-log/audit-log.route.js';
+import { notificationsRouter } from '../../../modules/notifications/notifications.route.js';
 
 export default (app: any) => {
   const router = Router();
@@ -31,4 +32,6 @@ export default (app: any) => {
   tenantsRoute(router);
 
   auditLogsRouter(router);
+
+  notificationsRouter(router);
 };
