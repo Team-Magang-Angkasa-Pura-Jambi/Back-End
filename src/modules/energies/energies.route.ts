@@ -12,6 +12,8 @@ export const energiesRoute = (router: Router) => {
   const prefix = '/energies';
   router.get(prefix, validate(energiesSchema.show), asyncHandler(energiesController.show));
 
+  router.get(prefix + '/with-reading-types', asyncHandler(energiesController.showWithReadingType));
+
   router.get(`${prefix}/:id`, validate(energiesSchema.show), asyncHandler(energiesController.show));
 
   router.use(prefix, authorize(RoleType.ADMIN, RoleType.SUPER_ADMIN));

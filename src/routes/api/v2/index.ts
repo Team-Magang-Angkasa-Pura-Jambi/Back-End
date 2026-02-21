@@ -19,6 +19,8 @@ import { formulaRoute } from '../../../modules/formula_definitions/formula_defin
 import { priceSchemeRoute } from '../../../modules/price_schemes/price_schemes.route.js';
 import { budgetRoute } from '../../../modules/annual_budgets/annual_budgets.route.js';
 import { allocationRoute } from '../../../modules/budget_allocations/budget_allocations.route.js';
+import { readingRoute } from '../../../modules/reading_sessions/reading_sessions.route.js';
+import { dailySummaryRoute } from '../../../modules/daily_summaries/daily_summaries.route.js';
 
 export default (app: any) => {
   const router = Router();
@@ -57,4 +59,8 @@ export default (app: any) => {
   budgetRoute(router);
 
   allocationRoute(router);
+
+  readingRoute(router);
+
+  dailySummaryRoute(router);
 };

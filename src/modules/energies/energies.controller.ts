@@ -11,6 +11,11 @@ export const energiesController = {
     const data = await energiesService.store(body);
     return res200({ res, message: 'Berhasil Menambahkan Data', data });
   },
+
+  showWithReadingType: async (req: Request, res: Response, next: NextFunction) => {
+    const data = await energiesService.showWithReadingType();
+    return res200({ res, message: 'Berhasil Mendapatkan Data', data });
+  },
   show: async (req: Request, res: Response, next: NextFunction) => {
     const { query, params } = res.locals.validatedData;
 

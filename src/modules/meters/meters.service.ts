@@ -23,11 +23,20 @@ export const metersService = {
           };
         }
 
+        if (payload.reading_config && payload.reading_config.length > 0) {
+          createData.reading_configs = {
+            createMany: {
+              data: payload.reading_config,
+            },
+          };
+        }
+
         const newMeter = await tx.meter.create({
           data: createData,
           include: {
             energy_type: { select: { name: true, unit_standard: true } },
             tank_profile: true,
+            reading_configs: true,
             location: { select: { name: true } },
             tenant: { select: { name: true } },
           },
@@ -62,7 +71,40 @@ export const metersService = {
             location: true,
             tenant: true,
             reading_configs: {
-              include: { reading_type: true },
+              select: {
+                reading_type: { select: { type_name: true, unit: true, reading_type_id: true } },
+                alarm_max_threshold: true,
+                alarm_min_threshold: true,
+                is_active: true,
+                config_id: true,
+              },
+            },
+            budget_allocations: {
+              include: {
+                budget: true,
+              },
+            },
+            calculation_template: {
+              select: {
+                name: true,
+                creator: {
+                  select: {
+                    full_name: true,
+                  },
+                },
+                definitions: { select: { name: true, formula_items: true } },
+              },
+            },
+            efficiency_targets: true,
+            price_scheme: {
+              include: {
+                rates: true,
+              },
+            },
+            updater: {
+              select: {
+                full_name: true,
+              },
             },
           },
         });
@@ -122,28 +164,73 @@ export const metersService = {
 
   patch: async (id: number, payload: UpdateMetersPayload) => {
     try {
-      const { meter, meter_profile } = payload;
+      return await prisma.$transaction(async (tx) => {
+        const { meter, meter_profile, reading_config } = payload;
 
-      const updateData: Prisma.MeterUncheckedUpdateInput = {
-        ...meter,
-      };
-
-      if (meter_profile) {
-        updateData.tank_profile = {
-          upsert: {
-            create: meter_profile as Prisma.TankProfileUncheckedCreateInput,
-            update: meter_profile,
-          },
+        const updateData: Prisma.MeterUncheckedUpdateInput = {
+          ...meter,
         };
-      }
 
-      return await prisma.meter.update({
-        where: { meter_id: id },
-        data: updateData,
-        include: {
-          tank_profile: true,
-          energy_type: true,
-        },
+        if (meter_profile) {
+          updateData.tank_profile = {
+            upsert: {
+              create: meter_profile as Prisma.TankProfileUncheckedCreateInput,
+              update: meter_profile,
+            },
+          };
+        }
+
+        if (reading_config) {
+          const incomingReadingTypeIds = reading_config.map((c) => c.reading_type_id);
+
+          await tx.meterReadingConfig.deleteMany({
+            where: {
+              meter_id: id,
+              reading_type_id: {
+                notIn: incomingReadingTypeIds,
+              },
+            },
+          });
+
+          if (reading_config.length > 0) {
+            for (const config of reading_config) {
+              await tx.meterReadingConfig.upsert({
+                where: {
+                  meter_id_reading_type_id: {
+                    meter_id: id,
+                    reading_type_id: config.reading_type_id,
+                  },
+                },
+                create: {
+                  meter_id: id,
+                  reading_type_id: config.reading_type_id,
+                  is_active: config.is_active,
+                  alarm_min_threshold: config.alarm_min_threshold,
+                  alarm_max_threshold: config.alarm_max_threshold,
+                },
+                update: {
+                  is_active: config.is_active,
+                  alarm_min_threshold: config.alarm_min_threshold,
+                  alarm_max_threshold: config.alarm_max_threshold,
+                },
+              });
+            }
+          }
+        }
+
+        const updatedMeter = await tx.meter.update({
+          where: { meter_id: id },
+          data: updateData,
+          include: {
+            tank_profile: true,
+            energy_type: { select: { name: true, unit_standard: true } },
+            reading_configs: {
+              include: { reading_type: true },
+            },
+          },
+        });
+
+        return updatedMeter;
       });
     } catch (error) {
       return handlePrismaError(error, 'Meter');
@@ -157,6 +244,82 @@ export const metersService = {
       });
     } catch (error) {
       return handlePrismaError(error, 'Meter');
+    }
+  },
+
+  getAvailableAttributes: async (id: number) => {
+    try {
+      const targetMeter = await prisma.meter.findUnique({
+        where: { meter_id: id },
+        include: {
+          reading_configs: {
+            where: { is_active: true },
+            include: { reading_type: true },
+          },
+          location: {
+            include: {
+              meters: {
+                where: {
+                  NOT: { meter_id: id },
+                  status: 'ACTIVE',
+                },
+                include: {
+                  reading_configs: {
+                    where: { is_active: true },
+                    include: { reading_type: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!targetMeter) throw new Error('Meter not found');
+
+      const attributes = [];
+
+      attributes.push({
+        label: `Faktor Kali (${targetMeter.meter_code})`,
+        type: 'spec',
+        specField: 'multiplier',
+        meterId: targetMeter.meter_id,
+      });
+
+      targetMeter.reading_configs.forEach((config) => {
+        attributes.push({
+          label: config.reading_type.type_name,
+          type: 'reading',
+          readingTypeId: config.reading_type_id,
+          meterId: targetMeter.meter_id,
+          timeShift: 0,
+        });
+      });
+
+      if (targetMeter.location?.meters) {
+        targetMeter.location.meters.forEach((otherMeter) => {
+          attributes.push({
+            label: `Faktor Kali (${otherMeter.meter_code})`,
+            type: 'spec',
+            specField: 'multiplier',
+            meterId: otherMeter.meter_id,
+          });
+
+          otherMeter.reading_configs.forEach((config) => {
+            attributes.push({
+              label: `${config.reading_type.type_name} (${otherMeter.meter_code})`,
+              type: 'reading',
+              readingTypeId: config.reading_type_id,
+              meterId: otherMeter.meter_id,
+              timeShift: 0,
+            });
+          });
+        });
+      }
+
+      return attributes;
+    } catch (error) {
+      return handlePrismaError(error, 'Meter Attributes');
     }
   },
 };

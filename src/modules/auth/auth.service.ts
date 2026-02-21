@@ -33,7 +33,7 @@ export const authService = {
       role: user.role.role_name,
     };
 
-    const token = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: '1d' });
     return {
       user: jwtPayload,
       token,

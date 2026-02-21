@@ -7,13 +7,21 @@ import {
 } from './calculation_templates.type.js';
 
 export const templateService = {
-  /**
-   * Membuat template baru sekaligus dengan definisi formulanya (Nested Write)
-   */
   store: async (payload: CreateTemplatePayload) => {
     try {
+      const { definitions, ...templateData } = payload.template;
+
       return await prisma.calculationTemplate.create({
-        data: payload.template,
+        data: {
+          ...templateData,
+          definitions: {
+            create: (definitions as any[]).map((def: any) => ({
+              name: def.name,
+              is_main: def.is_main ?? false,
+              formula_items: def.formula_items,
+            })),
+          },
+        },
         include: {
           definitions: true,
           creator: { select: { username: true } },
@@ -25,7 +33,7 @@ export const templateService = {
   },
 
   /**
-   * Mengambil satu detail template atau daftar banyak template
+   * Mengambil detail atau daftar template
    */
   show: async (
     id?: string,
@@ -66,7 +74,6 @@ export const templateService = {
           orderBy: { created_at: 'desc' },
           include: {
             _count: { select: { meters: true } },
-
             definitions: true,
           },
         }),
@@ -87,11 +94,28 @@ export const templateService = {
     }
   },
 
+  /**
+   * Update Template
+   */
   patch: async (id: string, payload: UpdateTemplatePayload) => {
     try {
+      const { definitions, ...templateData } = payload.template;
+
       return await prisma.calculationTemplate.update({
         where: { template_id: id },
-        data: payload.template,
+        data: {
+          ...templateData,
+          ...(definitions && {
+            definitions: {
+              deleteMany: {},
+              create: (definitions as any[]).map((def: any) => ({
+                name: def.name,
+                is_main: def.is_main ?? false,
+                formula_items: def.formula_items,
+              })),
+            },
+          }),
+        },
         include: {
           definitions: true,
         },
@@ -101,6 +125,9 @@ export const templateService = {
     }
   },
 
+  /**
+   * Hapus Template
+   */
   remove: async (id: string) => {
     try {
       return await prisma.calculationTemplate.delete({

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const configShape = {
+export const configShape = {
   meter_id: z.coerce.number({ error: 'ID Meter wajib diisi' }),
   reading_type_id: z.coerce.number({ error: 'ID Reading Type wajib diisi' }),
   is_active: z.boolean().default(true),
