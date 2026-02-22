@@ -12,7 +12,7 @@ export const tenantsControllers = {
 
     const { body } = res.locals.validatedData;
 
-    body.create_by = user_id;
+    body.created_by = user_id;
 
     const data = await tenantsService.store(body);
     return res201({
@@ -69,6 +69,7 @@ export const tenantsControllers = {
 
     const id = params.id;
 
-    await tenantsService.remove(Number(id));
+    const data = await tenantsService.remove(Number(id));
+    return res200({ res, message: 'Tenant berhasil dihapus', data });
   },
 };

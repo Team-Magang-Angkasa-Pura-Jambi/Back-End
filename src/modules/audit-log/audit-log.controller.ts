@@ -1,21 +1,19 @@
 import { type Request, type Response } from 'express';
 import { auditLogService } from './audit-log.service.js';
+import { res200 } from '../../utils/response.js';
 
 export const auditLogController = {
   show: async (req: Request, res: Response) => {
-    try {
-      const { query } = res.locals.validatedData;
+    const { query } = res.locals.validatedData;
 
-      const result = await auditLogService.show(query);
+    const result = await auditLogService.show(query);
 
-      return res.status(200).json({
-        status: 'success',
-        message: 'Audit logs retrieved successfully',
-        ...result,
-      });
-    } catch (error: any) {
-      return res.status(400).json({ status: 'fail', message: error.message });
-    }
+    return res200({
+      res,
+      message: 'Audit logs retrieved successfully',
+      data: result.data,
+      meta: result.meta,
+    });
   },
 
   forbidden: (req: Request, res: Response) => {
