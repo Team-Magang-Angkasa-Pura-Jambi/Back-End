@@ -21,4 +21,10 @@ export const budgetRoute = (router: Router) => {
     validate(budgetSchema.remove),
     asyncHandler(budgetController.remove),
   );
+
+  router.get(
+    `${prefix}/:id/remaining`,
+    validate(budgetSchema.showRemaining),
+    asyncHandler(budgetController.showRemaining),
+  );
 };

@@ -26,6 +26,7 @@ export const metersController = {
 
     if (params?.id) {
       const data = await metersService.show(params.id);
+
       if (!data) throw new Error404('Meter tidak ditemukan');
 
       return res200({ res, message: 'Detail Meter ditemukan', data });

@@ -39,6 +39,12 @@ export const usersSchema = {
       is_active: z.coerce.boolean().optional(),
     }),
   }),
+
+  delete: z.object({
+    params: z.object({
+      id: z.coerce.number({ error: 'ID User harus diisi' }),
+    }),
+  }),
 };
 
 export type UserBodyPayload = z.infer<typeof usersSchema.store>['body'];

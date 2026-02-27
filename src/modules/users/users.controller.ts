@@ -21,10 +21,16 @@ export const usersController = {
   patch: async (req: Request, res: Response) => {
     const { params, body } = res.locals.validatedData;
 
-    if (!params) throw new Error('ID harus diisi');
+    if (!params?.id) throw new Error('ID harus diisi');
 
+    // 3. Update data ke database
     const data = await usersService.patch(Number(params.id), body);
-    return res200({ res, message: 'Berhasil Mengubah Data User', data });
+
+    return res200({
+      res,
+      message: 'Berhasil Mengubah Data User',
+      data,
+    });
   },
 
   remove: async (req: Request, res: Response) => {

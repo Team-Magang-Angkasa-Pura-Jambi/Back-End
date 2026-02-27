@@ -55,7 +55,7 @@ export const metersService = {
       page?: number;
       limit?: number;
       search?: string;
-      energy_type?: string;
+      energy_type_id?: number;
       location_id?: number;
       tenant_id?: number;
       status?: 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE';
@@ -123,10 +123,8 @@ export const metersService = {
         ];
       }
 
-      if (query?.energy_type) {
-        where.energy_type = {
-          name: { equals: query.energy_type, mode: 'insensitive' },
-        };
+      if (query?.energy_type_id) {
+        where.energy_type_id = query.energy_type_id;
       }
       if (query?.location_id) where.location_id = Number(query.location_id);
       if (query?.tenant_id) where.tenant_id = Number(query.tenant_id);

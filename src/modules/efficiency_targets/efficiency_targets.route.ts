@@ -10,6 +10,11 @@ export const efficiencyRoute = (router: Router) => {
   const prefix = '/efficiency';
 
   router.get(prefix, validate(efficiencySchema.show), asyncHandler(efficiencyController.show));
+  router.get(
+    prefix + '/:id',
+    validate(efficiencySchema.show),
+    asyncHandler(efficiencyController.show),
+  );
 
   router.post(prefix, validate(efficiencySchema.store), asyncHandler(efficiencyController.store));
 
@@ -23,4 +28,10 @@ export const efficiencyRoute = (router: Router) => {
     validate(efficiencySchema.remove),
     asyncHandler(efficiencyController.remove),
   );
+
+  // router.post(
+  //   prefix + '/preview',
+  //   validate(efficiencySchema.previewEfficiency),
+  //   asyncHandler(efficiencyController.previewEfficiency),
+  // );
 };

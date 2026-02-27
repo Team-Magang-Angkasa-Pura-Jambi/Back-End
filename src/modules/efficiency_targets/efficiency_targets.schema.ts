@@ -72,4 +72,10 @@ export const efficiencySchema = {
       id: z.coerce.number({ error: 'ID Target harus diisi' }),
     }),
   }),
+  // previewEfficiency: z.object({
+  //   body: z.object({
+  //     meter_id: z.number({ error: 'Meter ID wajib diisi' }),
+  //     target_percentage: z.number({ error: 'Target persentase wajib diisi' }),
+  //   }),
+  // }),
 };

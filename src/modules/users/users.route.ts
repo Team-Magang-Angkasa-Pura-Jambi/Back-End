@@ -19,5 +19,9 @@ export const usersRoute = (router: Router) => {
 
   router.post(prefix, validate(usersSchema.store), asyncHandler(usersController.store));
 
-  router.delete(`${prefix}/:id`, validate(usersSchema.patch), asyncHandler(usersController.remove));
+  router.delete(
+    `${prefix}/:id`,
+    validate(usersSchema.delete),
+    asyncHandler(usersController.remove),
+  );
 };

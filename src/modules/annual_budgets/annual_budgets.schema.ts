@@ -51,7 +51,7 @@ export const budgetSchema = {
         allocations: z
           .object({
             // Menggunakan allocationSchema yang sudah ada transform-nya
-            create: z.array(allocationSchema).min(1, 'Minimal satu alokasi meter wajib diisi'),
+            create: z.array(allocationSchema),
           })
           .optional(),
       }),
@@ -97,6 +97,11 @@ export const budgetSchema = {
   }),
 
   remove: z.object({
+    params: z.object({
+      id: z.coerce.number().int(),
+    }),
+  }),
+  showRemaining: z.object({
     params: z.object({
       id: z.coerce.number().int(),
     }),

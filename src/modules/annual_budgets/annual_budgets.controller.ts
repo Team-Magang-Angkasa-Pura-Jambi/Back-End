@@ -38,4 +38,9 @@ export const budgetController = {
     await budgetService.remove(params.id);
     return res200({ res, message: 'Anggaran berhasil dihapus' });
   },
+  showRemaining: async (req: Request, res: Response) => {
+    const { params } = res.locals.validatedData;
+    const data = await budgetService.showRemaining(params.id);
+    return res200({ res, message: 'Anggaran yang tersisa', data });
+  },
 };

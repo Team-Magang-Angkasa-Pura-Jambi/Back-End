@@ -1,6 +1,8 @@
 import { handlePrismaError } from '../../common/utils/prismaError.js';
+import { deleteFileFromUT } from '../../common/utils/uploadthing.js';
 import prisma from '../../configs/db.js';
 import { RoleType, type Prisma } from '../../generated/prisma/index.js';
+import { Error404 } from '../../utils/customError.js';
 import { type UpdateUserPayload, type UserBodyPayload } from './users.schema.js';
 import bcrypt from 'bcrypt';
 
@@ -17,18 +19,27 @@ export const usersService = {
       select: {
         user_id: true,
         full_name: true,
-        role: { select: { role_name: true } },
+        role: { select: { role_id: true, role_name: true } },
       },
     });
   },
 
   patch: async (user_id: number, payload: UpdateUserPayload) => {
     try {
-      const dataToUpdate: any = { ...payload };
+      const oldUser = await prisma.user.findUnique({
+        where: { user_id },
+      });
 
-      if (payload.password) {
-        dataToUpdate.password_hash = await bcrypt.hash(payload.password, 10);
-        delete dataToUpdate.password;
+      if (!oldUser) throw new Error404('User Tidak Ditemukan');
+
+      const { password, ...dataToUpdate }: any = payload;
+
+      if (payload.image_url && oldUser.image_url && oldUser.image_url !== payload.image_url) {
+        await deleteFileFromUT(oldUser.image_url);
+      }
+
+      if (password) {
+        dataToUpdate.password_hash = await bcrypt.hash(password, 10);
       }
 
       return await prisma.user.update({
@@ -37,7 +48,15 @@ export const usersService = {
         select: {
           user_id: true,
           full_name: true,
-          role: { select: { role_name: true } },
+          username: true,
+          email: true,
+          image_url: true,
+          is_active: true,
+          role: {
+            select: {
+              role_name: true,
+            },
+          },
         },
       });
     } catch (error) {
@@ -72,6 +91,7 @@ export const usersService = {
           username: true,
           email: true,
           image_url: true,
+          created_at: true,
           is_active: true,
           role: {
             select: { role_name: true },
@@ -111,6 +131,7 @@ export const usersService = {
         user_id: true,
         full_name: true,
         username: true,
+        created_at: true,
         role: {
           select: { role_name: true },
         },
