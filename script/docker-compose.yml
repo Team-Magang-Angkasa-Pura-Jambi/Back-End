@@ -3,7 +3,7 @@ version: '3.8'
 services:
   ml-service:
     build:
-      context: ./scripts
+      context: .
       dockerfile: Dockerfile
     container_name: ml_container
     ports:

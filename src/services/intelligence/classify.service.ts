@@ -4,63 +4,72 @@ import { _saveClassification } from '../metering/helpers/forecast-calculator.js'
 import { weatherService } from '../weather.service.js';
 import { machineLearningService } from './machineLearning.service.js';
 
+/**
+ * Helper: Memastikan data ada, jika tidak lempar Error404
+ */
 const ensureDataExists = <T>(data: T | null | undefined, name: string, date: Date): T => {
-  if (!data) throw new Error404(`Missing ${name} Data for ${new Date(date).toDateString()}`);
+  if (!data) throw new Error404(`Missing ${name} Data for ${date.toLocaleDateString('en-CA')}`);
   return data;
 };
 
-const toDecimalLike = (val: number) => ({
-  toNumber: () => val,
-});
+/**
+ * Helper: Mengambil data cuaca dengan fallback API (Mendukung History & Forecast)
+ */
+const getEffectiveWeather = async (date: Date) => {
+  // 1. Cek DB Terlebih dahulu
+  const dbWeather = await prisma.weatherHistory.findFirst({
+    where: { data_date: date },
+    select: { avg_temp: true, max_temp: true },
+  });
 
+  if (dbWeather) {
+    return {
+      suhu_rata: dbWeather.avg_temp.toNumber(),
+      suhu_max: dbWeather.max_temp.toNumber(),
+    };
+  }
+
+  // 2. Jika DB kosong, ambil dari API (Otomatis handle Januari via Open-Meteo)
+  console.log(
+    `[Classify] Data cuaca DB kosong, mengambil dari API untuk ${date.toLocaleDateString()}...`,
+  );
+  const apiWeather = await weatherService.getWeatherData(date);
+
+  if (apiWeather) {
+    return {
+      suhu_rata: apiWeather.suhu_rata,
+      suhu_max: apiWeather.suhu_max,
+    };
+  }
+
+  return null;
+};
+
+/**
+ * Klasifikasi Kinerja Unit Terminal (Parameter: Pax + Weather)
+ */
 export const classifyTerminal = async (date: Date, meterId: number) => {
   try {
-    const [aktualKwhData, paxData, dbWeatherData] = await Promise.all([
+    const [aktualKwhData, paxData, weatherData] = await Promise.all([
       prisma.dailySummary.findFirst({
         where: { summary_date: date, meter_id: meterId },
-        select: {
-          summary_id: true,
-          summary_date: true,
-          total_consumption: true,
-          total_cost: true,
-          meter_id: true,
-        },
+        select: { summary_id: true, total_consumption: true, meter_id: true },
       }),
       prisma.paxData.findFirst({
         where: { data_date: date },
         select: { total_pax: true },
       }),
-      prisma.weatherHistory.findFirst({
-        where: { data_date: date },
-        select: { avg_temp: true, max_temp: true },
-      }),
+      getEffectiveWeather(date),
     ]);
-
-    let weatherData = dbWeatherData;
-
-    if (!weatherData) {
-      console.log(
-        `[Classify] Data cuaca DB kosong untuk ${date.toDateString()}, mengambil dari API...`,
-      );
-
-      const apiWeather = await weatherService.getForecast(date);
-
-      if (apiWeather) {
-        weatherData = {
-          avg_temp: toDecimalLike(apiWeather.suhu_rata) as any,
-          max_temp: toDecimalLike(apiWeather.suhu_max) as any,
-        };
-      }
-    }
 
     const validKwh = ensureDataExists(aktualKwhData, 'KWH', date);
     const validPax = ensureDataExists(paxData, 'Pax', date);
-    const validWeather = ensureDataExists(weatherData, 'Weather (DB & API Failed)', date);
+    const validWeather = ensureDataExists(weatherData, 'Weather', date);
 
     const mlPayload = {
       pax: validPax.total_pax,
-      suhu_rata: validWeather.avg_temp.toNumber(),
-      suhu_max: validWeather.max_temp.toNumber(),
+      suhu_rata: validWeather.suhu_rata,
+      suhu_max: validWeather.suhu_max,
       aktual_kwh_terminal: validKwh.total_consumption?.toNumber() ?? 0,
     };
 
@@ -73,62 +82,38 @@ export const classifyTerminal = async (date: Date, meterId: number) => {
         result.kinerja_terminal,
         result.deviasi_persen_terminal,
         modelVersion,
+        date,
       );
     }
 
     return result;
   } catch (error) {
-    console.error('Error in classifyTerminal:', error);
-    if (error instanceof Error400 || error instanceof Error401 || error instanceof Error404) {
-      console.warn(`⚠️ Data tidak ditemukan (404). Melanjutkan proses ke item berikutnya...`);
-
-      // Return null agar fungsi pemanggil tahu bahwa data ini kosong, tapi tidak error
-      return;
-    } else {
-      throw new Error('Internal Server Error processing Terminal Classification');
-    }
+    return handleClassifyError(error, 'Terminal');
   }
 };
 
+/**
+ * Klasifikasi Kinerja Unit Kantor (Parameter: IsWorkday + Weather)
+ */
 export const classifyOffice = async (date: Date, meterId: number) => {
   try {
-    const [aktualKwhData, dbWeatherData] = await Promise.all([
+    const [aktualKwhData, weatherData] = await Promise.all([
       prisma.dailySummary.findFirst({
         where: { summary_date: date, meter_id: meterId },
       }),
-      prisma.weatherHistory.findFirst({
-        where: { data_date: date },
-        select: { avg_temp: true, max_temp: true },
-      }),
+      getEffectiveWeather(date),
     ]);
-
-    let weatherData = dbWeatherData;
-
-    if (!weatherData) {
-      console.log(
-        `[Classify] Data cuaca DB kosong untuk ${date.toDateString()}, mengambil dari API...`,
-      );
-
-      const apiWeather = await weatherService.getForecast(date);
-
-      if (apiWeather) {
-        weatherData = {
-          avg_temp: toDecimalLike(apiWeather.suhu_rata) as any,
-          max_temp: toDecimalLike(apiWeather.suhu_max) as any,
-        };
-      }
-    }
 
     const dayOfWeek = new Date(date).getUTCDay();
     const isWorkday = dayOfWeek >= 1 && dayOfWeek <= 5 ? 1 : 0;
 
     const validKwh = ensureDataExists(aktualKwhData, 'KWH', date);
-    const validWeather = ensureDataExists(weatherData, 'Weather (DB & API Failed)', date);
+    const validWeather = ensureDataExists(weatherData, 'Weather', date);
 
     const mlPayload = {
       is_hari_kerja: isWorkday,
-      suhu_rata: validWeather.avg_temp.toNumber(),
-      suhu_max: validWeather.max_temp.toNumber(),
+      suhu_rata: validWeather.suhu_rata,
+      suhu_max: validWeather.suhu_max,
       aktual_kwh_kantor: validKwh.total_consumption?.toNumber() ?? 0,
     };
 
@@ -141,32 +126,27 @@ export const classifyOffice = async (date: Date, meterId: number) => {
         result.kinerja_kantor,
         result.deviasi_persen_kantor,
         modelVersion,
+        date,
       );
     }
 
     return result;
   } catch (error) {
-    console.error('Error in classifyOffice:', error);
-    if (error instanceof Error400 || error instanceof Error401 || error instanceof Error404) {
-      throw error;
-    } else {
-      throw new Error('Internal Server Error processing Office Classification');
-    }
+    return handleClassifyError(error, 'Office');
   }
 };
 
+/**
+ * Main Entry Point: Dispatcher Klasifikasi berdasarkan Kategori Meter
+ */
 export const classifyService = async (date: Date, meterId: number) => {
   try {
     const meter = await prisma.meter.findUnique({
       where: { meter_id: meterId },
-      include: {
-        category: true,
-      },
+      include: { category: true },
     });
 
-    if (!meter) {
-      throw new Error404(`Meter dengan ID ${meterId} tidak ditemukan.`);
-    }
+    if (!meter) throw new Error404(`Meter dengan ID ${meterId} tidak ditemukan.`);
 
     const categoryName = meter.category?.name?.toLowerCase() || '';
 
@@ -176,14 +156,20 @@ export const classifyService = async (date: Date, meterId: number) => {
       return await classifyOffice(date, meterId);
     }
   } catch (error) {
-    console.error('Error in classifyService:', error);
-    if (error instanceof Error400 || error instanceof Error401 || error instanceof Error404) {
-      console.warn(`⚠️ Data tidak ditemukan (404). Melanjutkan proses ke item berikutnya...`);
-
-      // Return null agar fungsi pemanggil tahu bahwa data ini kosong, tapi tidak error
-      return;
-    } else {
-      throw new Error('Internal Server Error processing Classification Service');
-    }
+    return handleClassifyError(error, 'Main Service');
   }
+};
+
+/**
+ * Helper: Penanganan Error Terpusat
+ */
+const handleClassifyError = (error: any, context: string) => {
+  console.error(`[Classification Error - ${context}]:`, error.message);
+
+  if (error instanceof Error400 || error instanceof Error401 || error instanceof Error404) {
+    console.warn(`⚠️ Data tidak lengkap/tidak ditemukan. Melompati klasifikasi ini...`);
+    return null; // Mengembalikan null agar loop proses tidak terhenti (crash)
+  }
+
+  throw new Error(`Internal Server Error in ${context} Classification`);
 };

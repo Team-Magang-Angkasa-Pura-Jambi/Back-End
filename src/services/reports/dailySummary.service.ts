@@ -234,7 +234,7 @@ export class DailySummaryService extends GenericBaseService<
       Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
     );
     if (endDate >= todayUTC && startDate <= todayUTC) {
-      todayWeather = await weatherService.getForecast(today);
+      todayWeather = await weatherService.getWeatherData(today);
     }
 
     const [aggregates, paxAggregate, weatherAggregate] = await Promise.all([

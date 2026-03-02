@@ -1,5 +1,5 @@
-import axios, { isAxiosError } from 'axios';
-import { Error400, Error500 } from '../utils/customError.js';
+import axios from 'axios';
+import { Error500 } from '../utils/customError.js';
 import prisma from '../configs/db.js';
 import { weatherConfig } from '../configs/weather.js';
 
@@ -9,37 +9,28 @@ interface WeatherData {
   is_estimated?: boolean;
 }
 
-interface DailyAccumulator {
-  tempSum: number;
-  maxTemp: number;
-  count: number;
-}
-
 class WeatherService {
   private apiKey: string;
   private lat: string;
   private lon: string;
-  private baseURL: string;
+  private forecastURL: string;
+  private historyURL = 'https://archive-api.open-meteo.com/v1/archive';
 
   constructor() {
     this.apiKey = weatherConfig.apiKey;
     this.lat = weatherConfig.latitude;
     this.lon = weatherConfig.longitude;
-    this.baseURL = weatherConfig.baseURL;
+    this.forecastURL = weatherConfig.baseURL;
   }
 
   /**
-   * Mengambil data prakiraan.
-   * Strategi: Cek DB -> Jika null, Fetch API -> Hitung SEMUA tanggal di API -> Simpan SEMUA ke DB -> Return tanggal diminta.
+   * Mengambil data cuaca harian (History atau Forecast)
    */
-  public async getForecast(date: Date): Promise<WeatherData | null> {
-    if (!this.apiKey) return null;
-
-    // Gunakan Local Date agar tanggal tidak mundur karena timezone UTC
+  public async getWeatherData(date: Date): Promise<WeatherData | null> {
     const targetDateStr = date.toLocaleDateString('en-CA');
     const targetDateObj = new Date(targetDateStr);
 
-    // 1. CEK DATABASE (Prioritas Utama)
+    // 1. CEK DATABASE (Cache)
     const cachedWeather = await prisma.weatherHistory.findUnique({
       where: { data_date: targetDateObj },
     });
@@ -51,134 +42,96 @@ class WeatherService {
       };
     }
 
-    // 2. LOGIC GUARD: Handling Tanggal
+    // 2. TENTUKAN SUMBER API
     const today = new Date();
     const normalizeDate = (d: Date) => new Date(d.toLocaleDateString('en-CA'));
 
     const reqDateNorm = normalizeDate(date);
     const todayNorm = normalizeDate(today);
 
-    // --- PERBAIKAN UTAMA DISINI ---
-    // Jika tanggal adalah MASA LALU dan tidak ada di DB:
     if (reqDateNorm < todayNorm) {
-      console.warn(
-        `[WeatherService] Tanggal ${targetDateStr} adalah masa lalu & tidak ada di DB. API Forecast tidak support history.`,
-      );
-
-      // SOLUSI: Return NILAI DEFAULT / RATA-RATA (Hardcode atau estimasi)
-      // Agar sistem klasifikasi TIDAK Error 404.
-      // Anda bisa sesuaikan angka ini dengan rata-rata suhu lokasi Anda.
-      return {
-        suhu_rata: 28.0, // Suhu rata-rata aman (misal Indonesia)
-        suhu_max: 32.0, // Suhu max rata-rata aman
-        is_estimated: true, // (Opsional) Flag penanda data palsu
-      };
+      return await this.fetchHistoryFromOpenMeteo(targetDateStr);
+    } else {
+      return await this.fetchForecastFromOpenWeather(date);
     }
+  }
 
-    // Jika tanggal KEJAUHAN (lebih dari 5 hari kedepan)
-    const maxForecastDate = new Date();
-    maxForecastDate.setDate(today.getDate() + 5);
-    const maxDateNorm = normalizeDate(maxForecastDate);
-
-    if (reqDateNorm > maxDateNorm) {
-      console.warn(`[WeatherService] Tanggal ${targetDateStr} terlalu jauh untuk forecast.`);
-      return null; // Kalau masa depan kejauhan, lebih baik null/tunggu mendekati hari H
-    }
-
-    // 3. AMBIL DARI API (Hanya untuk Hari Ini & Masa Depan)
+  private async fetchHistoryFromOpenMeteo(dateStr: string): Promise<WeatherData | null> {
     try {
-      console.log(`[WeatherService] Cache miss untuk ${targetDateStr}. Mengambil data API...`);
-
-      const response = await axios.get(this.baseURL, {
+      const response = await axios.get(this.historyURL, {
         params: {
-          lat: this.lat,
-          lon: this.lon,
-          appid: this.apiKey,
-          units: 'metric',
+          latitude: this.lat,
+          longitude: this.lon,
+          start_date: dateStr,
+          end_date: dateStr,
+          daily: 'temperature_2m_max,temperature_2m_mean',
+          timezone: 'Asia/Jakarta',
         },
       });
 
-      const forecastList = response.data.list;
-      if (!forecastList || forecastList.length === 0) return null;
+      const daily = response.data.daily;
+      if (!daily?.time.length) return null;
 
-      const processedForecasts = this.aggregateForecastByDay(forecastList);
+      const result = {
+        suhu_rata: parseFloat(daily.temperature_2m_mean[0].toFixed(2)),
+        suhu_max: parseFloat(daily.temperature_2m_max[0].toFixed(2)),
+      };
 
-      // Simpan ke DB (Cache)
-      const dbPayload = Array.from(processedForecasts.entries()).map(([dateStr, data]) => ({
-        data_date: new Date(dateStr),
-        avg_temp: data.suhu_rata,
-        max_temp: data.suhu_max,
-      }));
-
-      if (dbPayload.length > 0) {
-        await prisma.weatherHistory.createMany({
-          data: dbPayload,
-          skipDuplicates: true,
-        });
-      }
-
-      // Cek apakah tanggal target ada di hasil API
-      const result = processedForecasts.get(targetDateStr);
-
-      if (!result) {
-        // Fallback jika API sukses tapi tanggal spesifik hari ini belum masuk list (jarang terjadi)
-        console.warn(`[WeatherService] API sukses, tapi tanggal ${targetDateStr} belum tersedia.`);
-        // Return default agar tidak crash
-        return { suhu_rata: 28.0, suhu_max: 32.0 };
-      }
+      await prisma.weatherHistory.create({
+        data: {
+          data_date: new Date(dateStr),
+          avg_temp: result.suhu_rata,
+          max_temp: result.suhu_max,
+        },
+      });
 
       return result;
     } catch (error) {
-      return this.handleAxiosError(error);
+      console.error('[WeatherService] History Error:', error);
+      return { suhu_rata: 28.0, suhu_max: 32.0, is_estimated: true };
     }
   }
 
-  /**
-   * Helper: Mengubah data per 3 jam (raw API) menjadi data harian (avg & max)
-   */
-  private aggregateForecastByDay(list: any[]): Map<string, WeatherData> {
-    const dailyMap = new Map<string, DailyAccumulator>();
+  private async fetchForecastFromOpenWeather(date: Date): Promise<WeatherData | null> {
+    const targetDateStr = date.toLocaleDateString('en-CA');
+    try {
+      const response = await axios.get(this.forecastURL, {
+        params: { lat: this.lat, lon: this.lon, appid: this.apiKey, units: 'metric' },
+      });
 
-    for (const item of list) {
-      const dateStr = item.dt_txt.split(' ')[0];
-      const temp = item.main.temp;
-      const max = item.main.temp_max;
+      const forecastList = response.data.list;
+      if (!forecastList) return null;
 
-      if (!dailyMap.has(dateStr)) {
-        dailyMap.set(dateStr, { tempSum: 0, maxTemp: -Infinity, count: 0 });
+      // Logika aggregasi (sama seperti kode lamamu)
+      const dailyMap = new Map<string, { sum: number; max: number; count: number }>();
+      for (const item of forecastList) {
+        const dStr = item.dt_txt.split(' ')[0];
+        if (!dailyMap.has(dStr)) dailyMap.set(dStr, { sum: 0, max: -Infinity, count: 0 });
+        const entry = dailyMap.get(dStr)!;
+        entry.sum += item.main.temp;
+        entry.max = Math.max(entry.max, item.main.temp_max);
+        entry.count++;
       }
 
-      const entry = dailyMap.get(dateStr)!;
-      entry.tempSum += temp;
-      entry.maxTemp = Math.max(entry.maxTemp, max);
-      entry.count += 1;
+      // Simpan semua ke DB (Bulk)
+      const payload = Array.from(dailyMap.entries()).map(([d, val]) => ({
+        data_date: new Date(d),
+        avg_temp: parseFloat((val.sum / val.count).toFixed(2)),
+        max_temp: parseFloat(val.max.toFixed(2)),
+      }));
+
+      await prisma.weatherHistory.createMany({ data: payload, skipDuplicates: true });
+
+      const target = dailyMap.get(targetDateStr);
+      return target
+        ? {
+            suhu_rata: parseFloat((target.sum / target.count).toFixed(2)),
+            suhu_max: target.max,
+          }
+        : null;
+    } catch (error) {
+      throw new Error500('Gagal mengambil ramalan cuaca.');
     }
-
-    const finalMap = new Map<string, WeatherData>();
-    dailyMap.forEach((val, key) => {
-      finalMap.set(key, {
-        suhu_rata: parseFloat((val.tempSum / val.count).toFixed(2)),
-        suhu_max: parseFloat(val.maxTemp.toFixed(2)),
-      });
-    });
-
-    return finalMap;
-  }
-
-  /**
-   * Helper: Centralized Error Handling
-   */
-  private handleAxiosError(error: unknown): never {
-    if (isAxiosError(error)) {
-      const status = error.response?.status;
-      const message = error.response?.data?.message ?? error.message;
-
-      console.error(`[WeatherService] Error ${status}: ${message}`);
-
-      if (status === 401) throw new Error500('API Key Weather invalid.');
-      if (status === 400) throw new Error400(`Bad Request: ${message}`);
-    }
-    throw new Error500('Gagal terhubung ke layanan cuaca.');
   }
 }
 

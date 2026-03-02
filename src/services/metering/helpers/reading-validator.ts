@@ -19,8 +19,17 @@ export const _validateReadingsAgainstPrevious = async (
         );
       }
     }
-    // Note: Untuk Fuel biasanya diperbolehkan input mundur/acak,
-    // tapi jika ingin tetap strik, hapus 'return' di bawah ini.
+
+    const futureSession = await prisma.readingSession.findFirst({
+      where: { meter_id: meter.meter_id, reading_date: { gte: dateForDb } },
+    });
+
+    if (futureSession) {
+      throw new Error400(
+        `Gagal menyimpan data. Sudah terdapat data pembacaan yang lebih baru pada tanggal ${new Date(futureSession.reading_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}.`,
+      );
+    }
+
     return;
   }
 

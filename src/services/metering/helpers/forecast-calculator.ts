@@ -1,5 +1,5 @@
 import prisma from '../../../configs/db.js';
-import { type Prisma, UsageCategory } from '../../../generated/prisma/index.js';
+import { UsageCategory } from '../../../generated/prisma/index.js';
 
 /**
  * Memetakan hasil string dari model ML ke tipe enum UsageCategory.
@@ -15,31 +15,37 @@ export const _mapClassificationToEnum = (classification: string): UsageCategory 
   return UsageCategory.NORMAL;
 };
 
+// Di dalam file forecast-calculator.ts
+
 export const _saveClassification = async (
-  summary: Prisma.DailySummaryGetPayload<object>,
+  validKwh: any,
   kinerja: string,
   deviasi: number,
   modelVersion: string,
+  date: Date, // Tambahkan parameter ini
 ) => {
   const classification = _mapClassificationToEnum(kinerja);
   const reasoning = `Deviasi ${deviasi.toFixed(2)}% dari prediksi normal.`;
 
   return await prisma.dailyUsageClassification.upsert({
-    where: { summary_id: summary.summary_id },
+    where: {
+      summary_id: validKwh.summary_id,
+    },
     update: {
-      classification,
+      classification: classification,
       confidence_score: deviasi,
       model_version: modelVersion,
-      reasoning,
+      reasoning: reasoning,
+      // classification_date biasanya tidak diupdate jika sudah ada
     },
     create: {
-      summary_id: summary.summary_id,
-      meter_id: summary.meter_id,
-      classification_date: summary.summary_date,
-      classification,
+      summary_id: validKwh.summary_id,
+      meter_id: validKwh.meter_id,
+      classification: classification,
       confidence_score: deviasi,
       model_version: modelVersion,
-      reasoning,
+      reasoning: reasoning,
+      classification_date: date, // SELESAI: Ini yang menyebabkan error tadi
     },
   });
 };
