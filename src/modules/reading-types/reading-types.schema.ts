@@ -15,7 +15,7 @@ export const readingTypesSchema = {
       type_name: z.string().min(1),
       energy_type_id: z.coerce.number({ error: 'ID Tipe Energi wajib diisi' }),
       unit: z.string({ error: 'Satuan (unit) wajib diisi' }).min(1),
-    }),
+    }), 
   }),
 
   patch: z.object({

@@ -18,24 +18,25 @@ export const readingTypesSerices = {
         select: {
           reading_type_id: true,
           type_name: true,
+          unit: true,
           energy_type: {
             select: {
               energy_type_id: true,
               name: true,
             },
           },
-          scheme_rates: {
-            select: {
-              rate_id: true,
-              scheme: true,
-            },
-          },
-          meter_configs: {
-            select: {
-              config_id: true,
-              meter: true,
-            },
-          },
+          // scheme_rates: {
+          //   select: {
+          //     rate_id: true,
+          //     scheme: true,
+          //   },
+          // },
+          // meter_configs: {
+          //   select: {
+          //     config_id: true,
+          //     meter: true,
+          //   },
+          // },
         },
       });
     } else {

@@ -17,6 +17,22 @@ export const readingController = {
       data,
     });
   },
+  patch: async (req: Request, res: Response) => {
+    const { body } = res.locals.validatedData;
+    const { params } = res.locals.validatedData;
+
+    const userId = Number(req.user?.id);
+
+    if (!userId) throw new Error('User tidak ditemukan');
+    if (!params) throw new Error('ID tidak ditemukan');
+
+    const data = await readingService.update(params.id, body, userId);
+    return res201({
+      res,
+      message: 'Pembacaan berhasil diperbaharui. Sistem sedang mengkalkulasi output...',
+      data,
+    });
+  },
 
   show: async (req: Request, res: Response) => {
     const { query } = res.locals.validatedData;
@@ -36,5 +52,26 @@ export const readingController = {
 
     await readingService.remove(params.id);
     return res200({ res, message: 'Data pembacaan berhasil dihapus' });
+  },
+
+  recalculate: async (req: Request, res: Response) => {
+    const { body } = res.locals.validatedData;
+
+    const data = await readingService.recalculate(body);
+    return res201({
+      res,
+      message: 'Sistem sedang mengkalkulasi output...',
+      data,
+    });
+  },
+
+  getLastReading: async (req: Request, res: Response) => {
+    const query = (res.locals.validatedData?.query || req.query) as any;
+    const data = await readingService.getLastReading(query);
+    return res200({
+      res,
+      message: 'Data pembacaan terakhir berhasil diambil',
+      data,
+    });
   },
 };

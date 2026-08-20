@@ -41,9 +41,9 @@ export const efficiencyController = {
     return res201({ res, message: 'Data Dihapus!', data });
   },
 
-  previewEfficiency: async (req: Request, res: Response, next: NextFunction) => {
-    const { body } = res.locals.validatedData;
-    const data = await efficiencyTargetsService.previewEfficiency(body);
-    return res200({ res, message: 'Data Diperbarui!', data });
-  },
+  // previewEfficiency: async (req: Request, res: Response, next: NextFunction) => {
+  //   const { body } = res.locals.validatedData;
+  //   const data = await efficiencyTargetsService.previewEfficiency(body);
+  //   return res200({ res, message: 'Data Diperbarui!', data });
+  // },
 };

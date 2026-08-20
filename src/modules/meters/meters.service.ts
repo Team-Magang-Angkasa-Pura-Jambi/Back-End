@@ -79,11 +79,6 @@ export const metersService = {
                 config_id: true,
               },
             },
-            budget_allocations: {
-              include: {
-                budget: true,
-              },
-            },
             calculation_template: {
               select: {
                 name: true,
@@ -93,6 +88,7 @@ export const metersService = {
                   },
                 },
                 definitions: { select: { name: true, formula_items: true } },
+                validations: true,
               },
             },
             efficiency_targets: true,

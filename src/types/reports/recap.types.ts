@@ -1,5 +1,5 @@
 import { type z } from 'zod';
-import type { UsageCategory } from '../../generated/prisma/index.js';
+import type { UsageCategory } from './analysis.types.js';
 import { type getRecapSchema } from '../../validations/reports/recap.validation.js';
 
 export type GetRecapQuery = z.infer<typeof getRecapSchema>['query'];

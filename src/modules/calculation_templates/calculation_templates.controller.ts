@@ -69,4 +69,10 @@ export const templateController = {
 
     return res200({ res, message: 'Template berhasil dihapus' });
   },
+
+  showListAvailableVariables: async (req: Request, res: Response) => {
+    const data = await templateService.listAvailableVariables();
+
+    return res200({ res, message: 'Variable Ditemukan!', data });
+  },
 };

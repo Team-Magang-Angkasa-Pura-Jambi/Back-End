@@ -5,26 +5,28 @@ export const _normalizeDate = (date: Date | string): Date => {
   const d = new Date(date);
   if (isNaN(d.getTime())) throw new Error('Format tanggal tidak valid.');
 
-  return d; // Kembalikan object Date utuh (Jam/Menit/Detik tetap ada)
+  // 1. Ambil angka kalender sesuai yang user lihat (waktu lokal)
+  const year = d.getFullYear();
+  const month = d.getMonth(); // Ingat: Januari = 0
+  const day = d.getDate();
+
+  // 2. Kunci menjadi UTC midnight agar Prisma tidak menggesernya mundur
+  return new Date(Date.UTC(year, month, day));
 };
 
-export const _validateMeter = async (meter_id: number, tx: Prisma.TransactionClient) => {
+export const _validateMeter = async (meter_id: number, tx: any) => {
   const meter = await tx.meter.findUnique({
     where: { meter_id },
     include: {
-      energy_type: true,
-      tank_profile: true,
-      // Include Atribut Spesifikasi Alat & Konfigurasi Sensor
-      // specs: {
-      //   include: { attribute: true },
-      // },
-      reading_configs: true,
-      calculation_template: {
-        include: { definitions: true },
+      reading_configs: {
+        include: {
+          reading_type: true,
+        },
       },
+      tank_profile: true,
+      calculation_template: true,
     },
   });
-
   if (!meter) throw new Error404(`Meteran dengan ID ${meter_id} tidak ditemukan.`);
 
   // Sesuaikan dengan ENUM terbaru: ACTIVE, INACTIVE, MAINTENANCE
@@ -35,9 +37,10 @@ export const _validateMeter = async (meter_id: number, tx: Prisma.TransactionCli
 };
 
 export const _checkUsageAgainstTargetAndNotify = async (
+  userId: number,
   summary: Prisma.DailySummaryGetPayload<object>,
   meter: Prisma.MeterGetPayload<object>,
-  tx: Prisma.TransactionClient,
+  tx: any,
 ): Promise<void> => {
   const target = await tx.efficiencyTarget.findFirst({
     where: {
@@ -61,9 +64,9 @@ export const _checkUsageAgainstTargetAndNotify = async (
 
     await tx.notification.create({
       data: {
-        user_id: meter.created_by ?? 1,
-        category: 'ALERT',
-        severity: 'MEDIUM',
+        user_id: userId,
+        category: 'ANOMALY_DETECTED',
+        severity: 'CRITICAL',
         title,
         message,
         reference_table: 'daily_summaries',

@@ -1,19 +1,54 @@
-import { differenceInDays } from 'date-fns';
+import { differenceInDays, format } from 'date-fns';
 import { Prisma } from '../../../generated/prisma/index.js';
 import { Error400 } from '../../../utils/customError.js';
+import { Parser } from 'expr-eval';
+
+const parser = new Parser();
+
+export interface ReadingDetailInput {
+  reading_type_id: number;
+  value: string | number | null;
+}
+
+export interface ValidationRule {
+  rule: string;
+  error_message: string;
+}
+
+export type ValidatedMeter = Prisma.MeterGetPayload<{
+  include: {
+    reading_configs: {
+      include: { reading_type: true };
+    };
+    tank_profile: true;
+    calculation_template: true;
+  };
+}>;
 
 export const readingValidator = {
-  async validate(meter: any, dateForDb: Date, details: any[], tx: Prisma.TransactionClient) {
+  async validate(
+    meter: ValidatedMeter,
+    dateForDb: Date,
+    details: ReadingDetailInput[],
+    tx: any,
+  ) {
+    // ==========================================
+    // 1. VALIDASI KRONOLOGI MASA DEPAN (Mencegah input mundur)
+    // ==========================================
     const futureSession = await tx.readingSession.findFirst({
       where: { meter_id: meter.meter_id, reading_date: { gt: dateForDb } },
     });
 
     if (futureSession) {
+      const formattedDate = format(futureSession.reading_date, 'yyyy-MM-dd');
       throw new Error400(
-        `Gagal: Sudah ada data yang lebih baru pada tanggal ${futureSession.reading_date.toISOString().split('T')[0]}.`,
+        `Gagal: Sudah ada data yang lebih baru pada tanggal ${formattedDate}. Tidak boleh mundur.`,
       );
     }
 
+    // ==========================================
+    // 2. AMBIL DATA SESI SEBELUMNYA & CEK GAP
+    // ==========================================
     const prevSession = await tx.readingSession.findFirst({
       where: { meter_id: meter.meter_id, reading_date: { lt: dateForDb } },
       orderBy: { reading_date: 'desc' },
@@ -21,39 +56,27 @@ export const readingValidator = {
     });
 
     if (prevSession) {
-      if (!meter.allow_gap) {
+      // Deteksi apakah ini meteran BBM (memiliki profil tangki)
+      const isBBM = !!meter.tank_profile;
+
+      // Aturan gap tanggal HANYA berlaku jika allow_gap = false DAN BUKAN meteran BBM
+      if (!meter.allow_gap && !isBBM) {
         const diffDays = differenceInDays(dateForDb, prevSession.reading_date);
         if (diffDays > 1) {
-          throw new Error400(
-            `Data tidak urut. Data terakhir ditemukan pada ${prevSession.reading_date.toISOString().split('T')[0]}.`,
-          );
-        }
-      }
-
-      if (!meter.allow_decrease && !meter.rollover_limit) {
-        for (const det of details) {
-          const lastDet = prevSession.details.find(
-            (d: any) => d.reading_type_id === det.reading_type_id,
-          );
-          if (lastDet) {
-            const currentVal = new Prisma.Decimal(det.value);
-            const prevVal = new Prisma.Decimal(lastDet.value);
-            if (currentVal.lessThan(prevVal)) {
-              throw new Error400(
-                `Input (${currentVal.toString()}) tidak boleh lebih kecil dari stand sebelumnya (${prevVal.toString()}).`,
-              );
-            }
-          }
+          const formattedPrevDate = format(prevSession.reading_date, 'yyyy-MM-dd');
+          throw new Error400(`Data tidak urut. Data terakhir ditemukan pada ${formattedPrevDate}.`);
         }
       }
     }
 
+    // ==========================================
+    // 3. VALIDASI AMBANG BATAS & TANGKI
+    // ==========================================
     for (const det of details) {
-      const inputVal = new Prisma.Decimal(det.value);
+      if (det.value === null || det.value === '') continue;
 
-      const config = meter.reading_configs?.find(
-        (c: any) => c.reading_type_id === det.reading_type_id,
-      );
+      const inputVal = new Prisma.Decimal(det.value as string | number);
+      const config = meter.reading_configs?.find((c) => c.reading_type_id === det.reading_type_id);
 
       if (config) {
         if (
@@ -89,6 +112,86 @@ export const readingValidator = {
               );
             }
           }
+        }
+      }
+    }
+
+    // ==========================================
+    // 4. VALIDASI DINAMIS DARI TEMPLATE JSON
+    // ==========================================
+    const validations = (meter.calculation_template?.validations ||
+      []) as unknown as ValidationRule[];
+
+    if (validations.length > 0) {
+      const scope: Record<string, number> = {};
+
+      // A. Muat data dari HARI KEMARIN (Mendukung suffix _Prev dan _Kmrn)
+      if (prevSession && prevSession.details) {
+        for (const prevDet of prevSession.details) {
+          const config = meter.reading_configs?.find(
+            (c) => c.reading_type_id === prevDet.reading_type_id,
+          );
+          if (config && config.reading_type?.type_name) {
+            const label = config.reading_type.type_name.replace(/\s+/g, '_');
+            const val = Number(prevDet.value);
+
+            scope[label] = val;
+            scope[`${label}_Prev`] = val;
+            scope[`${label}_Kmrn`] = val; // Selaras dengan format LWBP_Kmrn / WBP_Kmrn
+          }
+        }
+      }
+
+      // B. Muat data hari ini yang sudah tersimpan (Antisipasi input parsial shift)
+      const existingTodaySession = await tx.readingSession.findFirst({
+        where: { meter_id: meter.meter_id, reading_date: dateForDb },
+        include: { details: true },
+      });
+
+      if (existingTodaySession) {
+        for (const existingDet of existingTodaySession.details) {
+          const config = meter.reading_configs?.find(
+            (c) => c.reading_type_id === existingDet.reading_type_id,
+          );
+          if (config && config.reading_type?.type_name) {
+            const label = config.reading_type.type_name.replace(/\s+/g, '_');
+            scope[label] = Number(existingDet.value);
+          }
+        }
+      }
+
+      // C. Timpa dengan nilai inputan baru dari payload teknisi saat ini (Mendukung _Skrg)
+      for (const det of details) {
+        const config = meter.reading_configs?.find(
+          (c) => c.reading_type_id === det.reading_type_id,
+        );
+        if (config && config.reading_type?.type_name) {
+          const label = config.reading_type.type_name.replace(/\s+/g, '_');
+          const val = Number(det.value);
+
+          scope[label] = val;
+          scope[`${label}_Skrg`] = val; // Selaras dengan format LWBP_Skrg / WBP_Skrg
+        }
+      }
+
+      // D. Eksekusi Evaluasi Rumus Validasi
+      for (const validation of validations) {
+        try {
+          const ruleExpr = parser.parse(validation.rule);
+          const ruleVars = ruleExpr.variables();
+
+          const isAllVarsPresent = ruleVars.every((v) => scope[v] !== undefined);
+
+          if (isAllVarsPresent) {
+            const isRulePassed = ruleExpr.evaluate(scope);
+
+            if (!isRulePassed) {
+              throw new Error400(`Validasi Gagal: ${validation.error_message}`);
+            }
+          }
+        } catch (e: unknown) {
+          if (e instanceof Error400) throw e;
+          console.error(`[Validator] Gagal mem-parsing rule JSON: ${validation.rule}`, e);
         }
       }
     }

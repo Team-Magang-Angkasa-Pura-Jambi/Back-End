@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MeterStatus, TankShape } from '../../generated/prisma/index.js';
+import { MeterCategory, MeterStatus, TankShape } from '../../generated/prisma/index.js';
 
 const meterBase = {
   meter_code: z.string({ error: () => ({ message: 'Kode Meter wajib diisi' }) }).min(3),
@@ -10,9 +10,8 @@ const meterBase = {
   calculation_template_id: z.string().uuid().optional().nullable(),
   price_scheme_id: z.number().optional().nullable(),
   energy_type_id: z.number({ error: () => ({ message: 'Tipe Energi wajib diisi' }) }),
-
+  category: z.enum(MeterCategory).default(MeterCategory.LAINNYA),
   multiplier: z.preprocess((v) => (v === '' ? undefined : v), z.coerce.number()),
-
   is_virtual: z.boolean(),
   allow_gap: z.boolean(),
   allow_decrease: z.boolean(),
@@ -64,7 +63,7 @@ export const meterSchema = {
     body: z.object({
       meter: z.object(meterBase).partial().optional(),
       meter_profile: z.object(profileBase).partial().optional(),
-      reading_config: z.array(z.object(configBase).optional()),
+      reading_config: z.array(z.object(configBase).optional()).optional(),
     }),
   }),
 

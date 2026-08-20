@@ -18,15 +18,15 @@ export async function runImport() {
 
   // A. Ambil Meter
   const meterKantor = await prisma.meter.findFirst({
-    where: { category: { name: 'Office' } },
+    where: { category: 'KANTOR' },
   });
 
   const meterTerminal = await prisma.meter.findFirst({
-    where: { category: { name: 'Terminal' }, energy_type: { type_name: 'Electricity' } },
+    where: { category: 'TERMINAL', energy_type: { name: 'Electricity' } },
   });
 
   const meterAirTerminal = await prisma.meter.findFirst({
-    where: { category: { name: 'Terminal' }, energy_type: { type_name: 'Water' } },
+    where: { category: 'TERMINAL', energy_type: { name: 'Water' } },
   });
 
   // B. Reading Types (Listrik)
@@ -37,7 +37,7 @@ export async function runImport() {
   const malamType = await prisma.readingType.findFirst({ where: { type_name: 'Malam' } });
 
   // C. Reading Types (Air)
-  const waterType = await prisma.readingType.findFirst({ where: { type_name: 'Water' } });
+  const waterType = await prisma.readingType.findFirst({ where: { type_name: 'Water Flow' } });
 
   // Validasi Master Data
   if (!meterKantor || !meterTerminal) {
@@ -50,7 +50,7 @@ export async function runImport() {
 
   if (!wbpType || !lwbpType || !pagiType || !soreType || !malamType || !waterType) {
     console.error(
-      '❌ Salah satu Reading Type tidak ditemukan (Cek seed: WBP, LWBP, Pagi, Sore, Malam, Water).',
+      '❌ Salah satu Reading Type tidak ditemukan (Cek seed: WBP, LWBP, Pagi, Sore, Malam, Water Flow).',
     );
     return;
   }
@@ -128,13 +128,30 @@ export async function runImport() {
 
     try {
       await prisma.$transaction(async (tx) => {
+        // Helper untuk upsert detail tanpa unique constraint
+        const upsertDetailHelper = async (sessionId: number, typeId: number, val: number) => {
+          const existing = await tx.readingDetail.findFirst({
+            where: { session_id: sessionId, reading_type_id: typeId },
+          });
+          if (existing) {
+            await tx.readingDetail.update({
+              where: { detail_id: existing.detail_id },
+              data: { value: val },
+            });
+          } else {
+            await tx.readingDetail.create({
+              data: { session_id: sessionId, reading_type_id: typeId, value: val },
+            });
+          }
+        };
+
         // ------------------------------------------
         // BLOCK 1: TERMINAL LISTRIK (WBP & LWBP)
         // ------------------------------------------
         if (valWbpTerminal > 0 || valLwbpTerminal > 0) {
           const sessionTerminal = await tx.readingSession.upsert({
             where: {
-              unique_meter_reading_per_day: {
+              meter_id_reading_date: {
                 meter_id: meterTerminal.meter_id,
                 reading_date: readingDate,
               },
@@ -145,38 +162,12 @@ export async function runImport() {
 
           // WBP
           if (valWbpTerminal > 0) {
-            await tx.readingDetail.upsert({
-              where: {
-                session_id_reading_type_id: {
-                  session_id: sessionTerminal.session_id,
-                  reading_type_id: wbpType.reading_type_id,
-                },
-              },
-              create: {
-                session_id: sessionTerminal.session_id,
-                reading_type_id: wbpType.reading_type_id,
-                value: valWbpTerminal,
-              },
-              update: { value: valWbpTerminal },
-            });
+            await upsertDetailHelper(sessionTerminal.session_id, wbpType.reading_type_id, valWbpTerminal);
           }
 
           // LWBP
           if (valLwbpTerminal > 0) {
-            await tx.readingDetail.upsert({
-              where: {
-                session_id_reading_type_id: {
-                  session_id: sessionTerminal.session_id,
-                  reading_type_id: lwbpType.reading_type_id,
-                },
-              },
-              create: {
-                session_id: sessionTerminal.session_id,
-                reading_type_id: lwbpType.reading_type_id,
-                value: valLwbpTerminal,
-              },
-              update: { value: valLwbpTerminal },
-            });
+            await upsertDetailHelper(sessionTerminal.session_id, lwbpType.reading_type_id, valLwbpTerminal);
           }
         }
 
@@ -186,7 +177,7 @@ export async function runImport() {
         if (valKantorPagi > 0 || valKantorSore > 0 || valKantorMalam > 0) {
           const sessionOffice = await tx.readingSession.upsert({
             where: {
-              unique_meter_reading_per_day: {
+              meter_id_reading_date: {
                 meter_id: meterKantor.meter_id,
                 reading_date: readingDate,
               },
@@ -195,38 +186,34 @@ export async function runImport() {
             update: {},
           });
 
-          const upsertDetail = async (typeId: number, val: number) => {
-            if (val <= 0) return;
-            await tx.readingDetail.upsert({
-              where: {
-                session_id_reading_type_id: {
-                  session_id: sessionOffice.session_id,
-                  reading_type_id: typeId,
-                },
-              },
-              create: {
-                session_id: sessionOffice.session_id,
-                reading_type_id: typeId,
-                value: val,
-              },
-              update: { value: val },
-            });
-          };
-
-          await upsertDetail(pagiType.reading_type_id, valKantorPagi);
-          await upsertDetail(soreType.reading_type_id, valKantorSore);
-          await upsertDetail(malamType.reading_type_id, valKantorMalam);
+          if (valKantorPagi > 0) {
+            await upsertDetailHelper(sessionOffice.session_id, pagiType.reading_type_id, valKantorPagi);
+          }
+          if (valKantorSore > 0) {
+            await upsertDetailHelper(sessionOffice.session_id, soreType.reading_type_id, valKantorSore);
+          }
+          if (valKantorMalam > 0) {
+            await upsertDetailHelper(sessionOffice.session_id, malamType.reading_type_id, valKantorMalam);
+          }
         }
 
         // ------------------------------------------
         // BLOCK 3: PAX (Penumpang)
         // ------------------------------------------
         if (valPax > 0) {
-          await tx.paxData.upsert({
-            where: { data_date: readingDate },
-            create: { data_date: readingDate, total_pax: valPax },
-            update: { total_pax: valPax },
+          const existingPax = await tx.paxData.findFirst({
+            where: { date: readingDate, location_id: null, session_id: null },
           });
+          if (existingPax) {
+            await tx.paxData.update({
+              where: { pax_id: existingPax.pax_id },
+              data: { pax_count: valPax },
+            });
+          } else {
+            await tx.paxData.create({
+              data: { date: readingDate, pax_count: valPax, location_id: null, session_id: null },
+            });
+          }
         }
 
         // ------------------------------------------
@@ -236,7 +223,7 @@ export async function runImport() {
           // 1. Session Air
           const sessionWater = await tx.readingSession.upsert({
             where: {
-              unique_meter_reading_per_day: {
+              meter_id_reading_date: {
                 meter_id: meterAirTerminal.meter_id,
                 reading_date: readingDate,
               },
@@ -246,20 +233,7 @@ export async function runImport() {
           });
 
           // 2. Detail Air (Stand Meter)
-          await tx.readingDetail.upsert({
-            where: {
-              session_id_reading_type_id: {
-                session_id: sessionWater.session_id,
-                reading_type_id: waterType.reading_type_id,
-              },
-            },
-            create: {
-              session_id: sessionWater.session_id,
-              reading_type_id: waterType.reading_type_id,
-              value: valWaterTerminal,
-            },
-            update: { value: valWaterTerminal },
-          });
+          await upsertDetailHelper(sessionWater.session_id, waterType.reading_type_id, valWaterTerminal);
         }
       });
     } catch (error: any) {

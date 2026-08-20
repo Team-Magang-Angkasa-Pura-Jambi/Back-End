@@ -16,9 +16,19 @@ export const auditLogService = {
     const limit = Number(query?.limit) || 10;
     const skip = (page - 1) * limit;
 
+    let entityTableFilter: any = undefined;
+    if (query?.entity_table) {
+      if (query.entity_table.includes(',')) {
+        const tables = query.entity_table.split(',').map((t) => t.trim());
+        entityTableFilter = { in: tables, mode: 'insensitive' };
+      } else {
+        entityTableFilter = { equals: query.entity_table.trim(), mode: 'insensitive' };
+      }
+    }
+
     const where: Prisma.AuditLogWhereInput = {
-      ...(query?.action && { action: query.action }),
-      ...(query?.entity_table && { entity_table: query.entity_table }),
+      ...(query?.action && { action: { equals: query.action.trim(), mode: 'insensitive' } }),
+      ...(entityTableFilter && { entity_table: entityTableFilter }),
       ...(query?.user_id && !isNaN(Number(query.user_id)) && { user_id: Number(query.user_id) }),
     };
 

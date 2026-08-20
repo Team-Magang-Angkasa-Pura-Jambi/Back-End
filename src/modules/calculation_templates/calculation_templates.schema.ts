@@ -3,8 +3,6 @@ import { Parser } from 'expr-eval';
 
 const parser = new Parser();
 
-// 1. VARIABLE SCHEMA (Strict Union)
-// PERBAIKAN: Gunakan 'type' (bukan 'source') dan 'reading'/'spec' agar sinkron dengan formulaEngine.ts
 const variableSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('reading'),
@@ -26,7 +24,6 @@ const variableSchema = z.discriminatedUnion('type', [
   }),
 ]);
 
-// 2. FORMULA ITEM SCHEMA (With Logic Sync)
 const formulaItemSchema = z
   .object({
     formula: z.string().min(1, 'Rumus wajib diisi'),
@@ -51,7 +48,23 @@ const formulaItemSchema = z
     }
   });
 
-// 3. MAIN SHAPES
+const validationSchema = z
+  .object({
+    rule: z.string().min(1, 'Rule wajib diisi'),
+    error_message: z.string().min(1, 'Pesan error wajib diisi'),
+  })
+  .superRefine((data, ctx) => {
+    try {
+      parser.parse(data.rule);
+    } catch (e) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Syntax rule tidak valid (harus berupa ekspresi matematika atau logika).',
+        path: ['rule'],
+      });
+    }
+  });
+
 const formulaDefinitionShape = z.object({
   name: z.string().min(1),
   is_main: z.boolean().default(false),
@@ -63,13 +76,13 @@ const templateShape = {
   description: z.string().optional().nullable(),
 };
 
-// 4. THE COMPLETE EXPORT
 export const templateSchema = {
   store: z.object({
     body: z.object({
       template: z.object({
         ...templateShape,
         definitions: z.array(formulaDefinitionShape).min(1),
+        validations: z.array(validationSchema).optional(),
       }),
     }),
   }),
@@ -94,6 +107,7 @@ export const templateSchema = {
         .object({
           ...templateShape,
           definitions: z.array(formulaDefinitionShape.partial()).optional(),
+          validations: z.array(validationSchema).optional(),
         })
         .partial(),
     }),

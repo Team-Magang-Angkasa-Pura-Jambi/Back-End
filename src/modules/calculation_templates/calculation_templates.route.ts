@@ -9,6 +9,11 @@ export const templateRoute = (router: Router) => {
 
   router.get(prefix, validate(templateSchema.show), asyncHandler(templateController.show));
 
+  router.get(
+    `${prefix}/availableVariables`,
+    asyncHandler(templateController.showListAvailableVariables),
+  );
+
   router.get(`${prefix}/:id`, validate(templateSchema.show), asyncHandler(templateController.show));
 
   router.post(prefix, validate(templateSchema.store), asyncHandler(templateController.store));

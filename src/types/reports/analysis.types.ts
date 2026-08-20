@@ -1,6 +1,8 @@
 import { type z } from 'zod';
 import { type getAnalysisSchema } from '../../validations/reports/analysis.validation.js';
-import { type UsageCategory } from '../../generated/prisma/index.js';
+
+// UsageCategory is not in the Prisma schema — defined locally
+export type UsageCategory = 'SANGAT_EFISIEN' | 'NORMAL' | 'MENDEKATI_LIMIT' | 'OVER_BUDGET' | 'UNKNOWN';
 
 export type GetAnalysisQuery = z.infer<typeof getAnalysisSchema>['query'];
 

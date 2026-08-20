@@ -9,6 +9,33 @@ export const readingRoute = (router: Router) => {
 
   router.post(prefix, validate(readingSchema.store), asyncHandler(readingController.store));
   router.get(prefix, validate(readingSchema.show), asyncHandler(readingController.show));
+  router.post(
+    prefix + '/recalculate',
+    validate(readingSchema.recalculate),
+    asyncHandler(readingController.recalculate),
+  );
+  router.patch(
+    `${prefix}/:id`,
+    validate(readingSchema.update),
+    asyncHandler(readingController.patch),
+  );
+
+  router.get(
+    `${prefix}/last`,
+    validate(readingSchema.lastReading),
+    asyncHandler(readingController.getLastReading),
+  );
+  router.get(
+    `${prefix}/last-reading`,
+    validate(readingSchema.lastReading),
+    asyncHandler(readingController.getLastReading),
+  );
+  router.get(
+    '/readings/last',
+    validate(readingSchema.lastReading),
+    asyncHandler(readingController.getLastReading),
+  );
+
   router.delete(
     `${prefix}/:id`,
     validate(readingSchema.remove),

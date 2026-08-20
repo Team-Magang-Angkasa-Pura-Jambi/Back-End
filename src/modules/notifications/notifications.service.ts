@@ -1,14 +1,13 @@
 import { handlePrismaError } from '../../common/utils/prismaError.js';
 import prisma from '../../configs/db.js';
+import { Prisma } from '../../generated/prisma/index.js';
 import { type NotificationsPayload } from './notifications.type.js';
 
 export const notificationsService = {
   store: async (data: NotificationsPayload) => {
     return prisma.notification.create({
       data: {
-        user: {
-          connect: { user_id: data.user_id },
-        },
+        user_id: data.user_id!,
         category: data.category,
         severity: data.severity,
         title: data.title,
@@ -25,12 +24,12 @@ export const notificationsService = {
     const limit = Number(query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const where: any = { user_id };
+    const where: Prisma.NotificationWhereInput = { user_id };
     if (query.is_read !== undefined) {
       where.is_read = query.is_read === 'true';
     }
 
-    const [data, total] = await Promise.all([
+    const [data, total, unread_count] = await Promise.all([
       prisma.notification.findMany({
         where,
         skip,
@@ -38,31 +37,38 @@ export const notificationsService = {
         orderBy: { created_at: 'desc' },
       }),
       prisma.notification.count({ where }),
+
+      prisma.notification.count({
+        where: { user_id, is_read: false },
+      }),
     ]);
 
     return {
-      data,
+      notifications: data,
       meta: {
         total,
         page,
         limit,
         total_pages: Math.ceil(total / limit),
-        unread_count: await prisma.notification.count({
-          where: { user_id: user_id, is_read: false },
-        }),
+        unread_count,
       },
     };
   },
 
   update: async (notification_id: number, user_id: number) => {
     try {
-      const notif = await prisma.notification.findFirst({
-        where: { notification_id, user_id },
+      const notif = await prisma.notification.findUnique({
+        where: { notification_id },
+        select: { user_id: true, is_read: true },
       });
 
-      if (!notif) throw new Error('Notification not found or access denied');
+      if (!notif || notif.user_id !== user_id) {
+        throw new Error('Notification not found or access denied');
+      }
 
-      return prisma.notification.update({
+      if (notif.is_read) return notif;
+
+      return await prisma.notification.update({
         where: { notification_id },
         data: { is_read: true },
       });
@@ -72,14 +78,11 @@ export const notificationsService = {
   },
 
   bulkRead: async (user_id: number, { ids }: { ids: number[] }) => {
-    // Safety check
     if (!ids || ids.length === 0) return { count: 0 };
 
     return prisma.notification.updateMany({
       where: {
-        notification_id: {
-          in: ids, // <--- Sekarang 'ids' adalah [1, 2, 3] (Array murni)
-        },
+        notification_id: { in: ids },
         user_id,
         is_read: false,
       },
@@ -87,27 +90,32 @@ export const notificationsService = {
     });
   },
 
-  remove: async (notificationId: number, userId: number) => {
+  remove: async (notification_id: number, user_id: number) => {
     try {
-      const notif = await prisma.notification.findFirst({
-        where: { notification_id: notificationId, user_id: userId },
+      const notif = await prisma.notification.findUnique({
+        where: { notification_id },
+        select: { user_id: true },
       });
 
-      if (!notif) throw new Error('Notification not found');
+      if (!notif || notif.user_id !== user_id) {
+        throw new Error('Notification not found or access denied');
+      }
 
-      return prisma.notification.delete({
-        where: { notification_id: notificationId },
+      return await prisma.notification.delete({
+        where: { notification_id },
       });
     } catch (error) {
       return handlePrismaError(error, 'Notification');
     }
   },
 
-  removeMany: async (ids: number[], userId: number) => {
+  removeMany: async (ids: number[], user_id: number) => {
+    if (!ids || ids.length === 0) return { count: 0 };
+
     try {
-      return prisma.notification.deleteMany({
+      return await prisma.notification.deleteMany({
         where: {
-          user_id: userId,
+          user_id,
           notification_id: { in: ids },
         },
       });

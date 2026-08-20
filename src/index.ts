@@ -11,7 +11,7 @@ configureZod();
 const server = http.createServer(app);
 
 const socketServer = new SocketServer(server);
-socketServer.init();
+// socketServer.init();
 
 server.on('error', (error: NodeJS.ErrnoException) => {
   if (error.code === 'EADDRINUSE') {

@@ -22,7 +22,7 @@ export const locationsController = {
         data,
       });
     } catch (error) {
-      next(error);
+      return next(error);
     }
   },
 
@@ -38,7 +38,7 @@ export const locationsController = {
         data,
       });
     } catch (error) {
-      next(error);
+      return next(error);
     }
   },
 
@@ -60,7 +60,7 @@ export const locationsController = {
         data,
       });
     } catch (error) {
-      next(error);
+      return next(error);
     }
   },
 
@@ -75,7 +75,7 @@ export const locationsController = {
         message: 'Data Lokasi berhasil dihapus',
       });
     } catch (error) {
-      next(error);
+      return next(error);
     }
   },
 };

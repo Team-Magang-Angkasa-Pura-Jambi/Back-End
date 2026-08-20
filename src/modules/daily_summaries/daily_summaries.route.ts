@@ -6,5 +6,14 @@ import { dailySummarySchema } from './daily_summaries.schema.js';
 
 export const dailySummaryRoute = (router: Router) => {
   const prefix = '/daily-summaries';
+
+  
+  router.get(
+    `${prefix}/recap`,
+    validate(dailySummarySchema.recap),
+    asyncHandler(dailySummaryController.getRecapData),
+  );
+
+  
   router.get(prefix, validate(dailySummarySchema.show), asyncHandler(dailySummaryController.show));
 };
