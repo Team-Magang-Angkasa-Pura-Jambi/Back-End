@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { RoleName } from '../../generated/prisma/index.js';
+import { RoleType } from '../../generated/prisma/index.js';
 import { positiveInt } from '../../utils/schmeHelper.js';
 import { CrudSchemaBuilder } from '../../utils/shemaHandler.js';
 
 export const roleBodySchema = z.object({
-  role_name: z.enum(RoleName),
+  role_name: z.nativeEnum(RoleType),
 });
 
 export const roleParamsSchema = z.object({

@@ -23,7 +23,8 @@ const Schema = z.object({
     .min(1, 'At least one rate must be provided.')
     .refine((items) => new Set(items.map((i) => i.reading_type_id)).size === items.length, {
       message: 'Each reading type can only have one rate per scheme.',
-    }),
+    })
+    .optional(),
 
   tax_ids: z.array(positiveInt('Tax ID')).optional(),
 });

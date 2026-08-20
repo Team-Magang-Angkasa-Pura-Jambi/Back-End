@@ -1,0 +1,65 @@
+{
+  "cards": {
+    "electricity": {
+      "show": true,
+      "title": "Listrik",
+      "meterIds": []
+    },
+    "water": {
+      "show": true,
+      "title": "Air",
+      "meterIds": []
+    },
+    "fuel": {
+      "show": true,
+      "title": "BBM",
+      "meterIds": []
+    },
+    "pax": {
+      "show": true,
+      "title": "Penumpang (PAX)"
+    },
+    "weather": {
+      "show": true,
+      "title": "Cuaca & Suhu"
+    }
+  },
+  "yearly_heatmap": {
+    "show": true,
+    "title": "Health Check: Indeks Efisiensi Harian",
+    "meter_ids": [
+      1
+    ],
+    "default_meter_id": null
+  },
+  "trend_analysis": {
+    "show": true,
+    "title": "Analisis Tren Konsumsi",
+    "meter_ids": [
+      1
+    ],
+    "default_energy_id": 1,
+    "default_meter_id": null
+  },
+  "fuel_logistics": {
+    "show": false,
+    "title": "Analisis Logistik & Sisa Stok BBM",
+    "meter_ids": [
+      4
+    ],
+    "default_meter_id": null
+  },
+  "yearly_spending": {
+    "show": true,
+    "title": "Tren Pengeluaran Tahunan",
+    "default_energy_id": 1
+  },
+  "pax_correlation": {
+    "show": true,
+    "title": "Korelasi Beban Operasional",
+    "default_energy_id": 1
+  },
+  "electricityMeterIds": [],
+  "waterMeterIds": [],
+  "fuelMeterIds": []
+}

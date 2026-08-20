@@ -1,5 +1,5 @@
 import { type z } from 'zod';
-import type { UsageCategory } from '../../generated/prisma/index.js';
+import type { UsageCategory } from './analysis.types.js';
 import { type getRecapSchema } from '../../validations/reports/recap.validation.js';
 
 export type GetRecapQuery = z.infer<typeof getRecapSchema>['query'];
@@ -12,8 +12,8 @@ export interface RecapDataRow {
   consumption: number | null;
   classification: UsageCategory | null;
   confidence_score?: number | null;
-  prediction?: number | {} | null;
-  pax: number | {} | null;
+  prediction?: number | object | null;
+  pax: number | object | null;
   cost: number | null;
   avg_temp?: number | null;
   max_temp?: number | null;

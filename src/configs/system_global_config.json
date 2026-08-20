@@ -1,0 +1,32 @@
+{
+  "endpoints": {
+    "active_environment": "development",
+    "development": {
+      "backend_api_url": "http://localhost:8080/api/v2",
+      "ml_api_base_url": "http://localhost:8000"
+    },
+    "production": {
+      "backend_api_url": "https://sentinel.angkasapura2.co.id/api/v2",
+      "ml_api_base_url": "https://sentinel-ml.angkasapura2.co.id"
+    },
+    "backend_api_url": "http://localhost:8080/api/v2",
+    "ml_api_base_url": "http://localhost:8000"
+  },
+  "security": {
+    "jwt_secret": "SENTINELxANGKASAPURADJB",
+    "uploadthing_app_id": "",
+    "uploadthing_secret": "",
+    "uploadthing_token": ""
+  },
+  "weather": {
+    "airport_name": "Bandara Sultan Thaha Jambi",
+    "latitude": -1.63806,
+    "longitude": 103.6444,
+    "openweather_api_key": ""
+  },
+  "dashboardCards": {
+    "electricityMeterIds": [],
+    "waterMeterIds": [],
+    "fuelMeterIds": []
+  }
+}

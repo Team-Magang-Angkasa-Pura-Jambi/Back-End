@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { isoDate, positiveInt } from '../../utils/schmeHelper.js';
-import { AlertStatus, InsightSeverity } from '../../generated/prisma/index.js';
+// AlertStatus and InsightSeverity are not in the Prisma schema — using local string enums
+const AlertStatus = ['NEW', 'ACKNOWLEDGED', 'RESOLVED'] as const;
+const InsightSeverity = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 
 export const getAlertsSchema = z.object({
   query: z.object({
@@ -8,8 +10,8 @@ export const getAlertsSchema = z.object({
     limit: z.coerce.number().int().positive().max(100).default(10),
     startDate: isoDate('Tanggal Mulai').optional(),
     endDate: isoDate('Tanggal Selesai').optional(),
-    severity: z.nativeEnum(InsightSeverity).optional(), // Note: Alert model doesn't have severity, this might be for AnalyticsInsight
-    status: z.nativeEnum(AlertStatus).optional(),
+    severity: z.enum(InsightSeverity).optional(), // Note: Alert model doesn't have severity, this might be for AnalyticsInsight
+    status: z.enum(AlertStatus).optional(),
     meterId: positiveInt('ID Meter').optional(),
     search: z.string().trim().optional(),
   }),
@@ -27,7 +29,7 @@ export const getLatestAlertsSchema = z.object({
   query: z.object({
     scope: z.enum(['system', 'meters']).optional(),
     // BARU: Tambahkan filter status, misalnya untuk mengambil hanya yang 'NEW'
-    status: z.nativeEnum(AlertStatus).optional(),
+    status: z.enum(AlertStatus).optional(),
   }),
 });
 

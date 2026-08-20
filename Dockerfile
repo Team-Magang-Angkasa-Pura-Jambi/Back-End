@@ -1,45 +1,60 @@
-# --- STAGE 1: Build ---
-# Tahap ini digunakan untuk meng-install semua dependensi (termasuk dev)
-# dan membangun aplikasi TypeScript menjadi JavaScript.
+# ==========================================
+# STAGE 1: Builder
+# ==========================================
 FROM node:20-alpine AS builder
 
-# Tetapkan direktori kerja
 WORKDIR /usr/src/app
 
-# Install OpenSSL yang dibutuhkan oleh Prisma
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl libc6-compat
 
-# Salin file package.json dan package-lock.json
+# 1. Setup Dependencies
 COPY package*.json ./
+COPY prisma ./prisma
 
-# Install semua dependensi. Skrip `postinstall` ("npx prisma generate") akan berjalan otomatis.
+# Install dependencies
 RUN npm install
 
-# Salin sisa kode sumber aplikasi
+# 2. Copy Source Code
 COPY . .
 
-# Jalankan skrip build dari package.json
+# 3. Generate Prisma Client
+# Asumsi: Schema Anda memiliki output = "../src/generated/prisma"
+RUN npx prisma generate
+
+# 4. Build TypeScript
+# Ini akan membuat folder dist/src/... tapi TANPA runtime prisma
 RUN npm run build
 
-# --- STAGE 2: Production ---
-# Tahap ini membuat image final yang lebih ramping untuk produksi.
+# 5. Prune
+RUN npm prune --omit=dev
+
+
+# ==========================================
+# STAGE 2: Production
+# ==========================================
 FROM node:20-alpine
 
 WORKDIR /usr/src/app
 
-# Salin package.json dan package-lock.json untuk menginstall dependensi produksi saja
-COPY package*.json ./
-RUN npm install --omit=dev
+# Install System Deps
+RUN apk add --no-cache openssl libc6-compat
 
-# Install OpenSSL yang dibutuhkan oleh Prisma di image produksi
-RUN apk add --no-cache openssl
+# 1. Copy Node Modules
+COPY --from=builder /usr/src/app/node_modules ./node_modules
 
-# Salin hasil build (folder 'dist') dan skema prisma dari tahap 'builder'
+# 2. Copy Hasil Build JS (Aplikasi Anda)
 COPY --from=builder /usr/src/app/dist ./dist
+
+# 3. FIX CRITICAL: Copy Manual Generated Prisma Assets
+# Kita timpa folder generated di dalam dist dengan yang asli dari source.
+# Ini memastikan folder 'runtime' dan file binary ikut terbawa ke tempat yang benar.
+COPY --from=builder /usr/src/app/src/generated ./dist/src/generated
+
+# 4. Copy Schema (Opsional, tapi bagus untuk debug)
 COPY --from=builder /usr/src/app/prisma ./prisma
 
-# Ekspos port yang digunakan aplikasi
+COPY --from=builder /usr/src/app/package.json ./package.json
+
 EXPOSE 3000
 
-# Perintah untuk menjalankan aplikasi dari file hasil build
 CMD [ "node", "dist/index.js" ]

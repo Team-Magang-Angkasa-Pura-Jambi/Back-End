@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { CrudSchemaBuilder } from '../../utils/shemaHandler.js';
 import { positiveInt, zodString } from '../../utils/schmeHelper.js';
-import { RoleName } from '../../generated/prisma/index.js';
+import { RoleType } from '../../generated/prisma/index.js';
 
 const userIdSchema = positiveInt('User ID');
 const passwordRules = zodString('Password');
@@ -21,7 +21,7 @@ const userParamsSchema = z.object({
 
 export const userQuerySchema = z.object({
   query: z.object({
-    roleName: z.nativeEnum(RoleName).optional(),
+    roleName: z.nativeEnum(RoleType).optional(),
     isActive: z
       .enum(['true', 'false'])
       .optional()

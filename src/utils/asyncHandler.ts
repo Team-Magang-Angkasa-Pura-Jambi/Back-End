@@ -1,8 +1,10 @@
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction, RequestHandler } from 'express';
 
-type AsyncController = (req: any, res: Response, next: NextFunction) => Promise<any>;
-
-export const asyncHandler = (fn: AsyncController) => {
+/**
+ * Membungkus fungsi async untuk menangkap error secara otomatis
+ * dan meneruskannya ke Global Error Handler Express.
+ */
+export const asyncHandler = (fn: RequestHandler) => {
   return (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };

@@ -3,7 +3,7 @@ import { validate } from './validate.js';
 import { asyncHandler } from './asyncHandler.js';
 import { authorize } from '../middleware/auth.middleware.js';
 import type { ZodObject } from 'zod';
-import type { RoleName } from '../generated/prisma/index.js';
+import type { RoleType } from '../generated/prisma/index.js';
 
 interface CrudRouterOptions {
   ServiceClass: new () => any;
@@ -15,7 +15,7 @@ interface CrudRouterOptions {
     params: ZodObject<any>;
     getAll?: ZodObject<any>;
   };
-  authorizations?: Partial<Record<CrudAction, RoleName[]>>;
+  authorizations?: Partial<Record<CrudAction, RoleType[]>>;
   handlerNames?: Partial<Record<CrudAction, string>>;
 }
 

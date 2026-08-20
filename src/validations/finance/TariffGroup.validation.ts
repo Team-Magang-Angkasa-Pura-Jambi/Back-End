@@ -10,6 +10,7 @@ const tariffGroupBodySchema = z.object({
     .int({ message: ` Daya VA harus berupa bilangan bulat.` })
     .optional(),
   description: optionalString('Description'),
+  faktor_kali: positiveInt('faktor kali'),
 });
 
 const tariffGroupParamsSchema = z.object({

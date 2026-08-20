@@ -16,7 +16,7 @@ const meterBodySchema = z.object({
   meter_code: requiredString('Meter Code'),
   energy_type_id: positiveInt('Energy Type Id'),
   category_id: positiveInt('category Id'),
-  status: z.enum(MeterStatus).default(MeterStatus.Active),
+  status: z.nativeEnum(MeterStatus).default(MeterStatus.ACTIVE),
   tariff_group_id: positiveInt('tariff group Id'),
   tank_height_cm: positiveNumber('Tinggi Tangki').optional().nullable(),
   tank_volume_liters: positiveNumber('Volume Tangki').optional().nullable(),

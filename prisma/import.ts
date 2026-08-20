@@ -2,266 +2,254 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import csv from 'csv-parser';
-import { Prisma, PrismaClient } from '../src/generated/prisma/index.js';
+import prisma from '../src/configs/db.js'; // Pastikan path ini benar
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const prisma = new PrismaClient();
-
 const CSV_FILE_PATH = path.join(__dirname, 'historical_data.csv');
 
 export async function runImport() {
-  console.log(`🚀 Memulai impor data historis dari ${CSV_FILE_PATH}...`);
-  console.log('----------------------------------------------------');
+  console.log(`🚀 Memulai impor data (Terminal, Office, Pax, & Water)...`);
 
-  const technician = await prisma.user.findUniqueOrThrow({
-    where: { username: 'technician' },
-  });
-  const meterKantor = await prisma.meter.findUniqueOrThrow({
-    where: { meter_code: 'ELEC-KANTOR-01' },
-  });
-  const meterTerminal = await prisma.meter.findUniqueOrThrow({
-    where: { meter_code: 'ELEC-TERM-01' },
-  });
-  // BARU: Ambil data master untuk meteran air
-  const waterMeterKantor = await prisma.meter.findUniqueOrThrow({
-    where: { meter_code: 'WATER-KANTOR-01' },
-  });
-  const waterMeterTerminal = await prisma.meter.findUniqueOrThrow({
-    where: { meter_code: 'WATER-TERM-01' },
+  // ====================================================
+  // 1. AMBIL DATA MASTER (METER & READING TYPE)
+  // ====================================================
+
+  // A. Ambil Meter
+  const meterKantor = await prisma.meter.findFirst({
+    where: { category: 'KANTOR' },
   });
 
-  console.log('✅ Data master awal berhasil diambil dari database:');
-  console.log(`   - Teknisi: ${technician.username} (ID: ${technician.user_id})`);
-  console.log(`   - Meter Kantor: ${meterKantor.meter_code} (ID: ${meterKantor.meter_id})`);
-  console.log(`   - Meter Terminal: ${meterTerminal.meter_code} (ID: ${meterTerminal.meter_id})`);
-  console.log(
-    `   - Meter Air Kantor: ${waterMeterKantor.meter_code} (ID: ${waterMeterKantor.meter_id})`,
-  );
-  console.log(
-    `   - Meter Air Terminal: ${waterMeterTerminal.meter_code} (ID: ${waterMeterTerminal.meter_id})`,
-  );
+  const meterTerminal = await prisma.meter.findFirst({
+    where: { category: 'TERMINAL', energy_type: { name: 'Electricity' } },
+  });
 
-  // PERBAIKAN TOTAL: Ubah struktur untuk memastikan script menunggu semua proses selesai.
-  // 1. Baca seluruh file CSV dan ubah menjadi Promise.
+  const meterAirTerminal = await prisma.meter.findFirst({
+    where: { category: 'TERMINAL', energy_type: { name: 'Water' } },
+  });
+
+  // B. Reading Types (Listrik)
+  const wbpType = await prisma.readingType.findFirst({ where: { type_name: 'WBP' } });
+  const lwbpType = await prisma.readingType.findFirst({ where: { type_name: 'LWBP' } });
+  const pagiType = await prisma.readingType.findFirst({ where: { type_name: 'Pagi' } });
+  const soreType = await prisma.readingType.findFirst({ where: { type_name: 'Sore' } });
+  const malamType = await prisma.readingType.findFirst({ where: { type_name: 'Malam' } });
+
+  // C. Reading Types (Air)
+  const waterType = await prisma.readingType.findFirst({ where: { type_name: 'Water Flow' } });
+
+  // Validasi Master Data
+  if (!meterKantor || !meterTerminal) {
+    console.error('❌ Meter Listrik (Office/Terminal) tidak ditemukan.');
+    return;
+  }
+  if (!meterAirTerminal) {
+    console.warn('⚠️ Meter Air Terminal tidak ditemukan. Data air akan dilewati.');
+  }
+
+  if (!wbpType || !lwbpType || !pagiType || !soreType || !malamType || !waterType) {
+    console.error(
+      '❌ Salah satu Reading Type tidak ditemukan (Cek seed: WBP, LWBP, Pagi, Sore, Malam, Water Flow).',
+    );
+    return;
+  }
+
+  // ====================================================
+  // 2. BACA FILE CSV
+  // ====================================================
   const results: any[] = await new Promise((resolve, reject) => {
-    const results: any[] = [];
+    const data: any[] = [];
     fs.createReadStream(CSV_FILE_PATH)
-      // PERBAIKAN: Gunakan mapHeaders untuk membersihkan nama kolom dari karakter BOM
       .pipe(
         csv({
-          mapHeaders: ({ header }) => header.trim(),
+          mapHeaders: ({ header }) => header.trim(), // Trim spasi nama kolom
         }),
       )
-      .on('data', (data) => results.push(data))
-      .on('error', reject) // Tangani error saat membaca stream
-      .on('end', () => resolve(results));
+      .on('data', (row) => data.push(row))
+      .on('error', reject)
+      .on('end', () => resolve(data));
   });
 
-  console.log(results[0]);
+  console.log(`✅ File CSV dibaca: ${results.length} baris.`);
 
-  console.log(`✅ File CSV berhasil dibaca. Ditemukan ${results.length} baris data.`);
+  // ====================================================
+  // 3. LOOP PROSES DATA
+  // ====================================================
+  for (const row of results) {
+    if (!row.Tanggal) continue;
 
-  // 2. Filter dan urutkan data yang sudah ada di memori.
-  const validResults = results
-    .filter((row) => row.Tanggal && row.Tanggal.trim() !== '')
-    .sort((a, b) => {
-      // PERBAIKAN: Parsing tanggal sesuai format YYYY-MM-DD HH:MM:SS
-      const dateA = new Date(a.Tanggal);
-      const dateB = new Date(b.Tanggal);
-      return dateA.getTime() - dateB.getTime();
-    });
+    // --- A. Parsing Tanggal ---
+    const readingDate = new Date(row.Tanggal);
+    if (isNaN(readingDate.getTime())) {
+      console.error(`⚠️ Tanggal tidak valid: ${row.Tanggal}`);
+      continue;
+    }
+    // Set jam ke 12:00 siang (Local Time) untuk aman dari timezone
+    readingDate.setHours(12, 0, 0, 0);
 
-  // 3. Proses setiap baris secara sekuensial.
-  for (const row of validResults) {
-    // PERBAIKAN: Parsing tanggal sesuai format YYYY-MM-DD HH:MM:SS
-    const tanggal = new Date(row.Tanggal);
-    const pemakaianKantor = parseFloat(row['Kwh Kantor'].replace(/,/g, ''));
-    const biayaKantor = row['Pemakaian Kantor'].replace(/[Rp, ]/g, '');
-    const pemakaianTerminal = parseFloat(row['Kwh Terminal'].replace(/,/g, ''));
-    const biayaTerminal = row['Pemakaian Terminal'].replace(/[Rp, ]/g, '');
-    const pax = row.pax ? parseInt(row.pax.replace(/,/g, ''), 10) : 0;
-    const waterKantor = parseFloat(row['Air Kantor']);
-    const waterTerminal = parseFloat(row['Air Terminal']); // Asumsi biaya air 0
-    const weatherMax = parseFloat(row.suhu_max);
-    // PERBAIKAN: Koreksi typo dari suhu_rate menjadi suhu_rata
-    const weatherAvg = parseFloat(row.suhu_rata);
+    // --- B. Parsing Angka (Helper) ---
+    const cleanNum = (val: string | undefined) => {
+      if (!val) return 0;
+      return parseFloat(val.replace(/,/g, ''));
+    };
 
-    console.log(`\n🔄 Memproses data untuk tanggal ${row.Tanggal}...`);
+    // 1. Listrik Terminal
+    const valWbpTerminal = cleanNum(row['WBP TERMINAL']);
+    const valLwbpTerminal = cleanNum(row['LWBP TERMINAL']);
+
+    // 2. Listrik Kantor
+    const valKantorPagi = cleanNum(row['Kantor Pagi']);
+    const valKantorSore = cleanNum(row['Kantor Sore']);
+    const valKantorMalam = cleanNum(row['Kantor Malam']);
+
+    // 3. Air Terminal (Header Baru: 'meter air terminal')
+    const valWaterTerminal = cleanNum(row['meter air terminal']);
+
+    // 4. Pax
+    const valPax = parseInt((row.pax ?? '0').replace(/,/g, ''), 10);
+
+    // Skip jika baris kosong semua
+    if (
+      valWbpTerminal === 0 &&
+      valLwbpTerminal === 0 &&
+      valKantorPagi === 0 &&
+      valKantorSore === 0 &&
+      valKantorMalam === 0 &&
+      valWaterTerminal === 0 &&
+      valPax === 0
+    )
+      continue;
+
+    const logDate = readingDate.toISOString().split('T')[0];
     console.log(
-      `   - Data setelah parsing: Listrik Kantor=${pemakaianKantor} kWh (Rp${biayaKantor}), Listrik Terminal=${pemakaianTerminal} kWh (Rp${biayaTerminal}), Pax=${pax}, Air Kantor=${waterKantor} m³, Air Terminal=${waterTerminal} m³, Suhu=${weatherAvg}°C/${weatherMax}°C`,
+      `🔄 ${logDate} | Elec: ${valWbpTerminal}/${valLwbpTerminal} | Water: ${valWaterTerminal} | Ofc: P${valKantorPagi}/S${valKantorSore}/M${valKantorMalam} | Pax: ${valPax}`,
     );
 
     try {
-      // Gunakan transaksi untuk memastikan semua data untuk satu hari berhasil disimpan
       await prisma.$transaction(async (tx) => {
-        // 1. Simpan data Pax
-        await tx.paxData.upsert({
-          where: { data_date: tanggal },
-          update: { total_pax: pax },
-          create: { data_date: tanggal, total_pax: pax },
-        });
-        console.log(`   - Data Pax untuk ${row.Tanggal} disimpan: ${pax}`);
-
-        // BARU: Simpan data cuaca
-        if (!isNaN(weatherAvg) && !isNaN(weatherMax)) {
-          await tx.weatherHistory.upsert({
-            where: { data_date: tanggal },
-            update: {
-              avg_temp: weatherAvg,
-              max_temp: weatherMax,
-            },
-            create: {
-              data_date: tanggal,
-              avg_temp: weatherAvg,
-              max_temp: weatherMax,
-            },
+        // Helper untuk upsert detail tanpa unique constraint
+        const upsertDetailHelper = async (sessionId: number, typeId: number, val: number) => {
+          const existing = await tx.readingDetail.findFirst({
+            where: { session_id: sessionId, reading_type_id: typeId },
           });
-          console.log(`   - Data Cuaca untuk ${row.Tanggal} disimpan.`);
-        }
-
-        // 2. Langsung buat/update DailySummary untuk Meter Kantor
-        if (pemakaianKantor > 0) {
-          console.log(`pemakaian kantor :${pemakaianKantor}`);
-          console.log(`     -> Menyimpan DailySummary untuk Meter Kantor...`);
-          try {
-            const result = await tx.dailySummary.upsert({
-              where: {
-                summary_date_meter_id: {
-                  summary_date: tanggal,
-                  meter_id: meterKantor.meter_id,
-                },
-              },
-              update: {
-                total_consumption: pemakaianKantor,
-                total_cost: new Prisma.Decimal(biayaKantor),
-              },
-              create: {
-                summary_date: tanggal,
-                meter_id: meterKantor.meter_id,
-                total_consumption: pemakaianKantor,
-                total_cost: new Prisma.Decimal(biayaKantor),
-              },
+          if (existing) {
+            await tx.readingDetail.update({
+              where: { detail_id: existing.detail_id },
+              data: { value: val },
             });
-            console.log(result);
-
-            console.log(`   ✅ Data summary untuk meter Kantor berhasil dibuat/diperbarui.`);
-          } catch (error: any) {
-            console.error(`   ❌ Gagal menyimpan summary meter Kantor:`, error.message);
+          } else {
+            await tx.readingDetail.create({
+              data: { session_id: sessionId, reading_type_id: typeId, value: val },
+            });
           }
-        }
+        };
 
-        // 3. Langsung buat/update DailySummary untuk Meter Terminal
-        if (pemakaianTerminal > 0) {
-          console.log(`     -> Menyimpan DailySummary untuk Meter Terminal...`);
-          try {
-            await tx.dailySummary.upsert({
-              where: {
-                summary_date_meter_id: {
-                  summary_date: tanggal,
-                  meter_id: meterTerminal.meter_id,
-                },
-              },
-              update: {
-                total_consumption: pemakaianTerminal,
-                total_cost: new Prisma.Decimal(biayaTerminal),
-              },
-              create: {
-                summary_date: tanggal,
-                total_consumption: pemakaianTerminal,
+        // ------------------------------------------
+        // BLOCK 1: TERMINAL LISTRIK (WBP & LWBP)
+        // ------------------------------------------
+        if (valWbpTerminal > 0 || valLwbpTerminal > 0) {
+          const sessionTerminal = await tx.readingSession.upsert({
+            where: {
+              meter_id_reading_date: {
                 meter_id: meterTerminal.meter_id,
-                total_cost: new Prisma.Decimal(biayaTerminal),
+                reading_date: readingDate,
               },
-            });
-            console.log(`   ✅ Data summary untuk meter Terminal berhasil dibuat/diperbarui.`);
-          } catch (error: any) {
-            console.error(`   ❌ Gagal menyimpan summary meter Terminal:`, error.message);
+            },
+            create: { meter_id: meterTerminal.meter_id, reading_date: readingDate },
+            update: {},
+          });
+
+          // WBP
+          if (valWbpTerminal > 0) {
+            await upsertDetailHelper(sessionTerminal.session_id, wbpType.reading_type_id, valWbpTerminal);
+          }
+
+          // LWBP
+          if (valLwbpTerminal > 0) {
+            await upsertDetailHelper(sessionTerminal.session_id, lwbpType.reading_type_id, valLwbpTerminal);
           }
         }
 
-        // BARU: 4. Langsung buat/update DailySummary untuk Meter Air Kantor
-        // PERBAIKAN: Gunakan !isNaN untuk memastikan data selalu dibuat, bahkan jika konsumsi 0.
-        if (!isNaN(waterKantor)) {
-          console.log(`     -> Menyimpan DailySummary untuk Meter Air Kantor...`);
-          try {
-            await tx.dailySummary.upsert({
-              where: {
-                summary_date_meter_id: {
-                  summary_date: tanggal,
-                  meter_id: waterMeterKantor.meter_id,
-                },
+        // ------------------------------------------
+        // BLOCK 2: KANTOR LISTRIK (Pagi, Sore, Malam)
+        // ------------------------------------------
+        if (valKantorPagi > 0 || valKantorSore > 0 || valKantorMalam > 0) {
+          const sessionOffice = await tx.readingSession.upsert({
+            where: {
+              meter_id_reading_date: {
+                meter_id: meterKantor.meter_id,
+                reading_date: readingDate,
               },
-              update: {
-                total_consumption: waterKantor,
-                total_cost: 0, // Asumsi biaya air 0
-              },
-              create: {
-                summary_date: tanggal,
-                meter_id: waterMeterKantor.meter_id,
-                total_consumption: waterKantor,
-                total_cost: 0,
-              },
-            });
-            console.log(`   ✅ Data summary untuk meter Air Kantor berhasil dibuat/diperbarui.`);
-          } catch (error: any) {
-            console.error(`   ❌ Gagal menyimpan summary meter Air Kantor:`, error.message);
+            },
+            create: { meter_id: meterKantor.meter_id, reading_date: readingDate },
+            update: {},
+          });
+
+          if (valKantorPagi > 0) {
+            await upsertDetailHelper(sessionOffice.session_id, pagiType.reading_type_id, valKantorPagi);
+          }
+          if (valKantorSore > 0) {
+            await upsertDetailHelper(sessionOffice.session_id, soreType.reading_type_id, valKantorSore);
+          }
+          if (valKantorMalam > 0) {
+            await upsertDetailHelper(sessionOffice.session_id, malamType.reading_type_id, valKantorMalam);
           }
         }
 
-        // BARU: 5. Langsung buat/update DailySummary untuk Meter Air Terminal
-        // PERBAIKAN: Gunakan !isNaN untuk memastikan data selalu dibuat, bahkan jika konsumsi 0.
-        if (!isNaN(waterTerminal)) {
-          console.log(`     -> Menyimpan DailySummary untuk Meter Air Terminal...`);
-          try {
-            await tx.dailySummary.upsert({
-              where: {
-                summary_date_meter_id: {
-                  summary_date: tanggal,
-                  meter_id: waterMeterTerminal.meter_id,
-                },
-              },
-              update: {
-                total_consumption: waterTerminal,
-                total_cost: 0, // Asumsi biaya air 0
-              },
-              create: {
-                summary_date: tanggal,
-                meter_id: waterMeterTerminal.meter_id,
-                total_consumption: waterTerminal,
-                total_cost: 0,
-              },
+        // ------------------------------------------
+        // BLOCK 3: PAX (Penumpang)
+        // ------------------------------------------
+        if (valPax > 0) {
+          const existingPax = await tx.paxData.findFirst({
+            where: { date: readingDate, location_id: null, session_id: null },
+          });
+          if (existingPax) {
+            await tx.paxData.update({
+              where: { pax_id: existingPax.pax_id },
+              data: { pax_count: valPax },
             });
-            console.log(`   ✅ Data summary untuk meter Air Terminal berhasil dibuat/diperbarui.`);
-          } catch (error: any) {
-            console.error(`   ❌ Gagal menyimpan summary meter Air Terminal:`, error.message);
+          } else {
+            await tx.paxData.create({
+              data: { date: readingDate, pax_count: valPax, location_id: null, session_id: null },
+            });
           }
+        }
+
+        // ------------------------------------------
+        // BLOCK 4: TERMINAL AIR (Water)
+        // ------------------------------------------
+        if (meterAirTerminal && valWaterTerminal > 0) {
+          // 1. Session Air
+          const sessionWater = await tx.readingSession.upsert({
+            where: {
+              meter_id_reading_date: {
+                meter_id: meterAirTerminal.meter_id,
+                reading_date: readingDate,
+              },
+            },
+            create: { meter_id: meterAirTerminal.meter_id, reading_date: readingDate },
+            update: {},
+          });
+
+          // 2. Detail Air (Stand Meter)
+          await upsertDetailHelper(sessionWater.session_id, waterType.reading_type_id, valWaterTerminal);
         }
       });
     } catch (error: any) {
-      // Tangani error duplikat dengan baik
-      if (error.code === 'P2002') {
-        console.warn(
-          `   ⚠️  Gagal karena duplikasi data untuk ${row.Tanggal}, seharusnya ditangani oleh upsert. Error: ${error.message}`,
-        );
-      } else {
-        console.error(`   ❌ Gagal memproses data untuk ${row.Tanggal}:`, error.message);
-      }
+      console.error(`❌ Gagal memproses ${row.Tanggal}:`, error.message);
     }
   }
 
-  console.log('\n🎉 Impor data historis selesai!');
-  console.log('----------------------------------------------------');
+  console.log('\n🎉 Impor Selesai!');
 }
 
-// PERBAIKAN: Panggil fungsi runImport agar script ini bisa dieksekusi.
+// Jalankan
 runImport()
   .catch((e) => {
-    console.error('❌ Terjadi kesalahan saat menjalankan impor:', e);
-    // PERBAIKAN: Pastikan koneksi ditutup bahkan jika ada error
+    console.error(e);
     process.exit(1);
   })
   .finally(async () => {
-    // PERBAIKAN: Pastikan koneksi ditutup setelah semua selesai
     await prisma.$disconnect();
   });
