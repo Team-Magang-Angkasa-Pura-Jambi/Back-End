@@ -57,4 +57,4 @@ COPY --from=builder /usr/src/app/package.json ./package.json
 
 EXPOSE 3000
 
-CMD [ "node", "dist/index.js" ]
+CMD [ "node", "dist/src/index.js" ]
