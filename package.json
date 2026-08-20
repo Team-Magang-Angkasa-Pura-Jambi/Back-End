@@ -2,7 +2,7 @@
   "name": "be-sentinel",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/src/index.js",
   "scripts": {
     "build": "tsc && npx copyfiles src/generated/**/* dist",
     "build:force": "tsc || true && npx copyfiles -u 1 src/generated/**/* dist",
