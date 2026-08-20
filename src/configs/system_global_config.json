@@ -22,7 +22,7 @@
     "airport_name": "Bandara Sultan Thaha Jambi",
     "latitude": -1.63806,
     "longitude": 103.6444,
-    "openweather_api_key": "6953d3a5c74bbd94157aa3455bd9dd87"
+    "openweather_api_key": ""
   },
   "dashboardCards": {
     "electricityMeterIds": [],
