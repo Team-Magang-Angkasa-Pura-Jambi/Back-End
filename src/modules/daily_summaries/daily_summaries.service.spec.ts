@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { calculateDailyCost } from './daily_summaries.service';
-import { startOfDay } from 'date-fns';
+import { calculateDailyCost } from './daily_summaries.service.js';
 
 describe('dailySummaryService - calculateDailyCost', () => {
   let mockTx: any;
