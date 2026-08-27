@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { handlePrismaError } from '../../common/utils/prismaError.js';
 import { Error400, Error404 } from '../../utils/customError.js';
 import {
@@ -8,8 +9,8 @@ import {
 import { readingValidator } from './utils/reading.validator.js';
 import { formulaEngine } from './utils/formula.engine.js';
 import { endOfDay, startOfDay, subDays } from 'date-fns';
-import { z } from 'zod';
-import { readingSchema } from './reading_sessions.schema.js';
+import { type z } from 'zod';
+import { type readingSchema } from './reading_sessions.schema.js';
 
 import prisma from '../../configs/db.js';
 import { Prisma } from '../../generated/prisma/index.js';
@@ -40,7 +41,7 @@ export const readingService = {
 
         if (existingSession) {
           throw new Error400(
-            `Data pencatatan untuk meteran ini pada tanggal ${dateForDb.toISOString().split('T')[0]} sudah ada (ID: #${existingSession.session_id}). Silakan gunakan menu Edit jika ingin mengubah angka meteran.`
+            `Data pencatatan untuk meteran ini pada tanggal ${dateForDb.toISOString().split('T')[0]} sudah ada (ID: #${existingSession.session_id}). Silakan gunakan menu Edit jika ingin mengubah angka meteran.`,
           );
         }
 
@@ -96,7 +97,7 @@ export const readingService = {
         });
 
         await formulaEngine.run(meter_id, dateForDb, tx);
-        console.log(`[readingService] Processing Meter: ${dateForDb}`);
+        console.log(`[readingService] Processing Meter: ${dateForDb.toISOString()}`);
 
         const yesterday = subDays(dateForDb, 1);
         const prevSession = await tx.readingSession.findFirst({
@@ -111,7 +112,7 @@ export const readingService = {
 
         if (prevSession) {
           await formulaEngine.run(meter_id, yesterday, tx);
-          console.log(`[readingService] Re-Processing H-1 Meter: ${yesterday}`);
+          console.log(`[readingService] Re-Processing H-1 Meter: ${yesterday.toISOString()}`);
         }
 
         const summary = await tx.dailySummary.findUnique({
@@ -242,7 +243,7 @@ export const readingService = {
         });
 
         await formulaEngine.run(targetMeterId, dateForDb, tx);
-        console.log(`[readingService] Re-Processing Meter: ${dateForDb}`);
+        console.log(`[readingService] Re-Processing Meter: ${dateForDb.toISOString()}`);
 
         const yesterday = subDays(dateForDb, 1);
         const prevSession = await tx.readingSession.findFirst({
@@ -257,7 +258,9 @@ export const readingService = {
 
         if (prevSession) {
           await formulaEngine.run(targetMeterId, yesterday, tx);
-          console.log(`[readingService] Re-Processing H-1 Meter (Update): ${yesterday}`);
+          console.log(
+            `[readingService] Re-Processing H-1 Meter (Update): ${yesterday.toISOString()}`,
+          );
         }
 
         const summary = await tx.dailySummary.findUnique({
@@ -318,36 +321,39 @@ export const readingService = {
       const normalizedStart = _normalizeDate(start_date);
       const normalizedEnd = _normalizeDate(to_date);
 
-      return await prisma.$transaction(async (tx) => {
-        const readingSessions = await tx.readingSession.findMany({
-          where: {
-            meter_id,
-            reading_date: {
-              gte: normalizedStart,
-              lte: normalizedEnd,
+      return await prisma.$transaction(
+        async (tx) => {
+          const readingSessions = await tx.readingSession.findMany({
+            where: {
+              meter_id,
+              reading_date: {
+                gte: normalizedStart,
+                lte: normalizedEnd,
+              },
             },
-          },
-          orderBy: {
-            reading_date: 'asc',
-          },
-        });
+            orderBy: {
+              reading_date: 'asc',
+            },
+          });
 
-        if (readingSessions.length === 0) {
+          if (readingSessions.length === 0) {
+            return {
+              message: 'Tidak ada data untuk dikalkulasi ulang pada rentang waktu ini.',
+              count: 0,
+            };
+          }
+
+          for (const session of readingSessions) {
+            await formulaEngine.run(meter_id, session.reading_date, tx);
+          }
+
           return {
-            message: 'Tidak ada data untuk dikalkulasi ulang pada rentang waktu ini.',
-            count: 0,
+            message: 'Kalkulasi ulang berhasil.',
+            count: readingSessions.length,
           };
-        }
-
-        for (const session of readingSessions) {
-          await formulaEngine.run(meter_id, session.reading_date, tx);
-        }
-
-        return {
-          message: 'Kalkulasi ulang berhasil.',
-          count: readingSessions.length,
-        };
-      });
+        },
+        { timeout: 120000 },
+      );
     } catch (error) {
       return handlePrismaError(error, 'Recalculate Reading Session');
     }
@@ -388,7 +394,9 @@ export const readingService = {
           if (!isNaN(parsedDate.getTime())) {
             whereSession.reading_date = { lte: parsedDate };
           }
-        } catch {}
+        } catch {
+          // ignore parsing error
+        }
       }
 
       const lastSession = await prisma.readingSession.findFirst({
@@ -468,7 +476,7 @@ export const readingService = {
         last_cost: dailySum?.total_cost ? Number(dailySum.total_cost) : 0,
         details: detailsMap,
         value: specificValue,
-        reading_type_id: specificDetail?.reading_type_id || targetReadingTypeId || 0,
+        reading_type_id: specificDetail?.reading_type_id ?? targetReadingTypeId ?? 0,
         session: {
           reading_date: lastSession.reading_date,
         },

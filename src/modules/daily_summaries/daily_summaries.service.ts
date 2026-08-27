@@ -1,7 +1,8 @@
+/* eslint-disable no-console */
 import prisma from '../../configs/db.js';
 import { handlePrismaError } from '../../common/utils/prismaError.js';
-import { DailySummaryQuery } from './daily_summaries.type.js';
-import { Prisma } from '../../generated/prisma/index.js';
+import type { DailySummaryQuery } from './daily_summaries.type.js';
+import type { Prisma } from '../../generated/prisma/index.js';
 import { endOfDay, startOfDay } from 'date-fns';
 
 export interface RecapQuery {
@@ -111,7 +112,7 @@ export const dailySummaryService = {
           const dateStr = pax.date.toISOString().split('T')[0];
 
           // Jumlahkan semua pax di tanggal yang sama tanpa peduli lokasinya
-          const existingCount = paxMap.get(dateStr) || 0;
+          const existingCount = paxMap.get(dateStr) ?? 0;
           paxMap.set(dateStr, existingCount + pax.pax_count);
         });
       }
@@ -174,9 +175,9 @@ export const dailySummaryService = {
 
         // C. Ekstrak Pax Data dari Map
         const dateStr = summary.summary_date.toISOString().split('T')[0];
-        const paxCount = paxMap.get(dateStr) || 0;
+        const paxCount = paxMap.get(dateStr) ?? 0;
 
-        columnTotals['pax'] = (columnTotals['pax'] || 0) + paxCount;
+        columnTotals.pax = (columnTotals.pax ?? 0) + paxCount;
 
         // D. Ekstrak Target Efisiensi
         const summaryTime = summary.summary_date.getTime();
@@ -193,7 +194,7 @@ export const dailySummaryService = {
         const targetValue = activeTarget ? Number(activeTarget.baseline_value) : null;
 
         if (targetValue !== null) {
-          columnTotals['target'] = (columnTotals['target'] || 0) + targetValue;
+          columnTotals.target = (columnTotals.target ?? 0) + targetValue;
         }
 
         // E. Logika Hari Kerja
@@ -203,7 +204,7 @@ export const dailySummaryService = {
 
         // F. Ekstrak Nilai Prediksi ML
         const predKey = `${summary.meter_id}_${dateStr}`;
-        const predictedVal = predictionMap.get(predKey) ?? details['prediction'] ?? null;
+        const predictedVal = predictionMap.get(predKey) ?? details.prediction ?? null;
 
         return {
           id: summary.summary_id,
@@ -219,7 +220,7 @@ export const dailySummaryService = {
 
           // 👉 PERBAIKAN 2: Tangkap 2 parameter suhu (Rata-rata & Max) secara terpisah
           suhu_rata_rata:
-            details['suhu rata-rata'] ?? details['suhu rata rata'] ?? details['suhu'] ?? null,
+            details['suhu rata-rata'] ?? details['suhu rata rata'] ?? details.suhu ?? null,
           suhu_max: details['suhu max'] ?? details['suhu maksimal'] ?? null,
 
           ...details,
@@ -229,7 +230,10 @@ export const dailySummaryService = {
           target: targetValue, // Outputkan target ke FE
 
           classification: ml?.label || 'UNKNOWN',
-          confidence_score: ml?.deviation_percent != null ? Number(ml.deviation_percent) : null,
+          confidence_score:
+            ml?.deviation_percent !== null && ml?.deviation_percent !== undefined
+              ? Number(ml.deviation_percent)
+              : null,
           prediction: predictedVal,
         };
       });
@@ -410,10 +414,15 @@ export const calculateDailyCost = async (
   const resolveTariffCategory = (typeName: string): string => {
     const upperName = typeName.toUpperCase();
 
-    // Jika shift mengandung kata malam/sore, petakan ke WBP. Sisanya ke LWBP.
+    // Jika tipe secara eksplisit adalah LWBP atau KVARH
+    if (upperName.includes('LWBP')) return 'LWBP';
+    if (upperName.includes('KVARH')) return 'KVARH';
+
+    // Jika shift mengandung kata malam/sore, atau secara eksplisit WBP
     if (upperName.includes('MALAM') || upperName.includes('SORE') || upperName.includes('WBP')) {
       return 'WBP';
     }
+
     return 'LWBP'; // Pagi, Siang, atau shift umum masuk ke LWBP
   };
 
@@ -428,18 +437,29 @@ export const calculateDailyCost = async (
   for (const detail of session.details) {
     const typeName = detail.reading_type?.type_name ?? '';
     console.log(
-      `\n   ➔ Memproses Shift/Tipe: ${typeName} (ID: ${detail.reading_type_id}) | Nilai input: ${detail.value}`,
+      `\n   ➔ Memproses Shift/Tipe: ${typeName} (ID: ${detail.reading_type_id}) | Nilai input: ${Number(detail.value)}`,
     );
 
     const currentStand = Number(detail.value);
     const lastDet = prevSession?.details.find((d) => d.reading_type_id === detail.reading_type_id);
-    const previousStand = lastDet ? Number(lastDet.value) : 0;
-
-    let usage = currentStand - previousStand;
-    if (usage < 0) {
-      console.log(`   ⚠️ Pemakaian minus (${usage}). Anggap sebagai meteran baru/rollover.`);
-      usage = currentStand;
+    let rawUsage = 0;
+    if (lastDet) {
+      const previousStand = Number(lastDet.value);
+      rawUsage = currentStand - previousStand;
+      if (rawUsage < 0) {
+        console.log(`   ⚠️ Pemakaian minus (${rawUsage}). Anggap sebagai meteran baru/rollover.`);
+        rawUsage = currentStand;
+      }
+    } else {
+      console.log(
+        `⚠️ Data sebelumnya tidak ditemukan untuk tipe ID ${detail.reading_type_id}. Set pemakaian 0.`,
+      );
+      rawUsage = 0;
     }
+
+    // Terapkan faktor pengali (multiplier) dari meter
+    const multiplier = meter.multiplier ? Number(meter.multiplier) : 1;
+    const usage = rawUsage * multiplier;
 
     // Tentukan apakah masuk kelompok WBP atau LWBP
     const tariffCategory = resolveTariffCategory(typeName);

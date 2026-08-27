@@ -43,14 +43,12 @@ export const evaluationService = {
       payload.suhu_rata ??
       detailsMap['suhu rata-rata'] ??
       detailsMap['suhu rata rata'] ??
-      detailsMap['suhu'] ??
-      29.5;
+      detailsMap['suhu'];
 
     const suhuMax =
       payload.suhu_max ??
       detailsMap['suhu max'] ??
-      detailsMap['suhu maksimal'] ??
-      33.0;
+      detailsMap['suhu maksimal'];
 
     // Ekstrak status hari kerja
     let isHariKerja = payload.is_hari_kerja;
@@ -75,6 +73,10 @@ export const evaluationService = {
 
     try {
       if (meter.category === 'TERMINAL') {
+        if (!paxCount || paxCount === 0 || !suhuRata || suhuRata === 0 || !suhuMax || suhuMax === 0 || !summary.total_usage || Number(summary.total_usage) === 0) {
+          throw new Error400('Proses dibatalkan: Data belum lengkap (Pax, Suhu Rata, Suhu Max, atau Total Pemakaian bernilai 0/kosong).');
+        }
+
         const mlPayload = {
           pax: paxCount,
           suhu_rata: suhuRata,
@@ -86,6 +88,10 @@ export const evaluationService = {
         mlResult = response.data.terminal || response.data.data?.terminal || response.data.data;
         modelUsed = 'EVALUASI_TERMINAL_V1';
       } else if (meter.category === 'KANTOR') {
+        if (!suhuRata || suhuRata === 0 || !suhuMax || suhuMax === 0 || !summary.total_usage || Number(summary.total_usage) === 0) {
+          throw new Error400('Proses dibatalkan: Data belum lengkap (Suhu Rata, Suhu Max, atau Total Pemakaian bernilai 0/kosong).');
+        }
+
         const mlPayload = {
           suhu_rata: suhuRata,
           suhu_max: suhuMax,

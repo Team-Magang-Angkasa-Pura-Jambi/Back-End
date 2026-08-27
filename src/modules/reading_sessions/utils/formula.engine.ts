@@ -277,6 +277,17 @@ export const formulaEngine = {
           const dictKey = `M${mId}_RT${det.reading_type_id}_Prev`;
           dictionary[dictKey] = Number(det.value);
         });
+      } else {
+        // Jika tidak ada data sebelumnya (data pertama), set Prev = H agar selisih pemakaian = 0
+        currentAndNextSessions.forEach((session) => {
+          const sessionDateStr = format(session.reading_date, 'yyyy-MM-dd');
+          if (sessionDateStr === targetDateStr) {
+            session.details.forEach((det) => {
+              const dictKey = `M${mId}_RT${det.reading_type_id}_Prev`;
+              dictionary[dictKey] = Number(det.value);
+            });
+          }
+        });
       }
     }
 
