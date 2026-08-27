@@ -3,6 +3,7 @@ export const corsOptions = {
     'http://localhost:3000',
     'https://sentinel-angkasa-pura.vercel.app',
     'http://192.168.1.9:3000',
+    'https://sentinel-sultan-thaha-djambi.up.railway.app'
   ],
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
