@@ -1,0 +1,1 @@
+import { z } from 'zod'; const schema = z.coerce.number().optional().nullable(); console.log('null ->', schema.parse(null)); console.log('undefined ->', schema.parse(undefined));

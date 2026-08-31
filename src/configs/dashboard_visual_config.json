@@ -42,7 +42,7 @@
     "default_meter_id": null
   },
   "fuel_logistics": {
-    "show": false,
+    "show": true,
     "title": "Analisis Logistik & Sisa Stok BBM",
     "meter_ids": [
       4

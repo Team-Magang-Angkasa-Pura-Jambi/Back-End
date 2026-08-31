@@ -41,7 +41,7 @@ describe('dailySummaryService - calculateDailyCost', () => {
     });
 
     // 2. Setup Mock for ReadingSessions (Current & Previous)
-    mockTx.readingSession.findFirst.mockImplementation(async (args: any) => {
+    mockTx.readingSession.findFirst.mockImplementation((args: any) => {
       // If it's searching for the current day session
       if (args.where.reading_date.gte) {
         return {
@@ -50,12 +50,12 @@ describe('dailySummaryService - calculateDailyCost', () => {
           details: [
             {
               reading_type_id: 1,
-              value: 8339.400,
+              value: 8339.4,
               reading_type: { type_name: 'LWBP' },
             },
             {
               reading_type_id: 2,
-              value: 1317.840,
+              value: 1317.84,
               reading_type: { type_name: 'WBP' },
             },
           ],
@@ -69,12 +69,12 @@ describe('dailySummaryService - calculateDailyCost', () => {
           details: [
             {
               reading_type_id: 1,
-              value: 8335.080,
+              value: 8335.08,
               reading_type: { type_name: 'LWBP' },
             },
             {
               reading_type_id: 2,
-              value: 1317.360,
+              value: 1317.36,
               reading_type: { type_name: 'WBP' },
             },
           ],
@@ -86,7 +86,7 @@ describe('dailySummaryService - calculateDailyCost', () => {
     const result = await calculateDailyCost(meterId, targetDate, mockTx);
 
     // Assert Total Cost matches 10,440,662.40
-    expect(result.total_cost).toBeCloseTo(10440662.40, 2);
+    expect(result.total_cost).toBeCloseTo(10440662.4, 2);
 
     // Assert Breakdown
     const lwbpBreakdown = result.breakdown.find((b: any) => b.category === 'LWBP');
@@ -96,12 +96,12 @@ describe('dailySummaryService - calculateDailyCost', () => {
     // 8339.400 - 8335.080 = 4.320 => 4.320 * 2000 = 8640
     expect(lwbpBreakdown.consumption_value).toBeCloseTo(8640, 2);
     // 8640 * 1035.78 = 8,949,139.20
-    expect(lwbpBreakdown.cost).toBeCloseTo(8949139.20, 2);
+    expect(lwbpBreakdown.cost).toBeCloseTo(8949139.2, 2);
 
     expect(wbpBreakdown).toBeDefined();
     // 1317.840 - 1317.360 = 0.480 => 0.480 * 2000 = 960
     expect(wbpBreakdown.consumption_value).toBeCloseTo(960, 2);
     // 960 * 1553.67 = 1,491,523.20
-    expect(wbpBreakdown.cost).toBeCloseTo(1491523.20, 2);
+    expect(wbpBreakdown.cost).toBeCloseTo(1491523.2, 2);
   });
 });

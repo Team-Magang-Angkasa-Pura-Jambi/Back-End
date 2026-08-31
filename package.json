@@ -31,10 +31,12 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@ai-sdk/google": "^4.0.57",
     "@prisma/client": "^6.16.2",
     "@scalar/express-api-reference": "^0.8.41",
     "@types/joi": "^17.2.2",
     "@types/jsonwebtoken": "^9.0.10",
+    "ai": "^7.0.84",
     "axios": "^1.12.2",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
@@ -60,7 +62,7 @@
     "uploadthing": "^7.7.4",
     "uuid": "^13.0.0",
     "yamljs": "^0.3.0",
-    "zod": "^4.1.5"
+    "zod": "^4.5.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

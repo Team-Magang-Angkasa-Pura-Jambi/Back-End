@@ -47,6 +47,9 @@ const getDefaultConfig = (): FullSystemConfigPayload => {
       waterMeterIds: [],
       fuelMeterIds: [],
     },
+    ai: {
+      google_generative_ai_api_key: process.env.GOOGLE_GENERATIVE_AI_API_KEY || '',
+    },
   };
 };
 
@@ -119,6 +122,7 @@ export const systemConfigService = {
           security: { ...defaultConfig.security, ...(val.security || {}) },
           weather: { ...defaultConfig.weather, ...(val.weather || {}) },
           dashboardCards: { ...defaultConfig.dashboardCards, ...(val.dashboardCards || {}) },
+          ai: { ...defaultConfig.ai, ...(val.ai || {}) },
         };
       }
     } catch (error) {
@@ -170,6 +174,10 @@ export const systemConfigService = {
           payload.dashboardCards?.fuelMeterIds ?? current.dashboardCards.fuelMeterIds
         ).map(Number),
       },
+      ai: {
+        ...current.ai,
+        ...(payload.ai || {}),
+      } as any,
     };
 
     writeFallbackFile(mergedConfig);

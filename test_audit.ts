@@ -1,0 +1,1 @@
+import prisma from './src/configs/db.js'; async function main() { try { const res = await prisma.systemSetting.create({ data: { key: 'test_key_' + Date.now(), value: { a: 1 } } }); console.log('Created:', res); } catch(e) { console.error('Error:', e); } finally { await prisma.$disconnect(); } } main();

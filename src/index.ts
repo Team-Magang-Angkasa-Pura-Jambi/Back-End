@@ -2,6 +2,7 @@ import http from 'http';
 import 'dotenv/config';
 import { app } from './configs/app.js';
 import { SocketServer } from './configs/socket.js';
+import { startAnomalyDetectorJob } from './modules/ai_agent/anomaly_detector.job.js';
 import { configureZod } from './common/utils/zodConfig.js';
 
 const port = Number(process.env.PORT ?? 8080);
@@ -36,6 +37,7 @@ server.listen(port, host, () => {
 
   try {
     console.log('📅 [Cron] Services initialized.');
+    startAnomalyDetectorJob();
   } catch (err: any) {
     console.error('⚠️ [Cron] Failed to start:', err.message);
   }

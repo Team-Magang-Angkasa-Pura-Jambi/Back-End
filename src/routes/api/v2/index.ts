@@ -29,6 +29,9 @@ import { predictionRoute } from '../../../modules/predictions/predictions.route.
 import { systemConfigRoute } from '../../../modules/system_config/system_config.route.js';
 import { systemMonitorRoute } from '../../../modules/system_monitor/system_monitor.route.js';
 import { bugReportRoute } from '../../../modules/bug_reports/bug_reports.route.js';
+import { aiAgentRoute } from '../../../modules/ai_agent/ai_agent.route.js';
+import { pageGuidesRoute } from '../../../modules/page_guides/page_guides.route.js';
+import { menusRoute } from '../../../modules/menus/menus.route.js';
 
 export default (app: Application) => {
   const router = Router();
@@ -36,6 +39,7 @@ export default (app: Application) => {
 
   router.get('/', root);
   authRoute(router);
+  aiAgentRoute(router);
 
   router.use(authMiddleware);
   router.use(auditContextMiddleware);
@@ -66,6 +70,8 @@ export default (app: Application) => {
     systemConfigRoute,
     systemMonitorRoute,
     bugReportRoute,
+    pageGuidesRoute,
+    menusRoute,
   ];
 
   protectedRoutes.forEach((route) => route(router));

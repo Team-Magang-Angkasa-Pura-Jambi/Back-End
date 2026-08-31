@@ -3,6 +3,10 @@ export interface EnvEndpointsConfig {
   ml_api_base_url: string;
 }
 
+export interface AiIntegrationConfig {
+  google_generative_ai_api_key: string;
+}
+
 export interface ApiEndpointConfig {
   active_environment: 'development' | 'production';
   development: EnvEndpointsConfig;
@@ -36,6 +40,7 @@ export interface FullSystemConfigPayload {
   security: SecurityTokenConfig;
   weather: WeatherLocationConfig;
   dashboardCards: DashboardCardMetersConfig;
+  ai?: AiIntegrationConfig;
 }
 
 export interface SystemConfigResponse {

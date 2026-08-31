@@ -1,0 +1,1 @@
+import { auditLogService } from './src/modules/audit-log/audit-log.service.js'; async function main() { try { const res = await auditLogService.show({ page: 1, limit: 15 }); console.log('Result:', res.meta); } catch(e) { console.error('Error:', e); } } main();

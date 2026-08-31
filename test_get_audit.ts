@@ -1,0 +1,1 @@
+import prisma from './src/configs/db.js'; async function main() { try { const count = await prisma.auditLog.count(); const first = await prisma.auditLog.findFirst({ include: { user: true } }); console.log('Count:', count); console.log('First:', first); } catch(e) { console.error('Error:', e); } finally { await prisma.$disconnect(); } } main();

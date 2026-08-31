@@ -26,6 +26,8 @@ interface SentinelEntity {
   role_id?: number | string;
   config_id?: number | string;
   log_id?: number | string;
+  def_id?: number | string;
+  prediction_id?: number | string;
 }
 
 const basePrisma = new PrismaClient({
@@ -102,27 +104,31 @@ const prisma = basePrisma.$extends({
 
             const recordId = String(
               entity?.id ??
-                entity?.user_id ??
-                entity?.location_id ??
-                entity?.meter_id ??
-                entity?.session_id ??
-                entity?.reading_id ??
-                entity?.summary_id ??
-                entity?.budget_id ??
-                entity?.allocation_id ??
-                entity?.target_id ??
-                entity?.scheme_id ??
-                entity?.rate_id ??
-                entity?.tenant_id ??
-                entity?.setting_id ??
-                entity?.key ??
-                entity?.pax_id ??
-                entity?.template_id ??
-                entity?.formula_id ??
-                entity?.energy_type_id ??
-                entity?.role_id ??
-                entity?.config_id ??
-                'N/A',
+              entity?.user_id ??
+              entity?.location_id ??
+              entity?.meter_id ??
+              entity?.session_id ??
+              entity?.reading_type_id ??
+              entity?.reading_id ??
+              entity?.summary_id ??
+              entity?.budget_id ??
+              entity?.allocation_id ??
+              entity?.target_id ??
+              entity?.scheme_id ??
+              entity?.rate_id ??
+              entity?.tenant_id ??
+              entity?.setting_id ??
+              entity?.key ??
+              entity?.pax_id ??
+              entity?.template_id ??
+              entity?.formula_id ??
+              entity?.def_id ??
+              entity?.energy_type_id ??
+              entity?.role_id ??
+              entity?.config_id ??
+              entity?.log_id ??
+              entity?.prediction_id ??
+              'N/A',
             );
 
             if (recordId === 'N/A') return;
@@ -166,8 +172,8 @@ const prisma = basePrisma.$extends({
                     table: model,
                     recordId,
                     userId: safeUserId,
-                    oldData: oldData || null,
-                    newData: result || null,
+                    oldData: oldData ?? null,
+                    newData: result ?? null,
                   },
                 },
               },
