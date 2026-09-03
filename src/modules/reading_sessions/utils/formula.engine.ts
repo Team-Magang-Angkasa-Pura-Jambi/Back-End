@@ -118,21 +118,25 @@ export const formulaEngine = {
         // Hitung rumus menggunakan parser
         let result = parser.evaluate(rawFormula, scope);
 
-        // 👉 PENCEGATAN DATA PERTAMA 
-        // Cek apakah meteran yang ada di rumus ini adalah meteran baru (Hari Pertama)
+        // 👉 PENCEGATAN DATA PERTAMA & ANOMALI
         const isFirstData = variables.some((v) => {
           const mId = v.meterId ?? meter.meter_id;
           return dbDictionary[`M${mId}_IS_FIRST_DATA`] === 1;
         });
 
-        // Jika ini Data Pertama, paksa pemakaian = 0 (karena ini hanya input Baseline)
-        if (isFirstData) {
-          result = 0;
+        // HANYA PAKSA 0 JIKA INI ADALAH RUMUS UTAMA (PEMAKAIAN)
+        if (formulaDef.is_main) {
+          if (isFirstData) {
+            // Hari pertama: Pemakaian tidak bisa dihitung, set 0
+            result = 0;
+          } else if (result < 0) {
+            // Hasil minus (misal salah input atau data gantung), set 0
+            result = 0;
+          }
         }
-        // Jika bukan hari pertama tapi hasilnya negatif (misal input sore belum masuk)
-        else if (result < 0) {
-          result = 0;
-        }
+
+        // Rumus yang bukan main (seperti Stok & Durasi) akan lolos ke sini
+        // dan tetap menghasilkan nilai yang benar berdasarkan Tinggi_Skrg.
 
         summaryDetails.push({
           label: formulaDef.name,

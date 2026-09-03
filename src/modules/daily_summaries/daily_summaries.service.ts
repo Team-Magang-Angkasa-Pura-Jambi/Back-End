@@ -469,58 +469,58 @@ export const calculateDailyCost = async (
   // Jika tidak menggunakan formula, lakukan perhitungan manual per shift
   if (!usedFormula) {
     for (const detail of session.details) {
-    const typeName = detail.reading_type?.type_name ?? '';
-    console.log(
-      `\n   ➔ Memproses Shift/Tipe: ${typeName} (ID: ${detail.reading_type_id}) | Nilai input: ${Number(detail.value)}`,
-    );
-
-    const currentStand = Number(detail.value);
-    const lastDet = prevSession?.details.find((d) => d.reading_type_id === detail.reading_type_id);
-    let rawUsage = 0;
-    if (lastDet) {
-      const previousStand = Number(lastDet.value);
-      rawUsage = currentStand - previousStand;
-      if (rawUsage < 0) {
-        console.log(`   ⚠️ Pemakaian minus (${rawUsage}). Anggap sebagai meteran baru/rollover.`);
-        rawUsage = currentStand;
-      }
-    } else {
+      const typeName = detail.reading_type?.type_name ?? '';
       console.log(
-        `⚠️ Data sebelumnya tidak ditemukan untuk tipe ID ${detail.reading_type_id}. Set pemakaian 0.`,
+        `\n   ➔ Memproses Shift/Tipe: ${typeName} (ID: ${detail.reading_type_id}) | Nilai input: ${Number(detail.value)}`,
       );
-      rawUsage = 0;
+
+      const currentStand = Number(detail.value);
+      const lastDet = prevSession?.details.find((d) => d.reading_type_id === detail.reading_type_id);
+      let rawUsage = 0;
+      if (lastDet) {
+        const previousStand = Number(lastDet.value);
+        rawUsage = currentStand - previousStand;
+        if (rawUsage < 0) {
+          console.log(`   ⚠️ Pemakaian minus (${rawUsage}). Anggap sebagai meteran baru/rollover.`);
+          rawUsage = currentStand;
+        }
+      } else {
+        console.log(
+          `⚠️ Data sebelumnya tidak ditemukan untuk tipe ID ${detail.reading_type_id}. Set pemakaian 0.`,
+        );
+        rawUsage = 0;
+      }
+
+      // Terapkan faktor pengali (multiplier) dari meter
+      const multiplier = meter.multiplier ? Number(meter.multiplier) : 1;
+      const usage = rawUsage * multiplier;
+
+      // Tentukan apakah masuk kelompok WBP atau LWBP
+      const tariffCategory = resolveTariffCategory(typeName);
+      console.log(`   🔀 Dipetakan ke Kategori Tarif: ${tariffCategory} (Pemakaian: ${usage})`);
+
+      // Cari rate yang cocok di dalam skema harga berdasarkan kategori tarif tersebut
+      const matchingRate = scheme.rates.find(
+        (rate) => rate.reading_type?.type_name?.toUpperCase() === tariffCategory,
+      );
+
+      if (!matchingRate) {
+        console.log(`   ❌ Rate untuk kategori ${tariffCategory} tidak ditemukan di skema harga!`);
+        continue;
+      }
+
+      // Akumulasikan pemakaian jika ada beberapa shift yang masuk kategori sama (misal Pagi & Siang)
+      if (!aggregatedUsage[tariffCategory]) {
+        aggregatedUsage[tariffCategory] = {
+          usage: 0,
+          rate: Number(matchingRate.rate_value),
+          reading_type_ids: [],
+        };
+      }
+
+      aggregatedUsage[tariffCategory].usage += usage;
+      aggregatedUsage[tariffCategory].reading_type_ids.push(detail.reading_type_id);
     }
-
-    // Terapkan faktor pengali (multiplier) dari meter
-    const multiplier = meter.multiplier ? Number(meter.multiplier) : 1;
-    const usage = rawUsage * multiplier;
-
-    // Tentukan apakah masuk kelompok WBP atau LWBP
-    const tariffCategory = resolveTariffCategory(typeName);
-    console.log(`   🔀 Dipetakan ke Kategori Tarif: ${tariffCategory} (Pemakaian: ${usage})`);
-
-    // Cari rate yang cocok di dalam skema harga berdasarkan kategori tarif tersebut
-    const matchingRate = scheme.rates.find(
-      (rate) => rate.reading_type?.type_name?.toUpperCase() === tariffCategory,
-    );
-
-    if (!matchingRate) {
-      console.log(`   ❌ Rate untuk kategori ${tariffCategory} tidak ditemukan di skema harga!`);
-      continue;
-    }
-
-    // Akumulasikan pemakaian jika ada beberapa shift yang masuk kategori sama (misal Pagi & Siang)
-    if (!aggregatedUsage[tariffCategory]) {
-      aggregatedUsage[tariffCategory] = {
-        usage: 0,
-        rate: Number(matchingRate.rate_value),
-        reading_type_ids: [],
-      };
-    }
-
-    aggregatedUsage[tariffCategory].usage += usage;
-    aggregatedUsage[tariffCategory].reading_type_ids.push(detail.reading_type_id);
-  }
   }
 
   // ==========================================
