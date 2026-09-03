@@ -430,86 +430,71 @@ export const calculateDailyCost = async (
   // ==========================================
   // 4. AGREGASI PEMAKAIAN BERDASARKAN KATEGORI TARIF
   // ==========================================
+  // ==========================================
+  // 4. AGREGASI PEMAKAIAN BERDASARKAN FORMULA ATAU MANUAL
+  // ==========================================
   const aggregatedUsage: Record<
     string,
     { usage: number; rate: number; reading_type_ids: number[] }
   > = {};
 
-  // Cek apakah formulaEngine sudah menghitung pemakaian (WBP/LWBP)
   let usedFormula = false;
+
   if (summaryDetails && summaryDetails.length > 0) {
-    const wbpItem = summaryDetails.find(d => d.label.toUpperCase() === 'PEMAKAIAN WBP' || d.label.toUpperCase() === 'WBP');
-    const lwbpItem = summaryDetails.find(d => d.label.toUpperCase() === 'PEMAKAIAN LWBP' || d.label.toUpperCase() === 'LWBP');
+    // Cari item utama (is_main atau label pemakaian umum seperti BBM / Total Konsumsi / WBP / LWBP)
+    const mainItem = summaryDetails.find(
+      d =>
+        d.label.toUpperCase().includes('PEMAKAIAN') ||
+        d.label.toUpperCase().includes('WBP') ||
+        d.label.toUpperCase().includes('LWBP') ||
+        d.label.toUpperCase().includes('TOTAL')
+    );
 
-    if (wbpItem || lwbpItem) {
+    if (mainItem) {
       usedFormula = true;
-      console.log(`✅ Menggunakan hasil kalkulasi formulaEngine untuk perhitungan biaya!`);
+      console.log(`✅ Menggunakan hasil kalkulasi formulaEngine: [${mainItem.label}] = ${mainItem.value}`);
 
-      const rateWBP = scheme.rates.find(r => r.reading_type?.type_name?.toUpperCase() === 'WBP');
-      const rateLWBP = scheme.rates.find(r => r.reading_type?.type_name?.toUpperCase() === 'LWBP');
+      // Ambil rate pertama yang aktif di skema harga untuk meteran ini (berlaku untuk BBM / Meteran Total)
+      // Atau cocokkan dengan reading_type jika ada
+      const defaultRate = scheme.rates[0];
 
-      if (wbpItem && rateWBP) {
-        aggregatedUsage['WBP'] = {
-          usage: wbpItem.value,
-          rate: Number(rateWBP.rate_value),
-          reading_type_ids: [],
-        };
-      }
+      if (defaultRate) {
+        const rateVal = Number(defaultRate.rate_value);
+        const categoryName = defaultRate.reading_type?.type_name ?? 'GENERAL';
 
-      if (lwbpItem && rateLWBP) {
-        aggregatedUsage['LWBP'] = {
-          usage: lwbpItem.value,
-          rate: Number(rateLWBP.rate_value),
+        aggregatedUsage[categoryName] = {
+          usage: mainItem.value,
+          rate: rateVal,
           reading_type_ids: [],
         };
       }
     }
   }
 
-  // Jika tidak menggunakan formula, lakukan perhitungan manual per shift
-  if (!usedFormula) {
+  // Jika tidak menggunakan formula, jalankan perhitungan manual per shift seperti biasa
+  if (!usedFormula && session.details) {
     for (const detail of session.details) {
       const typeName = detail.reading_type?.type_name ?? '';
-      console.log(
-        `\n   ➔ Memproses Shift/Tipe: ${typeName} (ID: ${detail.reading_type_id}) | Nilai input: ${Number(detail.value)}`,
-      );
-
       const currentStand = Number(detail.value);
       const lastDet = prevSession?.details.find((d) => d.reading_type_id === detail.reading_type_id);
       let rawUsage = 0;
+
       if (lastDet) {
         const previousStand = Number(lastDet.value);
         rawUsage = currentStand - previousStand;
-        if (rawUsage < 0) {
-          console.log(`   ⚠️ Pemakaian minus (${rawUsage}). Anggap sebagai meteran baru/rollover.`);
-          rawUsage = currentStand;
-        }
-      } else {
-        console.log(
-          `⚠️ Data sebelumnya tidak ditemukan untuk tipe ID ${detail.reading_type_id}. Set pemakaian 0.`,
-        );
-        rawUsage = 0;
+        if (rawUsage < 0) rawUsage = currentStand;
       }
 
-      // Terapkan faktor pengali (multiplier) dari meter
       const multiplier = meter.multiplier ? Number(meter.multiplier) : 1;
       const usage = rawUsage * multiplier;
-
-      // Tentukan apakah masuk kelompok WBP atau LWBP
       const tariffCategory = resolveTariffCategory(typeName);
-      console.log(`   🔀 Dipetakan ke Kategori Tarif: ${tariffCategory} (Pemakaian: ${usage})`);
 
-      // Cari rate yang cocok di dalam skema harga berdasarkan kategori tarif tersebut
       const matchingRate = scheme.rates.find(
         (rate) => rate.reading_type?.type_name?.toUpperCase() === tariffCategory,
       );
 
-      if (!matchingRate) {
-        console.log(`   ❌ Rate untuk kategori ${tariffCategory} tidak ditemukan di skema harga!`);
-        continue;
-      }
+      if (!matchingRate) continue;
 
-      // Akumulasikan pemakaian jika ada beberapa shift yang masuk kategori sama (misal Pagi & Siang)
       if (!aggregatedUsage[tariffCategory]) {
         aggregatedUsage[tariffCategory] = {
           usage: 0,
