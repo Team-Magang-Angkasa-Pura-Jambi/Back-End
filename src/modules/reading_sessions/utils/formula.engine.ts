@@ -84,7 +84,7 @@ export const formulaEngine = {
     const usedFormulaTemplateId = meter.calculation_template_id;
     const definitions = meter.calculation_template?.definitions ?? [];
 
-    // KEMBALIKAN BLOK EVALUASI RUMUS (Solusi Error 1)
+    // BLOK EVALUASI RUMUS FINAL
     for (const formulaDef of definitions) {
       try {
         const formulaData = formulaDef.formula_items as unknown as FormulaItems;
@@ -109,11 +109,30 @@ export const formulaEngine = {
 
             const rtId = v.readingTypeId;
             const dictKey = `M${mId}_RT${rtId}_${suffix}`;
+
+            // Langsung fallback ke 0 jika data belum diinput (misal sore/malam belum ada)
             scope[v.label] = dbDictionary[dictKey] ?? 0;
           }
         });
 
-        const result = parser.evaluate(rawFormula, scope);
+        // Hitung rumus menggunakan parser
+        let result = parser.evaluate(rawFormula, scope);
+
+        // 👉 PENCEGATAN DATA PERTAMA 
+        // Cek apakah meteran yang ada di rumus ini adalah meteran baru (Hari Pertama)
+        const isFirstData = variables.some((v) => {
+          const mId = v.meterId ?? meter.meter_id;
+          return dbDictionary[`M${mId}_IS_FIRST_DATA`] === 1;
+        });
+
+        // Jika ini Data Pertama, paksa pemakaian = 0 (karena ini hanya input Baseline)
+        if (isFirstData) {
+          result = 0;
+        }
+        // Jika bukan hari pertama tapi hasilnya negatif (misal input sore belum masuk)
+        else if (result < 0) {
+          result = 0;
+        }
 
         summaryDetails.push({
           label: formulaDef.name,
@@ -263,6 +282,9 @@ export const formulaEngine = {
       });
 
       // 2. Ambil data HARI SEBELUMNYA SECARA DINAMIS (Anti-Gap Bug)
+
+
+      // 2. Ambil data HARI SEBELUMNYA SECARA DINAMIS
       const prevSession = await tx.readingSession.findFirst({
         where: {
           meter_id: mId,
@@ -272,25 +294,19 @@ export const formulaEngine = {
         include: { details: true },
       });
 
-      if (prevSession) {
+      // 👉 FLAG DATA PERTAMA (ABSOLUT)
+      // Jika sama sekali tidak ada riwayat sebelum tanggal target,
+      // kita berikan tanda khusus bahwa ini adalah Hari Pertama (Baseline).
+      if (!prevSession || prevSession.details.length === 0) {
+        dictionary[`M${mId}_IS_FIRST_DATA`] = 1;
+      } else {
+        // Jika ada riwayat, jalankan seperti biasa
         prevSession.details.forEach((det) => {
           const dictKey = `M${mId}_RT${det.reading_type_id}_Prev`;
           dictionary[dictKey] = Number(det.value);
         });
-      } else {
-        // Jika tidak ada data sebelumnya (data pertama), set Prev = H agar selisih pemakaian = 0
-        currentAndNextSessions.forEach((session) => {
-          const sessionDateStr = format(session.reading_date, 'yyyy-MM-dd');
-          if (sessionDateStr === targetDateStr) {
-            session.details.forEach((det) => {
-              const dictKey = `M${mId}_RT${det.reading_type_id}_Prev`;
-              dictionary[dictKey] = Number(det.value);
-            });
-          }
-        });
       }
     }
-
     return dictionary;
   },
 };
