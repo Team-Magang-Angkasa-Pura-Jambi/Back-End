@@ -336,9 +336,40 @@ export const readingService = {
             },
           });
 
+          // Ambil semua tanggal dari readingSessions
+          const readingDates = readingSessions.map((rs) => rs.reading_date.getTime());
+
+          // Cari daily_summary pada rentang tanggal yang sama
+          const dailySummariesToDelete = await tx.dailySummary.findMany({
+            where: {
+              meter_id,
+              summary_date: {
+                gte: normalizedStart,
+                lte: normalizedEnd,
+              },
+            },
+          });
+
+          // Hapus daily_summary yang tidak memiliki reading_session
+          const summariesToRemove = dailySummariesToDelete.filter(
+            (ds) => !readingDates.includes(ds.summary_date.getTime()),
+          );
+
+          if (summariesToRemove.length > 0) {
+            await tx.dailySummary.deleteMany({
+              where: {
+                summary_id: {
+                  in: summariesToRemove.map((s) => s.summary_id),
+                },
+              },
+            });
+          }
+
           if (readingSessions.length === 0) {
             return {
-              message: 'Tidak ada data untuk dikalkulasi ulang pada rentang waktu ini.',
+              message: summariesToRemove.length > 0 
+                ? `Tidak ada data pencatatan, ${summariesToRemove.length} data kalkulasi harian yang tidak valid telah dihapus.` 
+                : 'Tidak ada data untuk dikalkulasi ulang pada rentang waktu ini.',
               count: 0,
             };
           }
@@ -348,7 +379,9 @@ export const readingService = {
           }
 
           return {
-            message: 'Kalkulasi ulang berhasil.',
+            message: summariesToRemove.length > 0 
+              ? `Kalkulasi ulang berhasil. ${summariesToRemove.length} data usang dihapus.` 
+              : 'Kalkulasi ulang berhasil.',
             count: readingSessions.length,
           };
         },

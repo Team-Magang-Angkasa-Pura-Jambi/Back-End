@@ -82,9 +82,9 @@ model User {
   captured_reading_sessions ReadingSession[]
   notifications             Notification[]
   audit_logs                AuditLog[]
-  settings_updated          SystemSetting[]       @relation("SettingUpdatedBy")
+  settings_updated          SystemSetting[]  @relation("SettingUpdatedBy")
   ai_agent_logs             AiAgentLog[]
-  updated_page_guides       PageGuide[]           @relation("GuideUpdater")
+  updated_page_guides       PageGuide[]      @relation("GuideUpdater")
 
   @@map("users")
 }
@@ -268,10 +268,10 @@ model ReadingSession {
   notes               String?
   created_at          DateTime @default(now())
 
-  meter              Meter              @relation(fields: [meter_id], references: [meter_id])
-  captured_by        User?              @relation(fields: [captured_by_user_id], references: [user_id])
-  details            ReadingDetail[]
-  pax_records        PaxData[]
+  meter       Meter           @relation(fields: [meter_id], references: [meter_id])
+  captured_by User?           @relation(fields: [captured_by_user_id], references: [user_id])
+  details     ReadingDetail[]
+  pax_records PaxData[]
 
   @@unique([meter_id, reading_date])
   @@index([reading_date])
@@ -363,18 +363,18 @@ model MlPrediction {
 }
 
 model MlClassification {
-  classification_id String @id @default(uuid())
+  classification_id String   @id @default(uuid())
   model_used        String
   label             String
   deviation_percent Decimal? @db.Decimal(8, 2)
   benchmark_value   Decimal? @db.Decimal(19, 4)
 
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
-  daily_summary_id   Int? @unique
+  daily_summary_id Int? @unique
 
-  daily_summary   DailySummary?   @relation(fields: [daily_summary_id], references: [summary_id])
+  daily_summary DailySummary? @relation(fields: [daily_summary_id], references: [summary_id])
 
   @@map("ml_classifications")
 }
@@ -462,18 +462,18 @@ model Notification {
 }
 
 model AiAgentLog {
-  log_id         Int      @id @default(autoincrement())
-  user_id        Int?
-  session_id     String?
-  prompt         String   @db.Text
-  response_json  Json?
-  error_message  String?  @db.Text
-  latency_ms     Int
-  model_used     String
-  is_success     Boolean  @default(true)
-  created_at     DateTime @default(now())
+  log_id        Int      @id @default(autoincrement())
+  user_id       Int?
+  session_id    String?
+  prompt        String   @db.Text
+  response_json Json?
+  error_message String?  @db.Text
+  latency_ms    Int
+  model_used    String
+  is_success    Boolean  @default(true)
+  created_at    DateTime @default(now())
 
-  user           User?    @relation(fields: [user_id], references: [user_id])
+  user User? @relation(fields: [user_id], references: [user_id])
 
   @@map("ai_agent_logs")
 }
@@ -564,7 +564,7 @@ model SystemSetting {
   updated_at  DateTime @updatedAt
   created_at  DateTime @default(now())
 
-  updater     User?    @relation("SettingUpdatedBy", fields: [updated_by], references: [user_id])
+  updater User? @relation("SettingUpdatedBy", fields: [updated_by], references: [user_id])
 
   @@map("system_settings")
 }
@@ -594,24 +594,24 @@ enum BugCategory {
 }
 
 model BugReport {
-  report_id          String       @id @default(uuid())
+  report_id          String      @id @default(uuid())
   title              String
-  description        String       @db.Text
-  category           BugCategory  @default(UI_BUG)
-  severity           BugSeverity  @default(MEDIUM)
-  status             BugStatus    @default(OPEN)
+  description        String      @db.Text
+  category           BugCategory @default(UI_BUG)
+  severity           BugSeverity @default(MEDIUM)
+  status             BugStatus   @default(OPEN)
   page_url           String?
   browser_info       Json?
-  error_stack        String?      @db.Text
-  screenshot_url     String?      @db.Text
-  developer_response String?      @db.Text
+  error_stack        String?     @db.Text
+  screenshot_url     String?     @db.Text
+  developer_response String?     @db.Text
 
-  reporter_id        Int
-  reporter           User         @relation("BugReporter", fields: [reporter_id], references: [user_id])
+  reporter_id Int
+  reporter    User @relation("BugReporter", fields: [reporter_id], references: [user_id])
 
-  resolved_at        DateTime?
-  created_at         DateTime     @default(now())
-  updated_at         DateTime     @updatedAt
+  resolved_at DateTime?
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
 
   @@map("bug_reports")
 }
@@ -632,7 +632,7 @@ model PageGuide {
   created_at   DateTime @default(now())
   updated_at   DateTime @updatedAt
 
-  updater      User?    @relation("GuideUpdater", fields: [updated_by], references: [user_id])
+  updater User? @relation("GuideUpdater", fields: [updated_by], references: [user_id])
 
   @@map("page_guides")
 }
@@ -644,21 +644,20 @@ enum MenuStatus {
 }
 
 model Menu {
-  menu_id    Int        @id @default(autoincrement())
-  name       String
-  route      String?
-  icon_name  String?
+  menu_id       Int        @id @default(autoincrement())
+  name          String
+  route         String?
+  icon_name     String?
   allowed_roles Json? // e.g. ["SUPER_ADMIN", "ADMIN", "TECHNICIAN"]
-  status     MenuStatus @default(ACTIVE)
-  parent_id  Int?
-  sort_order Int        @default(0)
-  
-  created_at DateTime   @default(now())
-  updated_at DateTime   @updatedAt
+  status        MenuStatus @default(ACTIVE)
+  parent_id     Int?
+  sort_order    Int        @default(0)
 
-  parent     Menu?      @relation("MenuToMenu", fields: [parent_id], references: [menu_id])
-  children   Menu[]     @relation("MenuToMenu")
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  parent   Menu?  @relation("MenuToMenu", fields: [parent_id], references: [menu_id])
+  children Menu[] @relation("MenuToMenu")
 
   @@map("menus")
 }
-

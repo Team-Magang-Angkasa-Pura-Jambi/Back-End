@@ -157,7 +157,7 @@ export const formulaEngine = {
     });
 
     // 4. AMBIL DATA BIAYA (Solusi Error 2 & 3)
-    const calculatedCost = await calculateDailyCost(meter.meter_id, date, tx as any);
+    const calculatedCost = await calculateDailyCost(meter.meter_id, date, tx as any, summaryDetails);
 
     const prismaSafeDate = toPrismaDate(date);
 

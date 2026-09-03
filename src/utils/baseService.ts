@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '../generated/prisma/client.js';
 import { Prisma } from '../generated/prisma/index.js';
 import { Error400, Error404, Error409, Error500, HttpError } from './customError.js';
 

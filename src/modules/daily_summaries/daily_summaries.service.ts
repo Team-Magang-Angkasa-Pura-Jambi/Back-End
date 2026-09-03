@@ -329,6 +329,7 @@ export const calculateDailyCost = async (
   meterId: number,
   targetDate: Date,
   tx: Prisma.TransactionClient,
+  summaryDetails?: { label: string; value: number }[],
 ) => {
   console.log(`\n=== 🔎 DEBUG START: calculateDailyCost [Meter ID: ${meterId}] ===`);
   console.log(`📍 Target Date Asli:`, targetDate);
@@ -434,7 +435,40 @@ export const calculateDailyCost = async (
     { usage: number; rate: number; reading_type_ids: number[] }
   > = {};
 
-  for (const detail of session.details) {
+  // Cek apakah formulaEngine sudah menghitung pemakaian (WBP/LWBP)
+  let usedFormula = false;
+  if (summaryDetails && summaryDetails.length > 0) {
+    const wbpItem = summaryDetails.find(d => d.label.toUpperCase() === 'PEMAKAIAN WBP' || d.label.toUpperCase() === 'WBP');
+    const lwbpItem = summaryDetails.find(d => d.label.toUpperCase() === 'PEMAKAIAN LWBP' || d.label.toUpperCase() === 'LWBP');
+
+    if (wbpItem || lwbpItem) {
+      usedFormula = true;
+      console.log(`✅ Menggunakan hasil kalkulasi formulaEngine untuk perhitungan biaya!`);
+
+      const rateWBP = scheme.rates.find(r => r.reading_type?.type_name?.toUpperCase() === 'WBP');
+      const rateLWBP = scheme.rates.find(r => r.reading_type?.type_name?.toUpperCase() === 'LWBP');
+
+      if (wbpItem && rateWBP) {
+        aggregatedUsage['WBP'] = {
+          usage: wbpItem.value,
+          rate: Number(rateWBP.rate_value),
+          reading_type_ids: [],
+        };
+      }
+
+      if (lwbpItem && rateLWBP) {
+        aggregatedUsage['LWBP'] = {
+          usage: lwbpItem.value,
+          rate: Number(rateLWBP.rate_value),
+          reading_type_ids: [],
+        };
+      }
+    }
+  }
+
+  // Jika tidak menggunakan formula, lakukan perhitungan manual per shift
+  if (!usedFormula) {
+    for (const detail of session.details) {
     const typeName = detail.reading_type?.type_name ?? '';
     console.log(
       `\n   ➔ Memproses Shift/Tipe: ${typeName} (ID: ${detail.reading_type_id}) | Nilai input: ${Number(detail.value)}`,
@@ -486,6 +520,7 @@ export const calculateDailyCost = async (
 
     aggregatedUsage[tariffCategory].usage += usage;
     aggregatedUsage[tariffCategory].reading_type_ids.push(detail.reading_type_id);
+  }
   }
 
   // ==========================================
