@@ -1,6 +1,9 @@
 import { type Request, type Response } from 'express';
 import { res200, res201 } from '../../utils/response.js';
 import { readingService } from './reading_sessions.service.js';
+import { templateGeneratorService } from './services/template_generator.service.js';
+import { dynamicImportParserService } from './services/dynamic_import_parser.service.js';
+
 
 export const readingController = {
   store: async (req: Request, res: Response) => {
@@ -74,4 +77,56 @@ export const readingController = {
       data,
     });
   },
+
+  downloadTemplate: async (req: Request, res: Response) => {
+    const energyTypeId = Number(req.query.energy_type_id);
+    if (!energyTypeId || isNaN(energyTypeId)) {
+      throw new Error('energy_type_id wajib diisi dan berupa angka');
+    }
+
+    const meterId = req.query.meter_id ? Number(req.query.meter_id) : undefined;
+
+    const buffer = await templateGeneratorService.generateReadingTemplate(energyTypeId, meterId);
+
+    const filename = meterId
+      ? `Template_Import_Meter_${meterId}.xlsx`
+      : `Template_Import_Utilitas_${energyTypeId}.xlsx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(buffer);
+  },
+
+  importData: async (req: Request, res: Response) => {
+    const userId = Number(req.user?.id);
+    if (!userId) throw new Error('User tidak ditemukan');
+
+    const energyTypeId = Number(req.body.energy_type_id);
+    if (!energyTypeId || isNaN(energyTypeId)) {
+      throw new Error('energy_type_id wajib diisi');
+    }
+
+    const meterId = req.body.meter_id ? Number(req.body.meter_id) : undefined;
+
+    if (!req.file || !req.file.buffer) {
+      throw new Error('Berkas spreadsheet (.xlsx) wajib diunggah');
+    }
+
+    const result = await dynamicImportParserService.importReadings(
+      req.file.buffer,
+      energyTypeId,
+      userId,
+      meterId,
+    );
+
+    return res200({
+      res,
+      message: `Proses impor selesai. Total: ${result.total_rows}, Sukses: ${result.success_count}, Gagal: ${result.failed_count}`,
+      data: result,
+    });
+  },
 };
+

@@ -76,4 +76,20 @@ export const readingSchema = {
       readingDate: z.string().optional(),
     }),
   }),
+
+  downloadTemplate: z.object({
+    query: z.object({
+      energy_type_id: z.coerce.number().int().positive('energy_type_id wajib diisi'),
+      meter_id: z.coerce.number().int().optional(),
+    }),
+  }),
+
+  importData: z.object({
+    body: z.object({
+      energy_type_id: z.coerce.number().int().positive('energy_type_id wajib diisi'),
+      meter_id: z.coerce.number().int().optional(),
+    }),
+  }),
 };
+
+
